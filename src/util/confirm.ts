@@ -1,0 +1,14 @@
+import { Alert, Platform } from 'react-native';
+
+/** Cross-platform yes/no confirm. window.confirm on web, Alert on native. */
+export function confirmAction(message: string, title = 'Confirm'): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    return Promise.resolve(typeof window !== 'undefined' ? window.confirm(message) : true);
+  }
+  return new Promise((resolve) => {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Confirm', onPress: () => resolve(true) },
+    ]);
+  });
+}

@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Fly2Sky ETL",
+    "slug": "etl-app",
+    "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/51b77aad-255f-49bd-a831-945ecde869c8"
+    },
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "platforms": [
+      "ios",
+      "web"
+    ],
+    "web": {
+      "bundler": "metro"
+    },
+    "experiments": {
+      "baseUrl": "/app"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "aero.avora.etl",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Used to photograph aircraft damage and fuel/servicing receipts for the Technical Log.",
+        "NSPhotoLibraryUsageDescription": "Used to attach photos of damage or receipts to defects.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "https://etl.avora.aero/api",
+      "eas": {
+        "projectId": "51b77aad-255f-49bd-a831-945ecde869c8"
+      }
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
+    "owner": "mathewos"
+  }
+}
