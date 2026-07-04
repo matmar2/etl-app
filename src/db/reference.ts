@@ -64,3 +64,20 @@ export async function localAmmFilters(reg?: string): Promise<{ ata: string[] }> 
   const { data } = await getRef<{ ata: string[] }>(`ammfilters:${(reg ?? '').toUpperCase()}`);
   return data || { ata: [] };
 }
+
+// Offline route maps: airport coords (key `apt:<CODE>`) + overview map tiles (key `tile:<z/x/y>`,
+// value = data-URI). Tiles are deduplicated by their z/x/y key — stored once across all legs.
+export type AptCoord = { lat: number; lon: number; iata?: string | null; name?: string | null };
+export const setApt = (code: string, v: AptCoord) => setRef(`apt:${code.trim().toUpperCase()}`, v);
+export async function getApt(code: string): Promise<AptCoord | null> {
+  const { data } = await getRef<AptCoord>(`apt:${code.trim().toUpperCase()}`);
+  return data;
+}
+export const setTile = (key: string, dataUri: string) => setRef(`tile:${key}`, dataUri);
+export async function getTile(key: string): Promise<string | null> {
+  const { data } = await getRef<string>(`tile:${key}`);
+  return data;
+}
+export async function hasTile(key: string): Promise<boolean> {
+  return !!(await getTile(key));
+}

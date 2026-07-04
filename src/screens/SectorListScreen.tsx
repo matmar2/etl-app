@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, LeonFlight, leonFlights, syncPush } from '../api/client';
+import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, syncPush } from '../api/client';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import IcaoHint from '../components/IcaoHint';
 import { createSector, dedupeSectors, deleteSector, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
@@ -73,6 +73,7 @@ export default function SectorListScreen({ route, navigation }: any) {
       const fresh = await leonFlights(reg);          // full offline window (Admin leon_offline_hours)
       setFlights(fresh);
       try { await setCachedFlights(reg, fresh); } catch {}
+      cacheRouteMaps(fresh).catch(() => {});         // pre-cache overview route maps for offline (dedup'd)
       setFeed(`Updated ${new Date().toLocaleTimeString().slice(0, 5)} · ${fresh.length} flight(s)`);
     } catch (e: any) {
       const { flights: cached, updatedAt } = await getCachedFlights(reg).catch(() => ({ flights: [] as LeonFlight[], updatedAt: null }));

@@ -2,7 +2,8 @@ import Constants from 'expo-constants';
 import * as SecureStore from './secureStore';
 import { flushAttachments } from '../db/attachments';
 import { setCachedFlights } from '../db/flights';
-import { getRef, localAmm, localAmmFilters, localCdl, localMel, localTaskCards, localTaskFilters, setRef } from '../db/reference';
+import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, localMel, localTaskCards, localTaskFilters, setApt, setRef, setTile } from '../db/reference';
+import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
 import { sha1Hex, verifyTotp } from '../util/totp';
 
@@ -384,6 +385,59 @@ export const aircraftConfig = (reg: string): Promise<{ registration: string; typ
 export type Airport = { valid: boolean; icao: string; iata?: string | null; name?: string | null; city?: string | null; country?: string | null; lat?: number | null; lon?: number | null };
 export const airportLookup = (code: string): Promise<Airport> =>
   api(`/leon/airport/${encodeURIComponent(code.trim().toUpperCase())}`);
+
+// Fetch one map tile and return it as a base64 data-URI for offline storage.
+async function tileToDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(typeof fr.result === 'string' ? fr.result : null);
+      fr.onerror = () => resolve(null);
+      fr.readAsDataURL(blob);
+    });
+  } catch { return null; }
+}
+
+// Pre-cache the overview route map (airport coords + tiles) for upcoming flights so the Sector
+// "Map view" works offline. Tiles are deduplicated by z/x/y (stored once, shared across legs)
+// and skipped if already cached; a per-run download budget bounds the work. Native-only.
+export async function cacheRouteMaps(flights: LeonFlight[]): Promise<void> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !flights?.length) return;
+  const aptCoord = async (code?: string | null) => {
+    if (!code) return null;
+    const cached = await getApt(code);
+    if (cached?.lat != null) return cached;
+    try {
+      const a = await airportLookup(code);
+      if (a?.lat != null && a?.lon != null) {
+        const v = { lat: a.lat, lon: a.lon, iata: a.iata, name: a.name };
+        await setApt(code, v); return v;
+      }
+    } catch { /* offline */ }
+    return null;
+  };
+  let budget = 500;                                    // hard cap on tile downloads per run
+  const seen = new Set<string>();
+  for (const f of flights) {
+    if (budget <= 0) break;
+    if (!f.dep || !f.arr || f.dep === f.arr) continue;
+    const d = await aptCoord(f.dep), a = await aptCoord(f.arr);
+    if (!d || !a) continue;
+    const { tiles } = overviewTiles(d.lat, d.lon, a.lat, a.lon);
+    for (const t of tiles) {
+      if (budget <= 0) break;
+      const k = tileKey(t);
+      if (seen.has(k)) continue; seen.add(k);          // dedup within this run
+      if (await hasTile(k)) continue;                  // dedup across runs (already stored)
+      const uri = await tileToDataUri(geoapifyTileUrl(t.z, t.x, t.y));
+      if (uri) { await setTile(k, uri); budget--; }
+    }
+  }
+}
 
 export type PrevFuel = { fuel_kg: number | null; source: string | null; flight_no?: string | null; date?: string | null; dep?: string | null; arr?: string | null; continuity_ok?: boolean | null; cached?: boolean };
 
