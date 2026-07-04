@@ -673,7 +673,10 @@ export async function refreshReference() {
     flushAuthEvents().catch(() => {});                     // report any offline logins now we're online
     const ver = await api('/mel/ref-version');             // tiny — runs every time online
     const reg = currentAircraft()?.registration;
-    const ammKey = reg ? `amm:${reg.toUpperCase()}` : null;
+    // AMM is a maintenance tool — only mechanics (and admin/CAMO) need it cached offline;
+    // Captain/FO/Cabin iPads skip it (saves ~1.9 MB and a CAMO call per tail).
+    const wantsAmm = ['mechanic', 'admin', 'camo'].includes(role() || '');
+    const ammKey = (reg && wantsAmm) ? `amm:${reg.toUpperCase()}` : null;
     const [{ data: cachedVer }, { data: melCache }, ammCache] = await Promise.all([
       getRef('refversion'), getRef('mel'), ammKey ? getRef(ammKey) : Promise.resolve({ data: null }),
     ]);
