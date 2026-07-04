@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as SecureStore from './secureStore';
 import { flushAttachments } from '../db/attachments';
 import { setCachedFlights } from '../db/flights';
-import { getRef, localCdl, localMel, localTaskCards, localTaskFilters, setRef } from '../db/reference';
+import { getRef, localAmm, localAmmFilters, localCdl, localMel, localTaskCards, localTaskFilters, setRef } from '../db/reference';
 import { db } from '../db/schema';
 import { sha1Hex, verifyTotp } from '../util/totp';
 
@@ -672,13 +672,28 @@ export async function refreshReference() {
   try {
     flushAuthEvents().catch(() => {});                     // report any offline logins now we're online
     const ver = await api('/mel/ref-version');             // tiny — runs every time online
-    const [{ data: cachedVer }, { data: melCache }] = await Promise.all([getRef('refversion'), getRef('mel')]);
-    if (melCache && cachedVer && JSON.stringify(cachedVer) === JSON.stringify(ver)) return;   // unchanged
-    const [mel, cards, filters, cdl] = await Promise.all([
-      api('/mel?limit=3000'), api('/mel/task-cards?limit=3000'), api('/mel/task-cards/filters'), api('/cdl?limit=3000'),
+    const reg = currentAircraft()?.registration;
+    const ammKey = reg ? `amm:${reg.toUpperCase()}` : null;
+    const [{ data: cachedVer }, { data: melCache }, ammCache] = await Promise.all([
+      getRef('refversion'), getRef('mel'), ammKey ? getRef(ammKey) : Promise.resolve({ data: null }),
     ]);
-    await setRef('mel', mel); await setRef('taskcards', cards);
-    await setRef('taskfilters', filters); await setRef('cdl', cdl); await setRef('refversion', ver);
+    const unchanged = melCache && cachedVer && JSON.stringify(cachedVer) === JSON.stringify(ver);
+    const ammMissing = !!ammKey && !ammCache.data;         // this tail not cached yet (e.g. switched aircraft)
+    if (unchanged && !ammMissing) return;                  // nothing to do
+    if (!unchanged) {                                      // fleet reference changed → re-pull MEL/CDL/AMP
+      const [mel, cards, filters, cdl] = await Promise.all([
+        api('/mel?limit=3000'), api('/mel/task-cards?limit=3000'), api('/mel/task-cards/filters'), api('/cdl?limit=3000'),
+      ]);
+      await setRef('mel', mel); await setRef('taskcards', cards);
+      await setRef('taskfilters', filters); await setRef('cdl', cdl); await setRef('refversion', ver);
+    }
+    if (ammKey && reg) {                                   // AMM task-card picker offline (per aircraft)
+      const [amm, ammf] = await Promise.all([
+        api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`),
+        api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`),
+      ]);
+      await setRef(ammKey, amm); await setRef(`ammfilters:${reg.toUpperCase()}`, ammf);
+    }
   } catch { /* offline — keep whatever cache we have */ }
 }
 // "i.a.w <task no> <summary>" — the rectification narrative the mechanic edits.
@@ -708,13 +723,14 @@ export const mpdIawLine = (m: MpdCard): string =>
 // CAMO AMM task card (separate AMM DB) — applicable per aircraft (registration).
 export type AmmCard = { task_card_ref: string; title?: string; description?: string; ata?: string; revision?: string };
 export const ammFilters = async (reg?: string): Promise<{ ata: string[] }> => {
-  try { return await api(`/mel/amm/filters${reg ? '?reg=' + encodeURIComponent(reg) : ''}`); } catch { return { ata: [] }; }
+  try { return await api(`/mel/amm/filters${reg ? '?reg=' + encodeURIComponent(reg) : ''}`); }
+  catch { return localAmmFilters(reg); }                 // offline → cached AMM filters for this tail
 };
 export const ammSearch = async (reg?: string, q?: string, ata?: string): Promise<AmmCard[]> => {
   try {
     const p = [reg ? 'reg=' + encodeURIComponent(reg) : '', q ? 'q=' + encodeURIComponent(q) : '', ata ? 'ata=' + encodeURIComponent(ata) : '', 'limit=200'].filter(Boolean).join('&');
     return await api(`/mel/amm?${p}`);
-  } catch { return []; }
+  } catch { return localAmm(reg, q, ata); }               // offline → cached AMM task cards for this tail
 };
 export const ammSummary = (m: AmmCard): string =>
   (m.description || m.title || '').replace(/\s+/g, ' ').trim();

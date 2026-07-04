@@ -50,3 +50,17 @@ export async function localTaskFilters(): Promise<{ ata: string[]; sub: Record<s
   const { data } = await getRef<{ ata: string[]; sub: Record<string, string[]> }>('taskfilters');
   return data || { ata: [], sub: {} };
 }
+
+// AMM task cards are per-aircraft — cached by registration (key `amm:<REG>`). Mirror the
+// server filter: ata = first 2 digits; q over task_card_ref / title / description.
+export async function localAmm(reg?: string, q?: string, ata?: string): Promise<any[]> {
+  const { data } = await getRef<any[]>(`amm:${(reg ?? '').toUpperCase()}`);
+  let rows = data || [];
+  if (ata) rows = rows.filter((t) => String(t.ata ?? '').slice(0, 2) === ata);
+  if (q) { const s = q.toLowerCase(); rows = rows.filter((t) => has(t.task_card_ref, s) || has(t.title, s) || has(t.description, s)); }
+  return rows.slice(0, 200);
+}
+export async function localAmmFilters(reg?: string): Promise<{ ata: string[] }> {
+  const { data } = await getRef<{ ata: string[] }>(`ammfilters:${(reg ?? '').toUpperCase()}`);
+  return data || { ata: [] };
+}
