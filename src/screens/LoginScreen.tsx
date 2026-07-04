@@ -6,6 +6,7 @@ import { theme } from '../theme';
 export default function LoginScreen({ navigation }: any) {
   const [u, setU] = useState('admin');
   const [p, setP] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
   const [otp, setOtp] = useState('');
   const [mfa, setMfa] = useState(false);          // second-factor step
   const [busy, setBusy] = useState(false);
@@ -71,9 +72,15 @@ export default function LoginScreen({ navigation }: any) {
       <TextInput style={styles.input} value={u} onChangeText={setU} autoCapitalize="none"
         placeholder="User ID" placeholderTextColor={theme.sub}
         returnKeyType="next" onSubmitEditing={() => { if (!busy) submit(); }} blurOnSubmit={false} />
-      <TextInput style={styles.input} value={p} onChangeText={setP} secureTextEntry
-        placeholder="Password" placeholderTextColor={theme.sub}
-        returnKeyType="go" onSubmitEditing={() => { if (!busy) submit(); }} />
+      <View style={styles.pwdRow}>
+        <TextInput style={styles.pwdInput} value={p} onChangeText={setP} secureTextEntry={!showPwd}
+          placeholder="Password" placeholderTextColor={theme.sub} autoCapitalize="none" autoCorrect={false}
+          returnKeyType="go" onSubmitEditing={() => { if (!busy) submit(); }} />
+        <TouchableOpacity onPress={() => setShowPwd((v) => !v)} hitSlop={10} style={styles.eyeBtn}
+          accessibilityLabel={showPwd ? 'Hide password' : 'Show password'}>
+          <Text style={styles.eyeTxt}>{showPwd ? '🙈 Hide' : '👁 Show'}</Text>
+        </TouchableOpacity>
+      </View>
       {online === null ? (
         <Text style={styles.connChk}>● Checking server connection…</Text>
       ) : online ? (
@@ -108,6 +115,11 @@ const styles = StyleSheet.create({
   sub: { color: theme.sub, marginBottom: 28 },
   input: { width: 360, maxWidth: '90%', backgroundColor: theme.panel, color: theme.text,
     borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 14, marginBottom: 12, fontSize: 16 },
+  pwdRow: { width: 360, maxWidth: '90%', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 8, marginBottom: 12, flexDirection: 'row', alignItems: 'center' },
+  pwdInput: { flex: 1, color: theme.text, paddingVertical: 14, paddingLeft: 14, fontSize: 16 },
+  eyeBtn: { paddingHorizontal: 14, paddingVertical: 10 },
+  eyeTxt: { color: theme.accent, fontWeight: '700', fontSize: 14 },
   btn: { width: 360, maxWidth: '90%', backgroundColor: theme.green, borderRadius: 8, padding: 15, alignItems: 'center', marginTop: 6 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   err: { color: theme.red, marginBottom: 8 },
