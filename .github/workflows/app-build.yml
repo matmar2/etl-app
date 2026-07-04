@@ -1,0 +1,41 @@
+name: App Build & Release
+
+# Triggered from the ETL back office (Admin → App Build & Release) via the GitHub API,
+# or manually from the Actions tab. Does the actual EAS build / OTA update so no one
+# needs a terminal. The Expo token lives only here, as the repo secret EXPO_TOKEN.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'build = native (App Store/TestFlight or ad-hoc); ota = JS-only over-the-air update'
+        type: choice
+        options: [build, ota]
+        default: build
+      profile:
+        description: 'f2stestflight (TestFlight, auto-submitted) or adhoc (registered iPads)'
+        type: choice
+        options: [f2stestflight, adhoc]
+        default: f2stestflight
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: OTA update (JS only)
+        if: ${{ inputs.mode == 'ota' }}
+        run: eas update --channel ${{ inputs.profile == 'adhoc' && 'adhoc' || 'production' }} --platform ios --message "Back-office OTA (${{ inputs.profile }})" --non-interactive
+
+      - name: Native build (+ auto-submit to TestFlight)
+        if: ${{ inputs.mode == 'build' }}
+        run: eas build --platform ios --profile ${{ inputs.profile }} ${{ inputs.profile == 'f2stestflight' && '--auto-submit' || '' }} --non-interactive

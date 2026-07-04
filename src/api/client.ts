@@ -721,6 +721,10 @@ export const ammSummary = (m: AmmCard): string =>
 // "i.a.w AMM Rev <rev> · <task#> — <description>" — starts the description; editable.
 export const ammIawLine = (m: AmmCard): string =>
   `i.a.w AMM Rev ${m.revision || '—'} · ${m.task_card_ref}${ammSummary(m) ? ' — ' + ammSummary(m) : ''}`.trim();
+// Full HTML instruction (with diagrams) for one AMM task card — for the in-app viewer.
+export type AmmContent = { task_card_ref: string; title?: string; ata?: string; revision?: string; html: string };
+export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> =>
+  api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
 
 // Push every dirty local row, then clear the dirty flag on success.
 // Replay locally-signed 2/10-day checks to the server. Network errors leave them

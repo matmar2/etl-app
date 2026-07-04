@@ -97,7 +97,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
   }
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>Report defect ({source.toUpperCase()})</Text>
       <Text style={styles.lbl}>System / title{required.includes('title') ? ' *' : ''}</Text>
       <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="e.g. VHF SYSTEM" placeholderTextColor={theme.sub} />

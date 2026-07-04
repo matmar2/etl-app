@@ -61,7 +61,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const closed = s.status === 'closed' || s.status === 'exported';
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       {!closed ? (
         <View style={styles.tlBar}>
           <Text style={styles.tlTxt}>TL # {tl != null ? fmtTl(tl) : '…'}</Text>

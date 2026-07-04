@@ -19,6 +19,11 @@ export default function SectorListScreen({ route, navigation }: any) {
   const [manualForm, setManualForm] = useState<any | null>(null);
   const [displayN, setDisplayN] = useState(10);    // picker shows next-N; full window stays cached offline
   useEffect(() => { appSettings().then((s) => setDisplayN(s.leon_offline_flights ?? 10)).catch(() => {}); }, []);
+  // "Your sectors" defaults to today; "List previous flights" opens a date range (today by default).
+  const today = new Date().toISOString().slice(0, 10);
+  const [histOpen, setHistOpen] = useState(false);
+  const [histFrom, setHistFrom] = useState(today);
+  const [histTo, setHistTo] = useState(today);
 
   async function refresh() {                       // instant local view
     await dedupeSectors().catch(() => {});
@@ -51,8 +56,12 @@ export default function SectorListScreen({ route, navigation }: any) {
     .filter(inWindow)
     .sort((a, b) => (a.std ?? '').localeCompare(b.std ?? ''))
     .slice(0, displayN);
-  // Your-sectors list uses the same window, but never hides a sector that is still in progress.
-  const visibleSectors = sectors.filter((s) => !['closed', 'exported'].includes(s.status) || inWindow(s));
+  // Your-sectors list: default shows today's legs plus anything still in progress (never hide an
+  // open sector, even from an earlier day). "List previous flights" switches to the chosen date range.
+  const inProgress = (s: Sector) => !['closed', 'exported'].includes(s.status);
+  const visibleSectors = histOpen
+    ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
+    : sectors.filter((s) => s.flight_date === today || inProgress(s));
   // A flight may only be opened once the previous one is closed (one open sector at a time),
   // and flights are opened in departure-time order (earliest first).
   const openSector = sectors.find((s) => !['closed', 'exported'].includes(s.status));
@@ -161,7 +170,7 @@ export default function SectorListScreen({ route, navigation }: any) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>Flight Details · {reg}</Text>
       {status ? <Text style={styles.status}>{status}</Text> : null}
 
@@ -216,10 +225,38 @@ export default function SectorListScreen({ route, navigation }: any) {
       )}
 
       <View style={styles.feedHead}>
-        <Text style={styles.section}>Your sectors</Text>
-        {visibleSectors.length ? <TouchableOpacity onPress={clearList}><Text style={styles.clear}>Clear list</Text></TouchableOpacity> : null}
+        <Text style={styles.section}>Your sectors · {histOpen ? `${histFrom} → ${histTo}` : 'today'}</Text>
+        <View style={{ flexDirection: 'row', gap: 16, alignItems: 'baseline' }}>
+          <TouchableOpacity onPress={() => { setHistOpen(!histOpen); if (!histOpen) { setHistFrom(today); setHistTo(today); } }}>
+            <Text style={styles.histLink}>{histOpen ? '✕ Back to today' : '🗓 List previous flights'}</Text>
+          </TouchableOpacity>
+          {!histOpen && visibleSectors.length ? <TouchableOpacity onPress={clearList}><Text style={styles.clear}>Clear list</Text></TouchableOpacity> : null}
+        </View>
       </View>
-      {visibleSectors.length === 0 ? <Text style={styles.empty}>None yet — pick a flight above.</Text> : visibleSectors.map((item) => (
+      {histOpen ? (
+        <View style={styles.histCard}>
+          <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <View style={{ width: 150 }}>
+              <Text style={styles.mlbl}>From</Text>
+              <TextInput style={styles.minput} value={histFrom} onChangeText={setHistFrom} placeholder="YYYY-MM-DD" placeholderTextColor={theme.sub} autoCapitalize="none" />
+            </View>
+            <View style={{ width: 150 }}>
+              <Text style={styles.mlbl}>To</Text>
+              <TextInput style={styles.minput} value={histTo} onChangeText={setHistTo} placeholder="YYYY-MM-DD" placeholderTextColor={theme.sub} autoCapitalize="none" />
+            </View>
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+              {[['Today', 0], ['7 days', 6], ['30 days', 29]].map(([lbl, back]) => (
+                <TouchableOpacity key={String(lbl)} style={styles.preset}
+                  onPress={() => { const to = today; const d = new Date(); d.setDate(d.getDate() - (back as number)); setHistFrom(d.toISOString().slice(0, 10)); setHistTo(to); }}>
+                  <Text style={styles.presetTxt}>{lbl}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <Text style={[styles.feed, { marginTop: 8 }]}>{visibleSectors.length} flight(s) in range · released &amp; closed Tech Logs are kept on the server and always reappear here.</Text>
+        </View>
+      ) : null}
+      {visibleSectors.length === 0 ? <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text> : visibleSectors.map((item) => (
         <View key={item.id} style={styles.row}>
           <TouchableOpacity style={styles.rowOpen} onPress={() => navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
             <Text style={styles.rowFlight}>{item.flight_no}</Text>
@@ -256,6 +293,10 @@ const styles = StyleSheet.create({
   rowRoute: { color: '#cde', flex: 1 },
   rowMeta: { color: theme.sub, fontSize: 12 },
   clear: { color: theme.red, fontWeight: '700', fontSize: 13 },
+  histLink: { color: theme.accent, fontWeight: '700', fontSize: 13 },
+  histCard: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12, marginTop: 8 },
+  preset: { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12 },
+  presetTxt: { color: theme.text, fontSize: 12, fontWeight: '700' },
   del: { color: theme.sub, fontSize: 16, paddingLeft: 10 },
   badge: { color: theme.accent, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   signed: { color: theme.green },

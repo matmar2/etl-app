@@ -41,7 +41,7 @@ export default function FeedbackScreen() {
   }
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={s.content}>
+    <ScrollView style={s.wrap} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Feedback</Text>
       <Text style={s.sub}>Report a bug, suggest a change, or ask a question. During testing, this is the fastest way to reach the team. For a bug, include the steps to reproduce. Replies from the team appear below.</Text>
 

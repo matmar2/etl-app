@@ -13,7 +13,7 @@ export default function DocumentsScreen() {
   }
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Documents</Text>
       <Text style={s.sub}>Controlled documents published by the CAMO/admin. Read-only.</Text>
       {docs === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :

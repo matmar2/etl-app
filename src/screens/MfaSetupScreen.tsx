@@ -23,7 +23,7 @@ export default function MfaSetupScreen({ navigation }: any) {
   const qr = data ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.otpauth_uri)}` : null;
 
   return (
-    <ScrollView contentContainerStyle={s.wrap}>
+    <ScrollView contentContainerStyle={s.wrap} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Set up two-factor authentication</Text>
       <Text style={s.sub}>Required for pilots & mechanics. Scan this with Google or Microsoft Authenticator.</Text>
       {!data ? <ActivityIndicator color={theme.accent} style={{ marginTop: 30 }} /> : (

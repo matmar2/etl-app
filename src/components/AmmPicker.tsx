@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AmmCard, ammFilters, ammSearch, ammSummary } from '../api/client';
+import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary } from '../api/client';
+import AmmInstruction from './AmmInstruction';
 import { theme } from '../theme';
 
 // Lets the mechanic search/filter the CAMO AMM task cards applicable to THIS aircraft and
@@ -14,6 +15,18 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
   const [filters, setFilters] = useState<{ ata: string[] }>({ ata: [] });
   const [rows, setRows] = useState<AmmCard[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<{ ref: string; html: string } | null>(null);   // instruction viewer
+  const [loadingRef, setLoadingRef] = useState<string | null>(null);
+
+  async function openInstruction(m: AmmCard) {
+    setLoadingRef(m.task_card_ref);
+    try {
+      const r = await ammContent(reg, m.task_card_ref);
+      setViewer({ ref: m.task_card_ref, html: r.html });
+    } catch {
+      setViewer({ ref: m.task_card_ref, html: '<div style="padding:20px;font-family:sans-serif;color:#333">No instruction is available for this task card (or the aircraft is offline).</div>' });
+    } finally { setLoadingRef(null); }
+  }
 
   useEffect(() => { if (visible) ammFilters(reg).then((f) => setFilters(f || { ata: [] })).catch(() => {}); }, [visible, reg]);
   useEffect(() => { if (visible) setAta((defaultAta || '').slice(0, 2)); }, [visible, defaultAta]);
@@ -59,7 +72,12 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
                     {m.revision || m.ata ? <Text style={s.meta}>{[m.revision ? `AMM Rev ${m.revision}` : '', m.ata].filter(Boolean).join(' · ')}</Text> : null}
                     <Text style={s.desc} numberOfLines={open ? undefined : 2}>{summary}</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={s.use} onPress={() => onPick(m)}><Text style={s.useTxt}>Use this task card ›</Text></TouchableOpacity>
+                  <View style={s.actions}>
+                    <TouchableOpacity style={s.instrBtn} onPress={() => openInstruction(m)} disabled={loadingRef === m.task_card_ref}>
+                      <Text style={s.instrTxt}>{loadingRef === m.task_card_ref ? 'Opening…' : '📖 Instruction'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.use} onPress={() => onPick(m)}><Text style={s.useTxt}>Use this task card ›</Text></TouchableOpacity>
+                  </View>
                 </View>
               );
             })}
@@ -67,6 +85,23 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
           </ScrollView>
         </View>
       </View>
+
+      {/* AMM instruction viewer (full HTML + diagrams from CAMO) */}
+      <Modal visible={!!viewer} animationType="slide" onRequestClose={() => setViewer(null)}>
+        <View style={s.viewer}>
+          <View style={s.vhead}>
+            <Text style={s.title} numberOfLines={1}>AMM · {viewer?.ref}</Text>
+            <TouchableOpacity onPress={() => setViewer(null)}><Text style={s.close}>Close</Text></TouchableOpacity>
+          </View>
+          <View style={{ flex: 1 }}>{viewer ? <AmmInstruction html={viewer.html} /> : null}</View>
+          <View style={s.vfoot}>
+            <TouchableOpacity style={s.pickBtn}
+              onPress={() => { const card = (rows || []).find((x) => x.task_card_ref === viewer?.ref); if (card) { setViewer(null); onPick(card); } }}>
+              <Text style={s.pickTxt}>Use this task card ›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -99,6 +134,14 @@ const s = StyleSheet.create({
   tno: { color: theme.text, fontWeight: '800', fontSize: 15 },
   meta: { color: theme.sub, fontSize: 12, marginTop: 2 },
   desc: { color: '#cde', fontSize: 13, marginTop: 6, lineHeight: 18 },
-  use: { marginTop: 8, alignSelf: 'flex-start' },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 20, marginTop: 10 },
+  use: { alignSelf: 'flex-start' },
   useTxt: { color: theme.accent, fontWeight: '800' },
+  instrBtn: { alignSelf: 'flex-start' },
+  instrTxt: { color: theme.green, fontWeight: '800' },
+  viewer: { flex: 1, backgroundColor: theme.bg, paddingTop: 12 },
+  vhead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10 },
+  vfoot: { padding: 12, borderTopWidth: 1, borderTopColor: theme.border },
+  pickBtn: { backgroundColor: theme.accent, borderRadius: 8, padding: 14, alignItems: 'center' },
+  pickTxt: { color: '#1a1300', fontWeight: '800' },
 });

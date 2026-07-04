@@ -13,7 +13,7 @@ export default function FormsScreen() {
   }
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Forms</Text>
       <Text style={s.sub}>Forms published for your role ({role() || '—'}) to complete.</Text>
       {forms === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :

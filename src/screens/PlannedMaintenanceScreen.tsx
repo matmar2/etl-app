@@ -160,7 +160,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   }
 
   return (
-    <ScrollView ref={scrollRef} style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView ref={scrollRef} style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Planned Maintenance · {reg}</Text>
       <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginBottom: 12 }}>
         <Text style={{ color: theme.sub, fontSize: 12, fontWeight: '700', marginBottom: 6, textTransform: 'uppercase' }}>Check status (due based on last completed)</Text>

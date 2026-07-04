@@ -34,7 +34,7 @@ export default function DeicingScreen({ route, navigation }: any) {
   );
 
   return (
-    <ScrollView style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={sx.title}>De-icing / Anti-icing · {s.flight_no}</Text>
       <Text style={sx.sub}>Record the de/anti-icing applied at departure. The anti-icing code is printed on the Tech Log.</Text>
 

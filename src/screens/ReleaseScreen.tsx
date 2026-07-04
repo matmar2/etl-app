@@ -105,7 +105,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
   const svc = st.serviceable;
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
         <Text style={[s.bannerTxt, { color: svc ? theme.green : theme.red }]}>
           {svc ? '● AIRCRAFT SERVICEABLE' : '▲ AIRCRAFT UNSERVICEABLE'}

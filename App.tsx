@@ -26,6 +26,7 @@ import AssistantScreen from './src/screens/AssistantScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
 import AckOverlay from './src/components/AckOverlay';
+import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
 
 const Stack = createNativeStackNavigator();
@@ -126,6 +127,7 @@ export default function App() {
           </Text>
         ) : null}
         {svc != null ? <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>{svc ? '● SERVICEABLE' : '▲ UNSERVICEABLE'}</Text> : null}
+        <OnlineStatus />
         <HeaderLogo />
       </View>
     ),

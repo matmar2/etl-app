@@ -121,7 +121,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const color = d.status === 'deferred' ? theme.accent : d.status === 'closed' || d.status === 'rectified' ? theme.green : theme.red;
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>{d.title || 'Defect'} <Text style={[styles.badge, { color }]}>· {d.status}</Text></Text>
       <Text style={styles.desc}>{d.description}</Text>
       <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>

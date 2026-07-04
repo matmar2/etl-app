@@ -23,8 +23,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "aero.avora.etl",
-      "buildNumber": "1",
+      "bundleIdentifier": "aero.avora.fly2sky.etl",
       "infoPlist": {
         "NSCameraUsageDescription": "Used to photograph aircraft damage and fuel/servicing receipts for the Technical Log.",
         "NSPhotoLibraryUsageDescription": "Used to attach photos of damage or receipts to defects.",

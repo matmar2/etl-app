@@ -79,7 +79,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
   }
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Ground Maintenance · {reg}</Text>
       <Text style={s.sub}>For maintenance with no crew onboard — after arrival or during a ground stay. Opens a maintenance-only Tech Log entry (Dep = Arr = parking station). Rectify defects / HIL items or defer under MEL, then issue the CRS.</Text>
 

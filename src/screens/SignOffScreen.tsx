@@ -28,7 +28,7 @@ export default function SignOffScreen() {
   }
 
   return (
-    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }}>
+    <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Flight Sign Off</Text>
       <Text style={s.sub}>Sign-offs recorded in the last {days} days (configurable in admin). Tap a row to open the signed Tech Log / CRS.{cached ? ' · Offline — showing the last cached list.' : ''}</Text>
       {msg ? <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>{msg}</Text> : null}

@@ -1,9 +1,10 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Constants from 'expo-constants';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
+import OnlineStatus from '../components/OnlineStatus';
 import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, publicConfig, refreshReference, roleLabel, setCurrentAircraft, signoffsRecent, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
@@ -46,6 +47,8 @@ export default function MainMenuScreen({ navigation }: any) {
   const [pick, setPick] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [ver, setVer] = useState<{ revision: string | null; approved_at?: string } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshedAt, setRefreshedAt] = useState('');
 
   function versionLabel() {
     const rev = ver?.revision || (Constants.expoConfig as any)?.version || '—';
@@ -57,36 +60,52 @@ export default function MainMenuScreen({ navigation }: any) {
   }
 
   function loadCounts(reg: string) {
-    Promise.all([listActiveDefects(reg).catch(() => []), listHIL(reg).catch(() => [])])
-      .then(([a, h]) => setCounts((c) => ({ ...c, defects: `${a.length} active${h.length ? ` · ${h.length} HIL` : ''}` })));
-    leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {});
-    documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {});
-    documentsList('form').then((d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))).catch(() => {});
-    signoffsRecent(15).then((r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))).catch(() => {});
+    return Promise.all([
+      Promise.all([listActiveDefects(reg).catch(() => []), listHIL(reg).catch(() => [])])
+        .then(([a, h]) => setCounts((c) => ({ ...c, defects: `${a.length} active${h.length ? ` · ${h.length} HIL` : ''}` }))),
+      leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {}),
+      documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {}),
+      documentsList('form').then((d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))).catch(() => {}),
+      signoffsRecent(15).then((r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))).catch(() => {}),
+    ]);
   }
+
+  // Reload everything the menu shows (fleet, aircraft status/utilisation, check + defect counts,
+  // permissions, reference cache, version). Used on focus and by the manual Refresh button.
+  const reload = useCallback(async (isAlive: () => boolean = () => true) => {
+    let cur = await loadCurrentAircraft();
+    const list = await fleetList().catch(() => [] as Fleet[]);
+    if (!isAlive()) return;
+    setFleet(list);
+    if (!cur && list.length) { cur = list[0]; await setCurrentAircraft(cur); }
+    setAc(cur);
+    const jobs: Promise<any>[] = [
+      publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
+      Promise.resolve(loadPermissions()).catch(() => {}),
+      Promise.resolve(refreshReference()).catch(() => {}),
+      flushFeedback().catch(() => {}),               // send any feedback queued while offline
+      deviceId().then((d) => appRelease(d)).then((r) => { if (isAlive()) setVer(r); }).catch(() => {}),
+    ];
+    if (cur) jobs.push(
+      aircraftStatus(cur.registration).then((s) => { if (isAlive()) setSt(s); }).catch(() => { if (isAlive()) setSt(null); }),
+      aircraftUtilisation(cur.registration).then((u) => { if (isAlive()) setUtil(u); }).catch(() => { if (isAlive()) setUtil(null); }),
+      loadCounts(cur.registration),
+    );
+    await Promise.all(jobs);
+  }, []);
 
   useFocusEffect(useCallback(() => {
     let alive = true;
-    (async () => {
-      let cur = await loadCurrentAircraft();
-      const list = await fleetList().catch(() => [] as Fleet[]);
-      if (!alive) return;
-      setFleet(list);
-      if (!cur && list.length) { cur = list[0]; await setCurrentAircraft(cur); }
-      setAc(cur);
-      if (cur) {
-        aircraftStatus(cur.registration).then((s) => alive && setSt(s)).catch(() => alive && setSt(null));
-        aircraftUtilisation(cur.registration).then((u) => alive && setUtil(u)).catch(() => alive && setUtil(null));
-        loadCounts(cur.registration);
-      }
-    })();
-    publicConfig().then((c) => alive && setTesting(!!c.testing_mode));
-    loadPermissions();
-    refreshReference();
-    flushFeedback().catch(() => {});                 // send any feedback queued while offline
-    deviceId().then((d) => appRelease(d)).then((r) => alive && setVer(r)).catch(() => {});
+    reload(() => alive);
     return () => { alive = false; };
-  }, []));
+  }, [reload]));
+
+  async function manualRefresh() {
+    if (refreshing) return;
+    setRefreshing(true);
+    try { await reload(); setRefreshedAt(new Date().toLocaleTimeString().slice(0, 5)); }
+    finally { setRefreshing(false); }
+  }
 
   async function choose(a: Fleet) {
     await setCurrentAircraft(a); setAc(a); setPick(false); setSt(null); setUtil(null); setCounts({});
@@ -111,9 +130,13 @@ export default function MainMenuScreen({ navigation }: any) {
         <View>
           <Text style={styles.appName}>Electronic Tech Log</Text>
           {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-          <Text style={styles.appVer}>{versionLabel()}</Text>
+          <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <OnlineStatus />
+          <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
+            {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
+          </TouchableOpacity>
           <HeaderLogo />
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
@@ -230,6 +253,8 @@ const styles = StyleSheet.create({
   appVer: { color: theme.sub, fontSize: 11, marginTop: 2 },
   signOut: { borderWidth: 1, borderColor: theme.border, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13 },
   signOutTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
+  refreshBtn: { borderWidth: 1, borderColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 88, alignItems: 'center' },
+  refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
   testBanner: { backgroundColor: 'rgba(240,165,0,0.14)', borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   testTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
 
