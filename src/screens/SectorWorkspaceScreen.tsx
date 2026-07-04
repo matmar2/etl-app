@@ -3,6 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { sectorTlHtml, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
+import RouteMapModal from '../components/RouteMapModal';
 import { theme } from '../theme';
 import { hhmm } from './sectorShared';
 import { fmtTl, parseTl } from '../util/tl';
@@ -12,6 +13,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [s, setS] = useState<any>(null);
   const [tl, setTl] = useState<number | null>(null);
   const [err, setErr] = useState('');
+  const [mapOpen, setMapOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setErr('');
@@ -69,8 +71,15 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         </View>
       ) : null}
       <Text style={styles.title}>{s.flight_no} · {s.dep} → {s.arr}</Text>
-      <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
+      <View style={styles.subRow}>
+        <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
+        {s.dep && s.arr && s.dep !== s.arr ? (
+          <TouchableOpacity onPress={() => setMapOpen(true)} hitSlop={8}><Text style={styles.mapBtn}>🗺  Map view</Text></TouchableOpacity>
+        ) : null}
+      </View>
       <Text style={[styles.status, { color: s.status === 'closed' ? theme.green : theme.accent }]}>{(s.status || 'draft').toUpperCase()}</Text>
+
+      <RouteMapModal visible={mapOpen} sector={s} onClose={() => setMapOpen(false)} />
 
       <TouchableOpacity style={styles.previewBtn} onPress={previewTl}>
         <Text style={styles.previewTxt}>⎙  Preview / print Tech Log (current info)</Text>
@@ -107,6 +116,8 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
   title: { color: theme.text, fontSize: 20, fontWeight: '800' },
   sub: { color: theme.sub, marginTop: 4 },
+  subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
+  mapBtn: { color: theme.accent, fontWeight: '800', fontSize: 13 },
   tlBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.accent, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 10 },
   tlTxt: { color: '#1a1300', fontWeight: '900', fontSize: 16 },
   tlEdit: { color: '#1a1300', fontWeight: '700', textDecorationLine: 'underline' },
