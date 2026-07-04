@@ -5,6 +5,11 @@ import { hhmm } from '../screens/sectorShared';
 import { theme } from '../theme';
 import MapCanvas from './MapCanvas';
 
+// Geoapify map tiles — English labels everywhere via lang=en (free tier, client key).
+// Restrict/rotate it in the Geoapify dashboard; to switch providers, change TILE_URL only.
+const GEOAPIFY_KEY = '35cc051d3e9440919ed8c6a1ffdfd7ae';
+const TILE_URL = `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEOAPIFY_KEY}&lang=en`;
+
 type Pt = { lat: number; lon: number; code: string; name?: string | null };
 
 // Great-circle distance in nautical miles.
@@ -40,7 +45,7 @@ function gc(a,b,n){var toR=Math.PI/180,toD=180/Math.PI;
   var z=A*Math.sin(f1)+B*Math.sin(f2);
   out.push([Math.atan2(z,Math.sqrt(x*x+y*y))*toD,Math.atan2(y,x)*toD]);}return out;}
 var map=L.map('map',{zoomControl:true,attributionControl:true});
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:11,attribution:'© OpenStreetMap'}).addTo(map);
+L.tileLayer('${TILE_URL}',{maxZoom:18,attribution:'© OpenStreetMap · © Geoapify'}).addTo(map);
 var line=L.polyline(gc(dep,arr,72),{color:'#c8102e',weight:3,opacity:.9,dashArray:'1 8',lineCap:'round'}).addTo(map);
 function dot(p,label,fill){L.circleMarker(p,{radius:7,color:'#fff',weight:2,fillColor:fill,fillOpacity:1}).addTo(map)
  .bindTooltip(label,{permanent:true,direction:'top',className:'lab',offset:[0,-6]});}
