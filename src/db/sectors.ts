@@ -1,6 +1,6 @@
 import { deleteServerSector, getServerSector, NetworkError, serverSectors, syncPush } from '../api/client';
 import { getLocalAircraftDefects, getSectorDefects } from './defects';
-import { pendingSectorDeleteIds, queueRequest } from './outbox';
+import { queueRequest } from './outbox';
 import { getRef, setRef } from './reference';
 import { db } from './schema';
 
@@ -202,12 +202,19 @@ export async function pullSectorList(reg: string): Promise<Sector[]> {
         s.status ?? 'draft', s.version ?? 1, JSON.stringify(s));
     }
     const serverIds = new Set((server as any[]).map((s) => s.id));
-    // Reconcile tombstones: drop one once the server no longer lists it (delete confirmed) OR the
-    // queued delete is gone (rejected, e.g. released) — so a stuck tombstone can't hide a sector forever.
+    // Reconcile tombstones: keep hiding a deleted sector while the server still lists it (the delete
+    // may still be queued or need Force) so an offline delete never reappears. Two exits: (1) the
+    // server has dropped the row → delete confirmed; (2) the row is released/exported → an official
+    // Tech Log record that can NEVER be deleted, so stop hiding it and let it reappear honestly.
     if (tombs.size) {
-      const stillQueued = await pendingSectorDeleteIds();
-      const keep = [...tombs].filter((id) => serverIds.has(id) && stillQueued.has(id));
-      await setRef(TOMB_KEY, keep);
+      const byId = new Map((server as any[]).map((s) => [s.id, s]));
+      const keep = [...tombs].filter((id) => {
+        const s = byId.get(id);
+        if (!s) return false;
+        const st = String(s.status || '').toLowerCase();
+        return st !== 'released' && st !== 'exported';
+      });
+      if (keep.length !== tombs.size) await setRef(TOMB_KEY, keep);
     }
     const localOnly = dirty.filter((x: any) => !serverIds.has(x.id));   // not yet on the server
     return [...(server as any[]).filter((s) => !tombs.has(s.id)), ...localOnly];
