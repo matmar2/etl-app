@@ -1,4 +1,5 @@
 import { deleteServerSector, getServerSector, NetworkError, serverSectors, syncPush } from '../api/client';
+import { getSectorDefects } from './defects';
 import { db } from './schema';
 
 export type Sector = {
@@ -83,6 +84,50 @@ export async function getSector(id: string): Promise<any | null> {
   const d = await db();
   const row = await d.getFirstAsync<{ payload: string }>('SELECT payload FROM sectors WHERE id = ?', id);
   return row ? JSON.parse(row.payload) : null;
+}
+
+// Build a release-status view from the LOCAL sector + defects so the Release page renders
+// offline (print/transfer, and an offline CRS). Approximate — the server view is authoritative online.
+export async function localReleaseStatus(sectorId: string): Promise<any> {
+  const s = await getSector(sectorId);
+  const defs = await getSectorDefects(sectorId).catch(() => [] as any[]);
+  const brief = (d: any) => ({ id: d.id, title: d.title, description: d.description, ata_chapter: d.ata_chapter, mel_ref: d.mel_ref, status: d.status });
+  const isCabin = (d: any) => d.area === 'cabin' || d.source === 'cabin';
+  const done = (d: any) => ['rectified', 'closed', 'deferred'].includes(d.status);
+  const blockers = defs.filter((d) => !isCabin(d) && !done(d) && d.blocks_serviceability !== false);
+  const deferred = defs.filter((d) => d.status === 'deferred');
+  const cabin_pending = defs.filter((d) => isCabin(d) && !['rectified', 'closed'].includes(d.status));
+  return {
+    serviceable: blockers.length === 0,
+    blockers: blockers.map(brief), deferred: deferred.map(brief), cabin_pending: cabin_pending.map(brief),
+    released: !!s?.released_at, release: s?.released_at ? { by: s.released_by, at: s.released_at, kind: s.release_kind } : {},
+    reset_request: null, _offline: true,
+  };
+}
+
+// Optimistically mark a sector released in the local mirror (the real release is queued in the
+// outbox and syncs later). Does not set dirty — the release replays via its own endpoint.
+export async function markLocalReleased(sectorId: string, rel: { by?: string; kind?: string; note?: string }): Promise<void> {
+  const s = await getSector(sectorId);
+  if (!s) return;
+  const payload = { ...s, released_at: new Date().toISOString(), status: 'released', released_by: rel.by, release_kind: rel.kind, release_note: rel.note };
+  const d = await db();
+  await d.runAsync('UPDATE sectors SET status = ?, payload = ? WHERE id = ?', 'released', JSON.stringify(payload), sectorId);
+}
+
+// Create a ground maintenance log locally (offline). page_kind=maintenance_only; /sync/push
+// assigns the real TL number and sets status=maintenance on the server when it syncs.
+export async function createLocalMaintenance(reg: string, station: string, wo?: string, note?: string): Promise<{ id: string }> {
+  const d = await db();
+  const id = uuid();
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = { id, aircraft_id: reg, flight_no: 'MAINT', flight_date: today, dep: station, arr: station,
+    page_kind: 'maintenance_only', status: 'maintenance', wo_ref: wo, note, source: 'manual', version: 1 };
+  await d.runAsync(
+    `INSERT INTO sectors (id, aircraft_id, flight_no, flight_date, dep, arr, status, version, dirty, payload)
+     VALUES (?,?,?,?,?,?,?,1,1,?)`,
+    id, reg, 'MAINT', today, station, station, 'maintenance', JSON.stringify(payload));
+  return { id };
 }
 
 export type LocalPrevFuel = { fuel_kg: number; source: string; flight_no?: string; date?: string;

@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml } from '../api/client';
 import RoBanner from '../components/RoBanner';
-import { getSector } from '../db/sectors';
+import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
@@ -44,7 +44,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
   const load = useCallback(() => {
-    releaseStatus(sectorId).then(setSt).catch(() => setMsg('Offline — the Release & CRS page needs a connection. Reconnect to issue a release.'));
+    releaseStatus(sectorId).then(setSt)                                    // online → authoritative
+      .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
     const reg = currentAircraft()?.registration;
     if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
@@ -68,14 +69,21 @@ export default function ReleaseScreen({ route, navigation }: any) {
   async function submitRelease(signature: string) {
     setBusy(true); setMsg('');
     try {
-      const r = await releaseSector(sectorId, {
+      const r: any = await releaseSector(sectorId, {
         note: note.trim() || undefined, signer_name: signer.trim() || undefined,
         licence_no: licence.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined,
       });
-      setMsg(`Released · ${KIND[r.kind] || r.kind}`);
-      setSig(null); setOtp(''); setNeedOtp(false); load();
+      setSig(null); setOtp(''); setNeedOtp(false);
+      if (r?.queued) {
+        const kind = st?.deferred?.length ? 'deferred' : (st?.serviceable ? 'nil' : 'rectified');
+        await markLocalReleased(sectorId, { by: signer.trim() || undefined, kind, note: note.trim() || undefined }).catch(() => {});
+        setSt((prev: any) => prev ? { ...prev, released: true, release: { by: signer.trim() || undefined, kind, note: note.trim() || undefined } } : prev);
+        setMsg('CRS released offline — will sync when back online ✓');
+      } else {
+        setMsg(`Released · ${KIND[r.kind] || r.kind}`); load();
+      }
       Alert.alert('Before leaving the aircraft',
-        'Confirm before you leave:\n\n•  all flight-crew iPads are synced\n•  the tech log is backed up to the server');
+        'Confirm before you leave:\n\n•  all flight-crew iPads are synced\n•  the tech log is backed up to the server (when you reconnect)');
     } catch (e: any) {
       if (e instanceof MfaRequired) { setSig(signature); setNeedOtp(true); setMsg('Enter your authenticator code to release.'); }
       else if (/licen[cs]e/i.test(e.message || '')) { setSig(signature); setMsg(`${e.message}. Correct the licence and release again.`); }   // keep the signature — retry the licence only

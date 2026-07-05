@@ -61,3 +61,10 @@ export async function sectorExists(_aircraftId: string, flightNo: string, flight
   const all = await listSectors().catch(() => [] as Sector[]);
   return all.some((x) => x.flight_no === flightNo && String(x.flight_date) === flightDate);
 }
+
+// Web is always online — these offline helpers are no-ops (the online server paths are used instead).
+export async function localReleaseStatus(_sectorId: string): Promise<any> { return null; }
+export async function markLocalReleased(_sectorId: string, _rel: { by?: string; kind?: string; note?: string }): Promise<void> { /* no-op on web */ }
+export async function createLocalMaintenance(_reg: string, _station: string, _wo?: string, _note?: string): Promise<{ id: string }> {
+  throw new Error('Maintenance log needs a connection on the web app');
+}

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ammIawLine, ammRevision, ampRevision, can, createMaintenance, currentAircraft, extendDefect, iawText, listActiveDefects, listHIL, mpdIawLine, serverSectors, syncPush, taskLineWithHeader } from '../api/client';
+import { ammIawLine, ammRevision, ampRevision, can, createMaintenance, currentAircraft, extendDefect, iawText, listActiveDefects, listHIL, mpdIawLine, NetworkError, serverSectors, syncPush, taskLineWithHeader } from '../api/client';
+import { createLocalMaintenance } from '../db/sectors';
 import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
 import MelPicker from '../components/MelPicker';
@@ -63,8 +64,16 @@ export default function MaintenanceScreen({ route, navigation }: any) {
           'Maintenance log exists');
         if (!another) { navigation.navigate('Release', { sectorId: open.id }); return; }
       }
-      const r = await createMaintenance({ aircraft_id: reg, station: st, wo_ref: wo.trim() || undefined, note: note.trim() || undefined });
-      navigation.navigate('Release', { sectorId: r.id });   // work defects + issue CRS
+      let id: string;
+      try {
+        const r = await createMaintenance({ aircraft_id: reg, station: st, wo_ref: wo.trim() || undefined, note: note.trim() || undefined });
+        id = r.id;
+      } catch (e: any) {
+        if (!(e instanceof NetworkError)) throw e;
+        const r = await createLocalMaintenance(reg, st, wo.trim() || undefined, note.trim() || undefined);   // offline → local log, TL# assigned on sync
+        id = r.id;
+      }
+      navigation.navigate('Release', { sectorId: id });     // work defects + issue CRS
     } catch (e: any) { setMsg(e.message || 'Could not open the maintenance log.'); }
     finally { setBusy(false); }
   }

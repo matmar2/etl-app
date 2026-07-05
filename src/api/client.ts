@@ -311,11 +311,17 @@ export type ReleaseStatus = {
 export const releaseStatus = (sectorId: string): Promise<ReleaseStatus> =>
   api(`/sectors/${sectorId}/release-status`);
 export async function releaseSector(sectorId: string, body: { note?: string; signer_name?: string; licence_no?: string; signature_image?: string; otp?: string; device_id?: string }) {
-  const res = await fetch(`${BASE}/sectors/${sectorId}/release`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/sectors/${sectorId}/release`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify(body),
+    });
+  } catch {                                             // offline → queue the CRS with an offline flag
+    await queueRequest('POST', `/sectors/${sectorId}/release`, JSON.stringify({ ...body, offline: true }));
+    return { queued: true };
+  }
   if (!res.ok) {
     let detail = `release → ${res.status}`;
     try { detail = (await res.json()).detail || detail; } catch {}
