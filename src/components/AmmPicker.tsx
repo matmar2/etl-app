@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary, prefetchAmm } from '../api/client';
+import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary, NetworkError, prefetchAmm } from '../api/client';
 import AmmInstruction from './AmmInstruction';
 import { theme } from '../theme';
 
@@ -24,8 +24,12 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
     try {
       const r = await ammContent(reg, m.task_card_ref);
       setViewer({ ref: m.task_card_ref, html: r.html });
-    } catch {
-      setViewer({ ref: m.task_card_ref, html: '<div style="padding:20px;font-family:sans-serif;color:#333">No instruction is available for this task card (or the aircraft is offline).</div>' });
+    } catch (e) {
+      const offline = e instanceof NetworkError;
+      const msg = offline
+        ? 'This instruction is not saved on this iPad yet.<br><br>Full AMM instructions (and their diagrams) are large, so they are downloaded on demand and kept for offline use <b>only after you open them once while online</b>. The task-card list and the i.a.w reference already work offline — but to have this instruction available with no signal, open it once while connected.'
+        : 'No instruction is available for this task card.';
+      setViewer({ ref: m.task_card_ref, html: `<div style="padding:22px;font-family:-apple-system,sans-serif;color:#333;line-height:1.55;font-size:15px">${msg}</div>` });
     } finally { setLoadingRef(null); }
   }
 
