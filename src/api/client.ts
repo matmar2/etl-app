@@ -7,6 +7,8 @@ import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
 import { sha1Hex, verifyTotp } from '../util/totp';
+import { ungzip } from 'pako';
+import { AMM_BUNDLE_MODE } from '../config/amm';
 
 const BASE = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? 'http://localhost:8000';
 
@@ -940,6 +942,7 @@ export const ammContent = async (reg: string | undefined, ref: string): Promise<
     if (r?.html) setRef(ammTextKey(reg, ref), r).catch(() => {});  // keep text (original fig URLs) for offline
     return r;
   } catch (e) {
+    if (AMM_BUNDLE_MODE) { const b = await bundleContent(reg, ref); if (b) return b; }   // per-ATA bundle (offline)
     const t: any = (await getRef<any>(ammTextKey(reg, ref))).data;
     if (t?.empty) return { task_card_ref: ref, html: NO_INSTR_HTML };          // cached "no instruction" marker
     if (t?.html) return { ...t, html: await assembleOfflineAmm(t.html) };      // assemble diagrams from shared cache
@@ -948,6 +951,84 @@ export const ammContent = async (reg: string | undefined, ref: string): Promise<
     throw e;                                                                   // genuinely not cached yet
   }
 };
+
+// ── Per-ATA compressed bundles (AMM_BUNDLE_MODE) ──────────────────────────────────────────────
+const bundleKey = (reg: string | undefined, ata: string) => `ammbundle:${(reg ?? '').toUpperCase()}:${ata}`;
+function wrapAmmHtml(inner: string): string {
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<style>body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;margin:0;padding:16px 18px;color:#12181f;background:#fff;line-height:1.55;font-size:15px}'
+    + 'img{max-width:100%;height:auto;display:block;margin:10px 0}h1,h2,h3{line-height:1.25}table{border-collapse:collapse;max-width:100%}'
+    + 'td,th{border:1px solid #ccd;padding:4px 8px;vertical-align:top}.amm-task-key{color:#556;font-weight:700;font-size:12px}</style></head><body>'
+    + inner + '</body></html>';
+}
+function figMime(src: string): string {
+  const s = src.toLowerCase();
+  return s.endsWith('.png') ? 'image/png' : (s.endsWith('.jpg') || s.endsWith('.jpeg')) ? 'image/jpeg' : 'image/svg+xml';
+}
+// Authed fetch of a gzipped bundle → stored as a data-URI string.
+async function fetchBundle(reg: string, ata: string): Promise<{ uri: string; revision: string } | null> {
+  const headers = { 'X-Device-Id': await _devId(), ...(await authHeader()) };
+  let res: Response;
+  try { res = await fetch(`${BASE}/mel/amm/bundle?reg=${encodeURIComponent(reg)}&ata=${encodeURIComponent(ata)}`, { headers }); }
+  catch { return null; }
+  if (!res.ok) return null;
+  const revision = res.headers.get('X-Amm-Revision') || '';
+  const blob = await res.blob();
+  const uri = await new Promise<string | null>((resolve) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(typeof fr.result === 'string' ? fr.result : null);
+    fr.onerror = () => resolve(null);
+    fr.readAsDataURL(blob);
+  });
+  return uri ? { uri, revision } : null;
+}
+// Extract one card's instruction from its ATA bundle (offline), inlining its diagrams.
+async function bundleContent(reg: string | undefined, ref: string): Promise<AmmContent | null> {
+  const ata = (ref || '').slice(0, 2);
+  const b: any = (await getRef<any>(bundleKey(reg, ata))).data;
+  if (!b?.uri) return null;
+  try {
+    const b64 = String(b.uri).split(',')[1] || '';
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const data = JSON.parse(ungzip(bytes, { to: 'string' }) as string);
+    const html = data?.cards?.[ref];
+    if (html == null) return null;
+    let out = String(html);
+    const figs = data.figures || {};
+    for (const src of Object.keys(figs)) out = out.split(`src="${src}"`).join(`src="data:${figMime(src)};base64,${figs[src]}"`);
+    return { task_card_ref: ref, html: wrapAmmHtml(out) };
+  } catch { return null; }
+}
+
+// Download all per-ATA bundles for the tail (resumable; accurate success count; retries).
+export async function prefetchAmmBundles(reg: string | undefined,
+                                         onProgress?: (cached: number, total: number) => void): Promise<{ done: number; total: number }> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !reg) return { done: 0, total: 0 };
+  const atas = ((await ammFilters(reg).catch(() => ({ ata: [] as string[] }))).ata) || [];
+  const total = atas.length;
+  const have = new Set<string>();
+  for (const a of atas) if ((await getRef(bundleKey(reg, a))).data) have.add(a);
+  onProgress?.(have.size, total);
+  for (let pass = 0; pass < 4 && have.size < total; pass++) {
+    let progressed = false;
+    for (const a of atas) {
+      if (have.has(a)) continue;
+      const b = await fetchBundle(reg, a);
+      if (b) { await setRef(bundleKey(reg, a), b); have.add(a); progressed = true; onProgress?.(have.size, total); }
+    }
+    if (!progressed) break;                                                    // offline / stuck → resume next session
+  }
+  return { done: have.size, total };
+}
+export async function ammBundleProgress(reg: string | undefined): Promise<{ cached: number; total: number }> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !reg) return { cached: 0, total: 0 };
+  const atas = ((await ammFilters(reg).catch(() => ({ ata: [] as string[] }))).ata) || [];
+  let cached = 0;
+  for (const a of atas) if ((await getRef(bundleKey(reg, a))).data) cached++;
+  return { cached, total: atas.length };
+}
 
 // Cache ONE card's instruction (text + its figures) for offline. Returns true when the card is
 // resolved (cached OR confirmed to have no instruction); throws only on a network/server error so

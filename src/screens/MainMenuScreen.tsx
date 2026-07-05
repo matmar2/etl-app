@@ -6,7 +6,8 @@ import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import OnlineStatus from '../components/OnlineStatus';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, ammInstrProgress, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prefetchAllAmm, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, ammBundleProgress, ammInstrProgress, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prefetchAllAmm, prefetchAmmBundles, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { AMM_BUNDLE_MODE } from '../config/amm';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -71,11 +72,12 @@ export default function MainMenuScreen({ navigation }: any) {
         await prepareOffline(reg, (frac, label) => { if (isAlive()) setOfflineProg({ frac, label }); });
       } catch { /* best-effort */ }
       if (isAlive()) setTimeout(() => setOfflineProg(null), 2000);
-      // Phase 2 — all AMM instructions (text + deduped diagrams), resumable across sessions.
-      const seed = await ammInstrProgress(reg).catch(() => ({ cached: 0, total: 0 }));
+      // Phase 2 — all AMM instructions (per-card, or per-ATA bundles when AMM_BUNDLE_MODE), resumable.
+      const seed = await (AMM_BUNDLE_MODE ? ammBundleProgress(reg) : ammInstrProgress(reg)).catch(() => ({ cached: 0, total: 0 }));
       if (isAlive() && seed.total && seed.cached < seed.total) setAmmProg(seed);
       try {
-        await prefetchAllAmm(reg, (cached, total) => { if (isAlive()) setAmmProg({ cached, total }); });
+        const cb = (cached: number, total: number) => { if (isAlive()) setAmmProg({ cached, total }); };
+        await (AMM_BUNDLE_MODE ? prefetchAmmBundles(reg, cb) : prefetchAllAmm(reg, cb));
       } catch { /* resumes next session */ }
       if (isAlive()) setTimeout(() => setAmmProg(null), 3000);
     }).catch(() => { _offlinePreparedThisSession = false; });
