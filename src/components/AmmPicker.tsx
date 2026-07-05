@@ -96,24 +96,25 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
             <View style={{ height: 24 }} />
           </ScrollView>
         </View>
-      </View>
 
-      {/* AMM instruction viewer (full HTML + diagrams from CAMO) */}
-      <Modal visible={!!viewer} animationType="slide" onRequestClose={() => setViewer(null)}>
-        <View style={s.viewer}>
-          <View style={s.vhead}>
-            <Text style={s.title} numberOfLines={1}>AMM · {viewer?.ref}</Text>
-            <TouchableOpacity onPress={() => setViewer(null)}><Text style={s.close}>Close</Text></TouchableOpacity>
+        {/* AMM instruction viewer — an in-modal overlay (NOT a nested Modal, which freezes iOS
+            when both dismiss at once). "Use this task card" closes the overlay + picks in one modal. */}
+        {viewer ? (
+          <View style={s.viewer}>
+            <View style={s.vhead}>
+              <Text style={s.title} numberOfLines={1}>AMM · {viewer.ref}</Text>
+              <TouchableOpacity onPress={() => setViewer(null)}><Text style={s.close}>Close</Text></TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}><AmmInstruction html={viewer.html} /></View>
+            <View style={s.vfoot}>
+              <TouchableOpacity style={s.pickBtn}
+                onPress={() => { const card = (rows || []).find((x) => x.task_card_ref === viewer.ref); setViewer(null); if (card) onPick(card); }}>
+                <Text style={s.pickTxt}>Use this task card ›</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={{ flex: 1 }}>{viewer ? <AmmInstruction html={viewer.html} /> : null}</View>
-          <View style={s.vfoot}>
-            <TouchableOpacity style={s.pickBtn}
-              onPress={() => { const card = (rows || []).find((x) => x.task_card_ref === viewer?.ref); if (card) { setViewer(null); onPick(card); } }}>
-              <Text style={s.pickTxt}>Use this task card ›</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        ) : null}
+      </View>
     </Modal>
   );
 }
@@ -152,7 +153,7 @@ const s = StyleSheet.create({
   useTxt: { color: theme.accent, fontWeight: '800' },
   instrBtn: { alignSelf: 'flex-start' },
   instrTxt: { color: theme.green, fontWeight: '800' },
-  viewer: { flex: 1, backgroundColor: theme.bg, paddingTop: 12 },
+  viewer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.bg, paddingTop: 50 },
   vhead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10 },
   vfoot: { padding: 12, borderTopWidth: 1, borderTopColor: theme.border },
   pickBtn: { backgroundColor: theme.accent, borderRadius: 8, padding: 14, alignItems: 'center' },
