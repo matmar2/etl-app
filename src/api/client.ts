@@ -888,67 +888,99 @@ export const ammSummary = (m: AmmCard): string =>
 export const ammIawLine = (m: AmmCard): string =>
   `i.a.w AMM Rev ${m.revision || '—'} · ${m.task_card_ref}${ammSummary(m) ? ' — ' + ammSummary(m) : ''}`.trim();
 // Full HTML instruction (with diagrams) for one AMM task card — for the in-app viewer.
+// Offline strategy (all instructions cached by DEFAULT): each card's HTML is stored per-ref with
+// its ORIGINAL figure URLs, and every unique diagram is stored ONCE in a shared figure cache
+// (fig:<hash>). At view time offline we assemble the two — so shared diagrams aren't duplicated
+// across the ~3000 cards, keeping the whole tail's instructions to ~90 MB instead of ~1 GB.
 export type AmmContent = { task_card_ref: string; title?: string; ata?: string; revision?: string; html: string };
 const ammViewKey = (reg: string | undefined, ref: string) => `ammcontent:${(reg ?? '').toUpperCase()}:${ref}`;
-const ammSavedKey = (reg: string | undefined, ref: string) => `ammfull:${(reg ?? '').toUpperCase()}:${ref}`;
-// Fetch the full instruction HTML. On success cache the viewed card so it re-opens offline; when
-// offline, prefer a deliberately "saved for offline" copy (diagrams inlined) over the view cache.
-export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> => {
-  try {
-    const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
-    if (r?.html) setRef(ammViewKey(reg, ref), r).catch(() => {});
-    return r;
-  } catch (e) {
-    const saved = (await getRef<AmmContent>(ammSavedKey(reg, ref))).data;   // inlined, fully offline
-    if (saved) return saved;
-    const viewed = (await getRef<AmmContent>(ammViewKey(reg, ref))).data;   // text-only fallback
-    if (viewed) return viewed;
-    throw e;
-  }
-};
+const ammTextKey = (reg: string | undefined, ref: string) => `ammtext:${(reg ?? '').toUpperCase()}:${ref}`;
+const figKey = (url: string) => `fig:${sha1Hex(url)}`;
 
-// Inline every diagram (<img src="/api/figures/…">, resolved against the <base>) as a data-URI so
-// the instruction renders fully offline — figures included, not just the text.
-async function inlineAmmFigures(html: string): Promise<string> {
+function ammFigureUrls(html: string): { src: string; abs: string }[] {
   const base = (/(<base href=")([^"]+)"/i.exec(html)?.[2] || '').replace(/\/+$/, '');
-  const srcs = new Set<string>();
+  const out: { src: string; abs: string }[] = [];
+  const seen = new Set<string>();
   const re = /<img\b[^>]*\bsrc="([^"]+)"/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) { if (!m[1].startsWith('data:')) srcs.add(m[1]); }
+  while ((m = re.exec(html))) {
+    const src = m[1];
+    if (src.startsWith('data:') || seen.has(src)) continue;
+    seen.add(src);
+    out.push({ src, abs: /^https?:\/\//i.test(src) ? src : `${base}/${src.replace(/^\//, '')}` });
+  }
+  return out;
+}
+
+// Download & cache every diagram a card references, once each (shared across cards).
+async function cacheAmmFigures(html: string): Promise<void> {
+  for (const { abs } of ammFigureUrls(html)) {
+    const key = figKey(abs);
+    if ((await getRef(key)).data) continue;                        // already cached (shared)
+    const uri = await tileToDataUri(abs).catch(() => null);
+    if (uri) await setRef(key, uri).catch(() => {});
+  }
+}
+
+// Rebuild an offline-ready HTML by swapping each figure URL for its cached data-URI.
+async function assembleOfflineAmm(html: string): Promise<string> {
   let out = html;
-  for (const src of srcs) {
-    const abs = /^https?:\/\//i.test(src) ? src : `${base}/${src.replace(/^\//, '')}`;
-    const uri = await tileToDataUri(abs).catch(() => null);       // fetch → base64 data-URI
+  for (const { src, abs } of ammFigureUrls(html)) {
+    const uri = (await getRef<string>(figKey(abs))).data;
     if (uri) out = out.split(`src="${src}"`).join(`src="${uri}"`);
   }
   return out;
 }
 
-// "Save these for offline": cache the full instruction (diagrams inlined) for a chosen set of task
-// cards so a mechanic can read them with no signal. Deliberately opt-in per subset — instructions
-// are large (~139 MB/tail), and many mechanics only need the i.a.w reference, not the full text.
-export async function saveAmmForOffline(reg: string | undefined, refs: string[],
-                                        onProgress?: (done: number, total: number) => void): Promise<{ saved: number; failed: number }> {
-  const { Platform } = require('react-native');
-  if (Platform.OS === 'web') return { saved: 0, failed: 0 };
-  let saved = 0, failed = 0;
-  for (let i = 0; i < refs.length; i++) {
-    try {
-      const r = await api(`/mel/amm/content?ref=${encodeURIComponent(refs[i])}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
-      if (r?.html) { await setRef(ammSavedKey(reg, refs[i]), { ...r, html: await inlineAmmFigures(r.html) }); saved++; }
-      else failed++;
-    } catch { failed++; }                                          // offline / no instruction → skip
-    onProgress?.(i + 1, refs.length);
+export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> => {
+  try {
+    const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+    if (r?.html) setRef(ammTextKey(reg, ref), r).catch(() => {});  // keep text (original fig URLs) for offline
+    return r;
+  } catch (e) {
+    const t = (await getRef<AmmContent>(ammTextKey(reg, ref))).data;
+    if (t?.html) return { ...t, html: await assembleOfflineAmm(t.html) };   // assemble diagrams from shared cache
+    const viewed = (await getRef<AmmContent>(ammViewKey(reg, ref))).data;
+    if (viewed) return viewed;
+    throw e;
   }
-  return { saved, failed };
+};
+
+// Cache ONE card's instruction (text + its figures) for offline. Skips if already cached.
+async function cacheOneAmm(reg: string | undefined, ref: string): Promise<boolean> {
+  if ((await getRef(ammTextKey(reg, ref))).data) return true;      // resumable — already have it
+  const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+  if (!r?.html) return false;
+  await setRef(ammTextKey(reg, ref), r);
+  await cacheAmmFigures(r.html);
+  return true;
 }
-// How many of the given cards already have an offline copy saved (for the picker's badge).
-export async function ammSavedCount(reg: string | undefined, refs: string[]): Promise<number> {
+
+// Cache ALL instructions (text + deduped diagrams) for the tail's task cards — the default so a
+// mechanic has every reachable instruction offline with no manual step. Resumable: skips cards
+// already cached, so it continues across sessions. onProgress(done, total).
+export async function prefetchAllAmm(reg: string | undefined,
+                                     onProgress?: (done: number, total: number) => void): Promise<{ done: number; total: number }> {
   const { Platform } = require('react-native');
-  if (Platform.OS === 'web') return 0;
-  let n = 0;
-  for (const ref of refs) { if ((await getRef(ammSavedKey(reg, ref))).data) n++; }
-  return n;
+  if (Platform.OS === 'web' || !reg) return { done: 0, total: 0 };
+  const list = (await getRef<any[]>(`amm:${reg.toUpperCase()}`)).data || [];
+  const refs = list.map((c) => c.task_card_ref).filter(Boolean);
+  let done = 0;
+  for (const ref of refs) {
+    try { await cacheOneAmm(reg, ref); } catch { /* offline/failed — retry next run */ }
+    onProgress?.(++done, refs.length);
+  }
+  return { done, total: refs.length };
+}
+
+// How many of the tail's cards already have their instruction cached offline (list total + cached).
+export async function ammInstrProgress(reg: string | undefined): Promise<{ cached: number; total: number }> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !reg) return { cached: 0, total: 0 };
+  const list = (await getRef<any[]>(`amm:${reg.toUpperCase()}`)).data || [];
+  let cached = 0;
+  for (const c of list) { if (c.task_card_ref && (await getRef(ammTextKey(reg, c.task_card_ref))).data) cached++; }
+  return { cached, total: list.length };
 }
 
 // Push every dirty local row, then clear the dirty flag on success.

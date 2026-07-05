@@ -6,7 +6,7 @@ import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import OnlineStatus from '../components/OnlineStatus';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, ammInstrProgress, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prefetchAllAmm, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -55,18 +55,29 @@ export default function MainMenuScreen({ navigation }: any) {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(null);
+  const [ammProg, setAmmProg] = useState<{ cached: number; total: number } | null>(null);
 
   // Download everything needed for offline use once per session, with a visible progress bar so
   // crew know when it is safe to go offline. Re-armed (flag reset) if we were offline at the time.
+  // Two phases: (1) the quick core caches (lists, schedule, defects, maps); then (2) ALL AMM
+  // instructions download in the background (resumable) so every task card opens with no signal.
   function prepOffline(reg: string | undefined, isAlive: () => boolean) {
     if (_offlinePreparedThisSession || !reg) return;
     if (require('react-native').Platform.OS === 'web') return;        // web is always online — no offline prep
     _offlinePreparedThisSession = true;
-    serverReachable().then((ok) => {
+    serverReachable().then(async (ok) => {
       if (!ok) { _offlinePreparedThisSession = false; return; }        // retry next focus when online
-      prepareOffline(reg, (frac, label) => { if (isAlive()) setOfflineProg({ frac, label }); })
-        .then(() => { if (isAlive()) setTimeout(() => setOfflineProg(null), 2500); })
-        .catch(() => { if (isAlive()) setOfflineProg(null); });
+      try {
+        await prepareOffline(reg, (frac, label) => { if (isAlive()) setOfflineProg({ frac, label }); });
+      } catch { /* best-effort */ }
+      if (isAlive()) setTimeout(() => setOfflineProg(null), 2000);
+      // Phase 2 — all AMM instructions (text + deduped diagrams), resumable across sessions.
+      const seed = await ammInstrProgress(reg).catch(() => ({ cached: 0, total: 0 }));
+      if (isAlive() && seed.total && seed.cached < seed.total) setAmmProg(seed);
+      try {
+        await prefetchAllAmm(reg, (cached, total) => { if (isAlive()) setAmmProg({ cached, total }); });
+      } catch { /* resumes next session */ }
+      if (isAlive()) setTimeout(() => setAmmProg(null), 3000);
     }).catch(() => { _offlinePreparedThisSession = false; });
   }
 
@@ -110,7 +121,9 @@ export default function MainMenuScreen({ navigation }: any) {
       const r = await Updates.checkForUpdateAsync();
       if (r.isAvailable) {
         await Updates.fetchUpdateAsync();
-        if (await confirmAction('A new version is ready. Restart now to apply it?', 'Update ready')) await Updates.reloadAsync();
+        // Do NOT force Updates.reloadAsync() — an immediate in-place reload can hard-crash on iOS.
+        // The downloaded update applies safely on the next launch; ask the user to reopen.
+        await confirmAction('Update downloaded ✓\n\nClose the app fully (swipe up from the bottom) and reopen it to finish updating.', 'Update ready');
       } else {
         await confirmAction('You are already on the latest published version.', 'Up to date');
       }
@@ -229,7 +242,22 @@ export default function MainMenuScreen({ navigation }: any) {
               <Text style={styles.offPct}>{pct}%</Text>
             </View>
             <View style={styles.offTrack}><View style={[styles.offFill, { width: `${pct}%` }, done && { backgroundColor: theme.green }]} /></View>
-            <Text style={styles.offLabel}>{done ? 'All pickers, schedule, defects and maps are on this iPad. (AMM instructions: save per task in the picker.)' : offlineProg.label}</Text>
+            <Text style={styles.offLabel}>{done ? 'Pickers, schedule, defects and maps are on this iPad. AMM instructions continue downloading below.' : offlineProg.label}</Text>
+          </View>
+        );
+      })() : null}
+
+      {!offlineProg && ammProg && ammProg.total ? (() => {
+        const done = ammProg.cached >= ammProg.total;
+        const pct = Math.round((ammProg.cached / ammProg.total) * 100);
+        return (
+          <View style={[styles.offCard, done && { borderColor: theme.green }]}>
+            <View style={styles.offHead}>
+              <Text style={[styles.offTitle, done && { color: theme.green }]}>{done ? '✓ All AMM instructions ready offline' : 'Downloading AMM instructions…'}</Text>
+              <Text style={styles.offPct}>{ammProg.cached}/{ammProg.total}</Text>
+            </View>
+            <View style={styles.offTrack}><View style={[styles.offFill, { width: `${pct}%` }, done && { backgroundColor: theme.green }]} /></View>
+            <Text style={styles.offLabel}>{done ? 'Every task card opens with no signal — text and diagrams.' : 'Keep working — this runs in the background and resumes if interrupted.'}</Text>
           </View>
         );
       })() : null}
