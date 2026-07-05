@@ -889,20 +889,67 @@ export const ammIawLine = (m: AmmCard): string =>
   `i.a.w AMM Rev ${m.revision || '—'} · ${m.task_card_ref}${ammSummary(m) ? ' — ' + ammSummary(m) : ''}`.trim();
 // Full HTML instruction (with diagrams) for one AMM task card — for the in-app viewer.
 export type AmmContent = { task_card_ref: string; title?: string; ata?: string; revision?: string; html: string };
-// Fetch the full instruction HTML; cache each viewed card so it re-opens offline. (Diagrams still
-// load from CAMO's public figures URL and need a connection — the text/structure shows offline.)
+const ammViewKey = (reg: string | undefined, ref: string) => `ammcontent:${(reg ?? '').toUpperCase()}:${ref}`;
+const ammSavedKey = (reg: string | undefined, ref: string) => `ammfull:${(reg ?? '').toUpperCase()}:${ref}`;
+// Fetch the full instruction HTML. On success cache the viewed card so it re-opens offline; when
+// offline, prefer a deliberately "saved for offline" copy (diagrams inlined) over the view cache.
 export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> => {
-  const key = `ammcontent:${(reg ?? '').toUpperCase()}:${ref}`;
   try {
     const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
-    if (r?.html) setRef(key, r).catch(() => {});
+    if (r?.html) setRef(ammViewKey(reg, ref), r).catch(() => {});
     return r;
   } catch (e) {
-    const { data } = await getRef<AmmContent>(key);
-    if (data) return data;
+    const saved = (await getRef<AmmContent>(ammSavedKey(reg, ref))).data;   // inlined, fully offline
+    if (saved) return saved;
+    const viewed = (await getRef<AmmContent>(ammViewKey(reg, ref))).data;   // text-only fallback
+    if (viewed) return viewed;
     throw e;
   }
 };
+
+// Inline every diagram (<img src="/api/figures/…">, resolved against the <base>) as a data-URI so
+// the instruction renders fully offline — figures included, not just the text.
+async function inlineAmmFigures(html: string): Promise<string> {
+  const base = (/(<base href=")([^"]+)"/i.exec(html)?.[2] || '').replace(/\/+$/, '');
+  const srcs = new Set<string>();
+  const re = /<img\b[^>]*\bsrc="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) { if (!m[1].startsWith('data:')) srcs.add(m[1]); }
+  let out = html;
+  for (const src of srcs) {
+    const abs = /^https?:\/\//i.test(src) ? src : `${base}/${src.replace(/^\//, '')}`;
+    const uri = await tileToDataUri(abs).catch(() => null);       // fetch → base64 data-URI
+    if (uri) out = out.split(`src="${src}"`).join(`src="${uri}"`);
+  }
+  return out;
+}
+
+// "Save these for offline": cache the full instruction (diagrams inlined) for a chosen set of task
+// cards so a mechanic can read them with no signal. Deliberately opt-in per subset — instructions
+// are large (~139 MB/tail), and many mechanics only need the i.a.w reference, not the full text.
+export async function saveAmmForOffline(reg: string | undefined, refs: string[],
+                                        onProgress?: (done: number, total: number) => void): Promise<{ saved: number; failed: number }> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web') return { saved: 0, failed: 0 };
+  let saved = 0, failed = 0;
+  for (let i = 0; i < refs.length; i++) {
+    try {
+      const r = await api(`/mel/amm/content?ref=${encodeURIComponent(refs[i])}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+      if (r?.html) { await setRef(ammSavedKey(reg, refs[i]), { ...r, html: await inlineAmmFigures(r.html) }); saved++; }
+      else failed++;
+    } catch { failed++; }                                          // offline / no instruction → skip
+    onProgress?.(i + 1, refs.length);
+  }
+  return { saved, failed };
+}
+// How many of the given cards already have an offline copy saved (for the picker's badge).
+export async function ammSavedCount(reg: string | undefined, refs: string[]): Promise<number> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web') return 0;
+  let n = 0;
+  for (const ref of refs) { if ((await getRef(ammSavedKey(reg, ref))).data) n++; }
+  return n;
+}
 
 // Push every dirty local row, then clear the dirty flag on success.
 // Replay locally-signed 2/10-day checks to the server. Network errors leave them

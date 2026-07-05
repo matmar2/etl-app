@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary, NetworkError, prefetchAmm } from '../api/client';
+import { AmmCard, ammContent, ammFilters, ammSavedCount, ammSearch, ammSummary, NetworkError, prefetchAmm, saveAmmForOffline } from '../api/client';
 import AmmInstruction from './AmmInstruction';
 import { theme } from '../theme';
 
@@ -17,7 +17,24 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
   const [expanded, setExpanded] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ ref: string; html: string } | null>(null);   // instruction viewer
   const [loadingRef, setLoadingRef] = useState<string | null>(null);
-  const [cached, setCached] = useState<number | null>(null);   // AMM cards cached for offline
+  const [cached, setCached] = useState<number | null>(null);   // AMM task-card list cached for offline
+  const [saveProg, setSaveProg] = useState<{ done: number; total: number } | null>(null);
+  const [saveNote, setSaveNote] = useState('');
+  const [savedN, setSavedN] = useState(0);   // how many of the shown cards already have an offline copy
+
+  // Save the full instructions (diagrams inlined) for the cards currently shown, for offline reading.
+  async function saveThese() {
+    if (saveProg) return;
+    const refs = (rows || []).map((r) => r.task_card_ref).filter(Boolean);
+    if (!refs.length) return;
+    if (refs.length > 60) { setSaveNote('Too many to save at once — filter by ATA or search to 60 cards or fewer, then Save.'); return; }
+    setSaveNote(''); setSaveProg({ done: 0, total: refs.length });
+    const res = await saveAmmForOffline(reg, refs, (done, total) => setSaveProg({ done, total }));
+    setSaveProg(null);
+    setSaveNote(res.saved
+      ? `✓ ${res.saved} instruction${res.saved === 1 ? '' : 's'} saved for offline${res.failed ? ` · ${res.failed} unavailable` : ''}`
+      : 'Could not save — connect to the internet and try again.');
+  }
 
   async function openInstruction(m: AmmCard) {
     setLoadingRef(m.task_card_ref);
@@ -27,7 +44,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
     } catch (e) {
       const offline = e instanceof NetworkError;
       const msg = offline
-        ? 'This instruction is not saved on this iPad yet.<br><br>Full AMM instructions (and their diagrams) are large, so they are downloaded on demand and kept for offline use <b>only after you open them once while online</b>. The task-card list and the i.a.w reference already work offline — but to have this instruction available with no signal, open it once while connected.'
+        ? 'This instruction is not saved on this iPad yet.<br><br>Full AMM instructions and diagrams are large, so they are kept offline only when you choose to save them. While online, filter to the tasks you need and tap <b>“⬇ Save these … for offline”</b> at the top of the picker (or open each one once). The task-card list and the i.a.w reference already work offline.'
         : 'No instruction is available for this task card.';
       setViewer({ ref: m.task_card_ref, html: `<div style="padding:22px;font-family:-apple-system,sans-serif;color:#333;line-height:1.55;font-size:15px">${msg}</div>` });
     } finally { setLoadingRef(null); }
@@ -50,6 +67,11 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
     return () => clearTimeout(id);
   }, [visible, reg, q, ata]);
 
+  useEffect(() => {
+    if (!visible || !rows || !rows.length) { setSavedN(0); return; }
+    ammSavedCount(reg, rows.map((r) => r.task_card_ref)).then(setSavedN).catch(() => setSavedN(0));
+  }, [visible, reg, rows]);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.backdrop}>
@@ -60,7 +82,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
           </View>
 
           <TextInput style={s.input} value={q} onChangeText={setQ} placeholder="Search Task # / description" placeholderTextColor={theme.sub} autoCapitalize="characters" />
-          {cached ? <Text style={s.cached}>✓ {cached} cards saved for offline use</Text> : null}
+          {cached ? <Text style={s.cached}>✓ {cached} task cards available offline</Text> : null}
 
           <Text style={s.lbl}>ATA</Text>
           <View style={s.chipRow}>
@@ -69,6 +91,16 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
               {filters.ata.map((a) => <Chip key={a} label={a} on={ata === a} onPress={() => setAta(a)} />)}
             </ScrollView>
           </View>
+
+          {rows && rows.length ? (
+            <View style={s.saveBar}>
+              <TouchableOpacity style={[s.saveBtn, saveProg && { opacity: 0.6 }]} disabled={!!saveProg} onPress={saveThese}>
+                <Text style={s.saveTxt}>{saveProg ? `Saving instructions ${saveProg.done}/${saveProg.total}…` : `⬇ Save these ${rows.length} instruction${rows.length === 1 ? '' : 's'} for offline`}</Text>
+              </TouchableOpacity>
+              {saveNote ? <Text style={s.saveNote}>{saveNote}</Text>
+                : (!saveProg && savedN) ? <Text style={s.saveNote}>{savedN} of {rows.length} already saved offline</Text> : null}
+            </View>
+          ) : null}
 
           <ScrollView style={s.results}>
             {rows === null ? <ActivityIndicator style={{ marginTop: 20 }} /> : null}
@@ -134,6 +166,10 @@ const s = StyleSheet.create({
   close: { color: theme.accent, fontWeight: '700' },
   input: { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12 },
   cached: { color: theme.green, fontSize: 11, fontWeight: '700', marginTop: 6 },
+  saveBar: { marginTop: 6, marginBottom: 2 },
+  saveBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: theme.accent, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
+  saveTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
+  saveNote: { color: theme.sub, fontSize: 11, marginTop: 5 },
   lbl: { color: theme.sub, fontSize: 11, fontWeight: '700', marginTop: 10, marginBottom: 4, textTransform: 'uppercase' },
   chipRow: { height: 40, marginBottom: 2 },
   chips: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
