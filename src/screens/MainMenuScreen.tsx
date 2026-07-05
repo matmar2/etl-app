@@ -6,7 +6,7 @@ import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import OnlineStatus from '../components/OnlineStatus';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, publicConfig, refreshReference, roleLabel, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -26,6 +26,8 @@ const TILES: Tile[] = [
   { key: 'master', title: 'Master iPad', sub: 'Sync priority · Captain', nav: 'MasterDevice', icon: '📲', group: 'Help & feedback', tint: '#9b8cf0' },
 ];
 const GROUPS = ['Operations', 'Maintenance', 'Documents & forms', 'Help & feedback'];
+
+let _offlinePreparedThisSession = false;   // run the offline-prep bar once per app session
 
 function fmtLeft(c: CheckStatus): string {
   if (!c.baseline) return 'not recorded';
@@ -52,6 +54,21 @@ export default function MainMenuScreen({ navigation }: any) {
   const [refreshedAt, setRefreshedAt] = useState('');
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(null);
+
+  // Download everything needed for offline use once per session, with a visible progress bar so
+  // crew know when it is safe to go offline. Re-armed (flag reset) if we were offline at the time.
+  function prepOffline(reg: string | undefined, isAlive: () => boolean) {
+    if (_offlinePreparedThisSession || !reg) return;
+    if (require('react-native').Platform.OS === 'web') return;        // web is always online — no offline prep
+    _offlinePreparedThisSession = true;
+    serverReachable().then((ok) => {
+      if (!ok) { _offlinePreparedThisSession = false; return; }        // retry next focus when online
+      prepareOffline(reg, (frac, label) => { if (isAlive()) setOfflineProg({ frac, label }); })
+        .then(() => { if (isAlive()) setTimeout(() => setOfflineProg(null), 2500); })
+        .catch(() => { if (isAlive()) setOfflineProg(null); });
+    }).catch(() => { _offlinePreparedThisSession = false; });
+  }
 
   async function syncNow() {
     if (syncing) return;
@@ -122,6 +139,7 @@ export default function MainMenuScreen({ navigation }: any) {
     setFleet(list);
     if (!cur && list.length) { cur = list[0]; await setCurrentAircraft(cur); }
     setAc(cur);
+    prepOffline(cur?.registration, isAlive);   // one-time offline download with a progress bar
     const jobs: Promise<any>[] = [
       publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
@@ -200,6 +218,21 @@ export default function MainMenuScreen({ navigation }: any) {
           <Text style={styles.testTxt}>⚠ TESTING MODE — MFA code 123456 · tap “Switch aircraft” to change tail. Off at go-live.</Text>
         </View>
       ) : null}
+
+      {offlineProg ? (() => {
+        const done = offlineProg.frac >= 1;
+        const pct = Math.round(offlineProg.frac * 100);
+        return (
+          <View style={[styles.offCard, done && { borderColor: theme.green }]}>
+            <View style={styles.offHead}>
+              <Text style={[styles.offTitle, done && { color: theme.green }]}>{done ? '✓ Ready for offline use' : 'Preparing offline data…'}</Text>
+              <Text style={styles.offPct}>{pct}%</Text>
+            </View>
+            <View style={styles.offTrack}><View style={[styles.offFill, { width: `${pct}%` }, done && { backgroundColor: theme.green }]} /></View>
+            <Text style={styles.offLabel}>{done ? 'All pickers, schedule, defects and maps are on this iPad. (AMM instructions: save per task in the picker.)' : offlineProg.label}</Text>
+          </View>
+        );
+      })() : null}
 
       <ClockBanner />
       {/* aircraft + serviceability hero */}
@@ -312,6 +345,13 @@ const styles = StyleSheet.create({
   updateTxt: { color: '#1a1300', fontWeight: '800', fontSize: 13 },
   pendingPill: { backgroundColor: '#B45309', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12, alignItems: 'center' },
   pendingTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  offCard: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 12 },
+  offHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
+  offTitle: { color: theme.text, fontWeight: '800', fontSize: 13 },
+  offPct: { color: theme.sub, fontWeight: '800', fontSize: 12, fontVariant: ['tabular-nums'] },
+  offTrack: { height: 6, borderRadius: 3, backgroundColor: theme.tile, marginTop: 8, overflow: 'hidden' },
+  offFill: { height: 6, borderRadius: 3, backgroundColor: theme.accent },
+  offLabel: { color: theme.sub, fontSize: 11, marginTop: 6 },
   testBanner: { backgroundColor: 'rgba(240,165,0,0.14)', borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   testTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
 

@@ -1087,3 +1087,27 @@ export async function prefetchHelp(): Promise<void> {
   try { await guidePages(); } catch { /* keep cache */ }
   try { await assistantFaq(); } catch { /* keep cache */ }
 }
+
+// Orchestrate every "download for offline" job as ordered, labelled steps so the Main Menu can
+// show a single progress bar and a clear "ready for offline" state. Each step is best-effort;
+// a failure advances the bar rather than blocking. Does NOT fetch AMM instructions (opt-in via
+// the picker's "Save these for offline"). onProgress(fraction 0..1, label).
+export async function prepareOffline(reg: string | undefined,
+                                     onProgress: (frac: number, label: string) => void): Promise<void> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web') { onProgress(1, 'Online'); return; }
+  const steps: { label: string; run: () => Promise<any> }[] = [
+    { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', run: () => refreshReference() },
+    { label: 'Flight schedule (next 72 h)', run: () => prefetchOfflineFlights() },
+    { label: 'Aircraft defects & HIL', run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
+    { label: 'Previous-leg fuel', run: () => prefetchLastFuel() },
+    { label: 'User guide & assistant', run: () => prefetchHelp() },
+    { label: 'Route maps', run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
+  ];
+  for (let i = 0; i < steps.length; i++) {
+    onProgress(i / steps.length, steps[i].label);
+    try { await steps[i].run(); } catch { /* best-effort — keep going */ }
+    onProgress((i + 1) / steps.length, steps[i].label);
+  }
+  onProgress(1, 'Ready for offline');
+}
