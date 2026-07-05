@@ -195,17 +195,12 @@ export default function MainMenuScreen({ navigation }: any) {
     <View style={styles.wrap}>
       {/* top bar */}
       <View style={styles.topRow}>
-        <View>
+        <View style={{ flexShrink: 1, marginRight: 8 }}>
           <Text style={styles.appName}>Electronic Tech Log</Text>
           {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-          <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
+          <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          {pending > 0 ? (
-            <TouchableOpacity onPress={syncNow} disabled={syncing} style={styles.pendingPill}>
-              <Text style={styles.pendingTxt}>{syncing ? 'Syncing…' : `⇅ ${pending} to sync`}</Text>
-            </TouchableOpacity>
-          ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <OnlineStatus />
           <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
             {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
@@ -217,6 +212,12 @@ export default function MainMenuScreen({ navigation }: any) {
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
       </View>
+
+      {pending > 0 ? (
+        <TouchableOpacity onPress={syncNow} disabled={syncing} style={styles.pendingBar}>
+          <Text style={styles.pendingBarTxt}>{syncing ? 'Syncing…' : `⇅ ${pending} change${pending === 1 ? '' : 's'} to sync — tap to sync now`}</Text>
+        </TouchableOpacity>
+      ) : null}
 
       {testing ? (
         <View style={styles.testBanner}>
@@ -348,8 +349,8 @@ const styles = StyleSheet.create({
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
   updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },
   updateTxt: { color: '#1a1300', fontWeight: '800', fontSize: 13 },
-  pendingPill: { backgroundColor: '#B45309', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12, alignItems: 'center' },
-  pendingTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  pendingBar: { backgroundColor: '#B45309', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
+  pendingBarTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },
   offCard: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 12 },
   offHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   offTitle: { color: theme.text, fontWeight: '800', fontSize: 13 },

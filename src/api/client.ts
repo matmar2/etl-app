@@ -1205,11 +1205,11 @@ export async function prepareOffline(reg: string | undefined,
                                      onProgress: (frac: number, label: string) => void): Promise<void> {
   const { Platform } = require('react-native');
   if (Platform.OS === 'web') { onProgress(1, 'Online'); return; }
-  const steps: { label: string; run: () => Promise<any> }[] = [
-    { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', run: () => refreshReference() },
-    { label: 'Flight schedule (next 72 h)', run: () => prefetchOfflineFlights() },
-    { label: 'Aircraft defects & HIL', run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
-    { label: '2/10-day check forms & planned tasks', run: async () => {
+  const steps: { label: string; ms: number; run: () => Promise<any> }[] = [
+    { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', ms: 45000, run: () => refreshReference() },
+    { label: 'Flight schedule (next 72 h)', ms: 20000, run: () => prefetchOfflineFlights() },
+    { label: 'Aircraft defects & HIL', ms: 15000, run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
+    { label: '2/10-day check forms & planned tasks', ms: 20000, run: async () => {
       if (!reg) return;
       await Promise.all([
         checkTemplate('2day', reg).catch(() => {}),
@@ -1218,15 +1218,16 @@ export async function prepareOffline(reg: string | undefined,
         nextTl(reg).catch(() => {}),
       ]);
     } },
-    { label: 'Previous-leg fuel', run: () => prefetchLastFuel() },
-    { label: 'User guide & assistant', run: () => prefetchHelp() },
-    { label: 'Route maps', run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
+    { label: 'Previous-leg fuel', ms: 15000, run: () => prefetchLastFuel() },
+    { label: 'User guide & assistant', ms: 20000, run: () => prefetchHelp() },
+    { label: 'Route maps', ms: 30000, run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
   ];
   for (let i = 0; i < steps.length; i++) {
     onProgress(i / steps.length, steps[i].label);
-    // Each step is best-effort AND time-boxed (60 s) so one stuck request can't hang the whole bar;
-    // whatever it didn't finish is just re-tried next session (all steps are resumable/skip-cached).
-    try { await withTimeout(steps[i].run(), 60000); } catch { /* skip — keep going */ }
+    // Best-effort AND time-boxed per step, so one stalled request (common on the flaky offline→online
+    // moment) advances the bar quickly instead of freezing it. Whatever didn't finish is re-tried
+    // next session (all steps are resumable / skip-cached).
+    try { await withTimeout(steps[i].run(), steps[i].ms); } catch { /* skip — keep going */ }
     onProgress((i + 1) / steps.length, steps[i].label);
   }
   onProgress(1, 'Ready for offline');
