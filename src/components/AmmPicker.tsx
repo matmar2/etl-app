@@ -27,7 +27,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
     } catch (e) {
       const offline = e instanceof NetworkError;
       const msg = offline
-        ? 'This instruction hasn’t finished downloading for offline use yet.<br><br>All AMM instructions download automatically in the background whenever the iPad is online — watch the <b>offline-readiness bar on the Main Menu</b>. Once it shows the instructions are ready, every task card opens with no signal.'
+        ? 'AMM instructions open <b>online only</b> for now — please connect to the internet to view this instruction.<br><br>The task-card list and its i.a.w reference already work offline; full offline instructions are coming in a later update.'
         : 'No instruction is available for this task card.';
       setViewer({ ref: m.task_card_ref, html: `<div style="padding:22px;font-family:-apple-system,sans-serif;color:#333;line-height:1.55;font-size:15px">${msg}</div>` });
     } finally { setLoadingRef(null); }
