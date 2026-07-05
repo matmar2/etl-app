@@ -311,8 +311,20 @@ export const pendingAckDefects = (aircraftId: string): Promise<any[]> =>
 export const ackDefect = (defectId: string): Promise<{ acknowledged: boolean; ack_by?: string }> =>
   api(`/defects/${defectId}/ack`, { method: 'POST' });
 
-export const nextTl = (reg: string): Promise<{ next_tl: number }> =>
-  api(`/aircraft/${encodeURIComponent(reg)}/next-tl`);
+// Next TLB page number (last used + 1). Cached per tail so it's pre-filled offline; always
+// editable — the mechanic confirms it against the physical Tech Log Book page.
+export async function nextTl(reg: string): Promise<{ next_tl: number }> {
+  const key = `nexttl_${(reg ?? '').toUpperCase()}`;
+  try {
+    const r = await api(`/aircraft/${encodeURIComponent(reg)}/next-tl`);
+    if (r && typeof r.next_tl === 'number') setRef(key, r).catch(() => {});
+    return r;
+  } catch (e) {
+    const { data } = await getRef<{ next_tl: number }>(key);   // offline → last known next-TL
+    if (data) return data;
+    throw e;
+  }
+}
 
 // Release gate: the revision this iPad's channel is approved to run (null = stay on current).
 // The actual OTA apply (expo-updates) is wired once EAS + the signed build are in place.
@@ -1203,6 +1215,7 @@ export async function prepareOffline(reg: string | undefined,
         checkTemplate('2day', reg).catch(() => {}),
         checkTemplate('10day', reg).catch(() => {}),
         maintTasks(reg).catch(() => {}),
+        nextTl(reg).catch(() => {}),
       ]);
     } },
     { label: 'Previous-leg fuel', run: () => prefetchLastFuel() },
