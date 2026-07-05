@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import OnlineStatus from '../components/OnlineStatus';
@@ -65,7 +66,40 @@ export default function MainMenuScreen({ navigation }: any) {
     const date = d && !isNaN(d.getTime())
       ? ` · ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
       : '';
-    return `Version ${rev}${date}`;
+    return `Version ${rev}${date}${otaLabel()}`;
+  }
+
+  // The TRUTH about which JS bundle is actually running (independent of the release-governance
+  // revision above). Shows the live OTA publish date so you can confirm an update landed.
+  function otaLabel() {
+    try {
+      if (!Updates.isEnabled) return '';
+      if (Updates.isEmbeddedLaunch) return ' · built-in';
+      const c: any = Updates.createdAt;
+      const cd = c ? new Date(c) : null;
+      const dt = cd && !isNaN(cd.getTime())
+        ? `${String(cd.getUTCDate()).padStart(2, '0')}/${String(cd.getUTCMonth() + 1).padStart(2, '0')} ${String(cd.getUTCHours()).padStart(2, '0')}:${String(cd.getUTCMinutes()).padStart(2, '0')}z`
+        : '';
+      return ` · OTA ${dt}`;
+    } catch { return ''; }
+  }
+
+  const [checking, setChecking] = useState(false);
+  async function checkForUpdate() {
+    if (checking) return;
+    if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
+    setChecking(true);
+    try {
+      const r = await Updates.checkForUpdateAsync();
+      if (r.isAvailable) {
+        await Updates.fetchUpdateAsync();
+        if (await confirmAction('A new version is ready. Restart now to apply it?', 'Update ready')) await Updates.reloadAsync();
+      } else {
+        await confirmAction('You are already on the latest published version.', 'Up to date');
+      }
+    } catch (e: any) {
+      await confirmAction(`Could not check for updates: ${e?.message || 'no connection'}. Make sure wifi is on and try again.`, 'Update check failed');
+    } finally { setChecking(false); }
   }
 
   function loadCounts(reg: string) {
@@ -141,7 +175,9 @@ export default function MainMenuScreen({ navigation }: any) {
         <View>
           <Text style={styles.appName}>Electronic Tech Log</Text>
           {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-          <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
+          <TouchableOpacity onPress={checkForUpdate} disabled={checking}>
+            <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}{checking ? ' · checking…' : ' · tap to update'}</Text>
+          </TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {pending > 0 ? (
