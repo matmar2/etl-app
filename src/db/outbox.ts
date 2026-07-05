@@ -16,6 +16,20 @@ export async function outboxCount(): Promise<number> {
   return r?.n ?? 0;
 }
 
+// Sector ids that still have a queued DELETE waiting to reach the server. Used by the
+// sector-list reconcile to decide whether a tombstone is still pending vs. resolved.
+export async function pendingSectorDeleteIds(): Promise<Set<string>> {
+  const d = await db();
+  const rows = await d.getAllAsync<{ path: string }>(
+    "SELECT path FROM outbox WHERE method = 'DELETE' AND path LIKE '/sectors/%'");
+  const ids = new Set<string>();
+  for (const r of rows) {
+    const m = /^\/sectors\/([^/?]+)/.exec(r.path);
+    if (m) ids.add(m[1]);
+  }
+  return ids;
+}
+
 // Replay queued mutations oldest-first. Delete on success or on a terminal HTTP 4xx
 // (retrying a client error would loop forever). Stop on offline / 5xx to retry next sync.
 export async function flushOutbox(apiFn: (path: string, init: any) => Promise<any>): Promise<void> {

@@ -74,14 +74,18 @@ async function cacheOfflineCred(username: string, password: string, token: strin
     const me = await api('/auth/me');
     let secret: string | null = null;
     if (me.mfa_enabled) { try { secret = (await api('/auth/mfa/secret')).secret; } catch {} }
+    let testing = false;
+    try { testing = !!(await publicConfig()).testing_mode; } catch {}   // mirror the server's testing MFA rule offline
     const salt = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     await SecureStore.setItem(offKey(username), JSON.stringify({
       username, salt, pwHash: sha1Hex(salt + password), secret,
-      role: me.role, name: me.name, mfa_enabled: !!me.mfa_enabled,
+      role: me.role, name: me.name, mfa_enabled: !!me.mfa_enabled, testing,
       clearance: !!me.clearance_authorized, perms: _perms, token, at: Date.now(),
     }));
   } catch { /* best-effort */ }
 }
+
+const TEST_MFA_CODE = '123456';   // mirrors backend mfa.TEST_MFA_CODE (accepted while testing_mode is on)
 
 // Stable per-install device id for the login/audit log — generated once, kept in the Keychain.
 export async function deviceId(): Promise<string> {
@@ -169,9 +173,14 @@ export async function loginOffline(username: string, password: string, otp?: str
   if (!raw) throw new Error('Offline: no saved session for this user — log in once online first.');
   const c = JSON.parse(raw);
   if (sha1Hex(c.salt + password) !== c.pwHash) throw new Error('Invalid username or password (offline).');
-  if (c.mfa_enabled) {
+  // Mirror the server: MFA is required when the user has it enabled OR testing_mode is on,
+  // and the test code 123456 is accepted while testing (real TOTP always is).
+  if (c.mfa_enabled || c.testing) {
     if (!otp) throw new MfaRequired();
-    if (!c.secret || !verifyTotp(c.secret, otp)) throw new Error('Invalid MFA code (offline).');
+    const code = otp.trim();
+    const testingBypass = c.testing && code === TEST_MFA_CODE;
+    const realOk = !!c.secret && verifyTotp(c.secret, code);
+    if (!testingBypass && !realOk) throw new Error('Invalid MFA code (offline).');
   }
   await SecureStore.setItem('token', c.token || '');
   _role = c.role ?? null;

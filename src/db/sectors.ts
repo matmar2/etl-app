@@ -1,6 +1,25 @@
 import { deleteServerSector, getServerSector, NetworkError, serverSectors, syncPush } from '../api/client';
 import { getLocalAircraftDefects, getSectorDefects } from './defects';
+import { pendingSectorDeleteIds, queueRequest } from './outbox';
+import { getRef, setRef } from './reference';
 import { db } from './schema';
+
+// Tombstones: ids of sectors deleted on this iPad whose server-side delete may still be pending.
+// pullSectorList must never re-insert a tombstoned sector, or an offline delete "comes back"
+// the moment the server list is fetched again. Cleared once the delete has resolved.
+const TOMB_KEY = 'sector_tombstones';
+async function getTombstones(): Promise<string[]> {
+  const { data } = await getRef<string[]>(TOMB_KEY);
+  return data || [];
+}
+async function addTombstone(id: string): Promise<void> {
+  const cur = await getTombstones();
+  if (!cur.includes(id)) await setRef(TOMB_KEY, [...cur, id]);
+}
+async function removeTombstone(id: string): Promise<void> {
+  const cur = await getTombstones();
+  if (cur.includes(id)) await setRef(TOMB_KEY, cur.filter((x) => x !== id));
+}
 
 export type Sector = {
   id: string;
@@ -54,8 +73,12 @@ export async function listSectors(): Promise<Sector[]> {
 export async function deleteSector(id: string, force = false): Promise<void> {
   try {
     await deleteServerSector(id, force);
+    await removeTombstone(id);                      // online delete succeeded — no tombstone needed
   } catch (e: any) {
-    if (!(e instanceof NetworkError)) throw e;     // offline → fall through to local-only
+    if (!(e instanceof NetworkError)) throw e;      // 409 (released/signed) etc → rethrow for force handling
+    // Offline: queue the server delete and tombstone the id so the next pull can't resurrect it.
+    await queueRequest('DELETE', `/sectors/${id}${force ? '?force=true' : ''}`);
+    await addTombstone(id);
   }
   const d = await db();
   await d.runAsync('DELETE FROM sectors WHERE id = ?', id);
@@ -163,12 +186,14 @@ export async function localPrevFuel(sectorId: string): Promise<LocalPrevFuel | n
 // are still unsynced (dirty). Upserts server rows into local for offline use.
 export async function pullSectorList(reg: string): Promise<Sector[]> {
   try {
-    await syncPush().catch(() => {});
+    await syncPush().catch(() => {});                  // flushes the outbox first (incl. queued deletes)
     const server = await serverSectors(reg);
     const d = await db();
+    const tombs = new Set(await getTombstones());
     const dirty = (await d.getAllAsync<{ payload: string }>('SELECT payload FROM sectors WHERE dirty = 1')).map((r) => JSON.parse(r.payload));
     const dirtyIds = new Set(dirty.map((x: any) => x.id));
     for (const s of server as any[]) {
+      if (tombs.has(s.id)) { await d.runAsync('DELETE FROM sectors WHERE id = ?', s.id); continue; }  // deleted here — stay deleted
       if (dirtyIds.has(s.id)) continue;                // keep local unsynced version
       await d.runAsync(
         `INSERT OR REPLACE INTO sectors (id, aircraft_id, flight_no, flight_date, dep, arr, status, version, dirty, payload)
@@ -177,8 +202,15 @@ export async function pullSectorList(reg: string): Promise<Sector[]> {
         s.status ?? 'draft', s.version ?? 1, JSON.stringify(s));
     }
     const serverIds = new Set((server as any[]).map((s) => s.id));
+    // Reconcile tombstones: drop one once the server no longer lists it (delete confirmed) OR the
+    // queued delete is gone (rejected, e.g. released) — so a stuck tombstone can't hide a sector forever.
+    if (tombs.size) {
+      const stillQueued = await pendingSectorDeleteIds();
+      const keep = [...tombs].filter((id) => serverIds.has(id) && stillQueued.has(id));
+      await setRef(TOMB_KEY, keep);
+    }
     const localOnly = dirty.filter((x: any) => !serverIds.has(x.id));   // not yet on the server
-    return [...(server as any[]), ...localOnly];
+    return [...(server as any[]).filter((s) => !tombs.has(s.id)), ...localOnly];
   } catch {
     return listSectors();                              // offline → local view
   }
