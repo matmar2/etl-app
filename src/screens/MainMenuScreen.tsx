@@ -105,6 +105,7 @@ export default function MainMenuScreen({ navigation }: any) {
   }
 
   const [checking, setChecking] = useState(false);
+  const [updateAvail, setUpdateAvail] = useState(false);   // a new OTA is waiting → red badge on ⇩ Update
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
@@ -151,6 +152,8 @@ export default function MainMenuScreen({ navigation }: any) {
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
       deviceId().then((d) => appRelease(d)).then((r) => { if (isAlive()) setVer(r); }).catch(() => {}),
+      Promise.resolve().then(() => (Updates.isEnabled ? Updates.checkForUpdateAsync() : null))
+        .then((r: any) => { if (isAlive()) setUpdateAvail(!!r?.isAvailable); }).catch(() => {}),   // OTA waiting?
     ];
     if (cur) jobs.push(
       aircraftStatus(cur.registration).then((s) => { if (isAlive()) setSt(s); }).catch(() => { if (isAlive()) setSt(null); }),
@@ -205,9 +208,12 @@ export default function MainMenuScreen({ navigation }: any) {
           <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
             {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
-            {checking ? <ActivityIndicator size="small" color="#1a1300" /> : <Text style={styles.updateTxt}>⇩ Update</Text>}
-          </TouchableOpacity>
+          <View>
+            <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
+              {checking ? <ActivityIndicator size="small" color="#1a1300" /> : <Text style={styles.updateTxt}>⇩ Update</Text>}
+            </TouchableOpacity>
+            {updateAvail && !checking ? <View style={styles.updateBadge} /> : null}
+          </View>
           <HeaderLogo />
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
@@ -349,6 +355,7 @@ const styles = StyleSheet.create({
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
   updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },
   updateTxt: { color: '#1a1300', fontWeight: '800', fontSize: 13 },
+  updateBadge: { position: 'absolute', top: -4, right: -4, width: 13, height: 13, borderRadius: 7, backgroundColor: theme.red, borderWidth: 2, borderColor: theme.bg },
   pendingBar: { backgroundColor: '#B45309', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   pendingBarTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },
   offCard: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 12 },
