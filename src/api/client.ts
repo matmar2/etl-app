@@ -215,10 +215,13 @@ let _devIdCache: string | null = null;
 async function _devId(): Promise<string> { if (!_devIdCache) _devIdCache = await deviceId(); return _devIdCache; }
 
 async function api(path: string, init: RequestInit = {}) {
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()), ...(init.headers ?? {}) },
-  });
+  const headers = { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()), ...(init.headers ?? {}) };
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, { ...init, headers });
+  } catch {
+    throw new NetworkError();                         // offline / server unreachable → callers fall back to local
+  }
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).detail || ''; } catch { /* non-JSON body */ }
