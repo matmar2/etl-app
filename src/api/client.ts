@@ -932,45 +932,67 @@ async function assembleOfflineAmm(html: string): Promise<string> {
   return out;
 }
 
+const NO_INSTR_HTML = '<div style="padding:22px;font-family:-apple-system,sans-serif;color:#333;line-height:1.55;font-size:15px">No instruction is available for this task card.</div>';
+
 export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> => {
   try {
     const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
     if (r?.html) setRef(ammTextKey(reg, ref), r).catch(() => {});  // keep text (original fig URLs) for offline
     return r;
   } catch (e) {
-    const t = (await getRef<AmmContent>(ammTextKey(reg, ref))).data;
-    if (t?.html) return { ...t, html: await assembleOfflineAmm(t.html) };   // assemble diagrams from shared cache
+    const t: any = (await getRef<any>(ammTextKey(reg, ref))).data;
+    if (t?.empty) return { task_card_ref: ref, html: NO_INSTR_HTML };          // cached "no instruction" marker
+    if (t?.html) return { ...t, html: await assembleOfflineAmm(t.html) };      // assemble diagrams from shared cache
     const viewed = (await getRef<AmmContent>(ammViewKey(reg, ref))).data;
     if (viewed) return viewed;
-    throw e;
+    throw e;                                                                   // genuinely not cached yet
   }
 };
 
-// Cache ONE card's instruction (text + its figures) for offline. Skips if already cached.
+// Cache ONE card's instruction (text + its figures) for offline. Returns true when the card is
+// resolved (cached OR confirmed to have no instruction); throws only on a network/server error so
+// the caller can retry. A card with no instruction is marked with an {empty} sentinel so it counts
+// as done and never re-fetches.
 async function cacheOneAmm(reg: string | undefined, ref: string): Promise<boolean> {
-  if ((await getRef(ammTextKey(reg, ref))).data) return true;      // resumable — already have it
-  const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
-  if (!r?.html) return false;
+  if ((await getRef(ammTextKey(reg, ref))).data) return true;      // resumable — already resolved
+  let r: any;
+  try {
+    r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+  } catch (e: any) {
+    if (/→ 404/.test(String(e?.message || ''))) { await setRef(ammTextKey(reg, ref), { task_card_ref: ref, empty: true }); return true; }
+    throw e;                                                        // network / 5xx → retry on a later pass
+  }
+  if (!r?.html) { await setRef(ammTextKey(reg, ref), { task_card_ref: ref, empty: true }); return true; }
   await setRef(ammTextKey(reg, ref), r);
-  await cacheAmmFigures(r.html);
+  await cacheAmmFigures(r.html);                                    // figures are best-effort (assembled at view)
   return true;
 }
 
 // Cache ALL instructions (text + deduped diagrams) for the tail's task cards — the default so a
-// mechanic has every reachable instruction offline with no manual step. Resumable: skips cards
-// already cached, so it continues across sessions. onProgress(done, total).
+// mechanic has every reachable instruction offline with no manual step. Progress reflects cards
+// ACTUALLY cached (not attempts), and failed fetches are retried across several passes, so the bar
+// only reaches 100% once every card is truly stored. Resumable across sessions; stops early (to
+// resume later) if a whole pass makes no progress (offline). onProgress(cached, total).
 export async function prefetchAllAmm(reg: string | undefined,
-                                     onProgress?: (done: number, total: number) => void): Promise<{ done: number; total: number }> {
+                                     onProgress?: (cached: number, total: number) => void): Promise<{ done: number; total: number }> {
   const { Platform } = require('react-native');
   if (Platform.OS === 'web' || !reg) return { done: 0, total: 0 };
   const list = (await getRef<any[]>(`amm:${reg.toUpperCase()}`)).data || [];
   const refs = list.map((c) => c.task_card_ref).filter(Boolean);
-  let done = 0;
-  for (const ref of refs) {
-    try { await cacheOneAmm(reg, ref); } catch { /* offline/failed — retry next run */ }
-    onProgress?.(++done, refs.length);
+  const total = refs.length;
+  const cached = new Set<string>();
+  for (const ref of refs) if ((await getRef(ammTextKey(reg, ref))).data) cached.add(ref);   // seed from disk
+  onProgress?.(cached.size, total);
+  for (let pass = 0; pass < 6 && cached.size < total; pass++) {
+    let progressed = false;
+    for (const ref of refs) {
+      if (cached.has(ref)) continue;
+      try { if (await cacheOneAmm(reg, ref)) { cached.add(ref); progressed = true; onProgress?.(cached.size, total); } }
+      catch { /* network — retry next pass */ }
+    }
+    if (!progressed) break;                                          // offline / stuck → resume next session
   }
-  return { done, total: refs.length };
+  return { done: cached.size, total };
 }
 
 // How many of the tail's cards already have their instruction cached offline (list total + cached).
