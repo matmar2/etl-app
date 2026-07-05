@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary } from '../api/client';
+import { AmmCard, ammContent, ammFilters, ammSearch, ammSummary, prefetchAmm } from '../api/client';
 import AmmInstruction from './AmmInstruction';
 import { theme } from '../theme';
 
@@ -17,6 +17,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
   const [expanded, setExpanded] = useState<string | null>(null);
   const [viewer, setViewer] = useState<{ ref: string; html: string } | null>(null);   // instruction viewer
   const [loadingRef, setLoadingRef] = useState<string | null>(null);
+  const [cached, setCached] = useState<number | null>(null);   // AMM cards cached for offline
 
   async function openInstruction(m: AmmCard) {
     setLoadingRef(m.task_card_ref);
@@ -28,7 +29,13 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
     } finally { setLoadingRef(null); }
   }
 
-  useEffect(() => { if (visible) ammFilters(reg).then((f) => setFilters(f || { ata: [] })).catch(() => {}); }, [visible, reg]);
+  // On open (online), cache this tail's full AMM list + filters so the picker works offline next
+  // time — one online open is enough. Shows how many cards are held for offline use.
+  useEffect(() => {
+    if (!visible || !reg) return;
+    ammFilters(reg).then((f) => setFilters(f || { ata: [] })).catch(() => {});
+    prefetchAmm(reg).then((n) => { if (n) setCached(n); }).catch(() => {});
+  }, [visible, reg]);
   useEffect(() => { if (visible) setAta((defaultAta || '').slice(0, 2)); }, [visible, defaultAta]);
   useEffect(() => {
     if (!visible) return;
@@ -49,6 +56,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
           </View>
 
           <TextInput style={s.input} value={q} onChangeText={setQ} placeholder="Search Task # / description" placeholderTextColor={theme.sub} autoCapitalize="characters" />
+          {cached ? <Text style={s.cached}>✓ {cached} cards saved for offline use</Text> : null}
 
           <Text style={s.lbl}>ATA</Text>
           <View style={s.chipRow}>
@@ -121,6 +129,7 @@ const s = StyleSheet.create({
   title: { color: theme.text, fontSize: 18, fontWeight: '800' },
   close: { color: theme.accent, fontWeight: '700' },
   input: { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12 },
+  cached: { color: theme.green, fontSize: 11, fontWeight: '700', marginTop: 6 },
   lbl: { color: theme.sub, fontSize: 11, fontWeight: '700', marginTop: 10, marginBottom: 4, textTransform: 'uppercase' },
   chipRow: { height: 40, marginBottom: 2 },
   chips: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },

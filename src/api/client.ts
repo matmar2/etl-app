@@ -812,14 +812,30 @@ export async function refreshReference() {
       await setRef('mel', mel); await setRef('taskcards', cards);
       await setRef('taskfilters', filters); await setRef('cdl', cdl); await setRef('refversion', ver);
     }
-    if (ammKey && reg) {                                   // AMM task-card picker offline (per aircraft)
-      const [amm, ammf] = await Promise.all([
-        api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`),
-        api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`),
-      ]);
-      await setRef(ammKey, amm); await setRef(`ammfilters:${reg.toUpperCase()}`, ammf);
-    }
+    if (reg) await prefetchAmm(reg);                       // AMM task-card picker offline (per aircraft)
   } catch { /* offline — keep whatever cache we have */ }
+}
+
+// Cache the full AMM task-card list + filters for a tail so the picker works offline. Kept
+// INDEPENDENT of the MEL/ref-version cache above (a failure there must never leave AMM
+// uncached), and also called when the AMM picker itself opens online — so a single online
+// open of the picker is enough to make it available offline, regardless of menu-load timing.
+export async function prefetchAmm(reg?: string): Promise<number> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !reg) return 0;
+  try {
+    const r = reg.toUpperCase();
+    const [amm, ammf] = await Promise.all([
+      api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`),
+      api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`),
+    ]);
+    if (Array.isArray(amm) && amm.length) {                // never clobber a good cache with an empty/blip response
+      await setRef(`amm:${r}`, amm);
+      await setRef(`ammfilters:${r}`, ammf);
+      return amm.length;
+    }
+  } catch { /* offline — keep existing cache */ }
+  return 0;
 }
 // "i.a.w <task no> <summary>" — the rectification narrative the mechanic edits.
 // Some AMP cards have a blank description in CAMO (text leaked into chapter/section);
@@ -864,8 +880,20 @@ export const ammIawLine = (m: AmmCard): string =>
   `i.a.w AMM Rev ${m.revision || '—'} · ${m.task_card_ref}${ammSummary(m) ? ' — ' + ammSummary(m) : ''}`.trim();
 // Full HTML instruction (with diagrams) for one AMM task card — for the in-app viewer.
 export type AmmContent = { task_card_ref: string; title?: string; ata?: string; revision?: string; html: string };
-export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> =>
-  api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+// Fetch the full instruction HTML; cache each viewed card so it re-opens offline. (Diagrams still
+// load from CAMO's public figures URL and need a connection — the text/structure shows offline.)
+export const ammContent = async (reg: string | undefined, ref: string): Promise<AmmContent> => {
+  const key = `ammcontent:${(reg ?? '').toUpperCase()}:${ref}`;
+  try {
+    const r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+    if (r?.html) setRef(key, r).catch(() => {});
+    return r;
+  } catch (e) {
+    const { data } = await getRef<AmmContent>(key);
+    if (data) return data;
+    throw e;
+  }
+};
 
 // Push every dirty local row, then clear the dirty flag on success.
 // Replay locally-signed 2/10-day checks to the server. Network errors leave them
