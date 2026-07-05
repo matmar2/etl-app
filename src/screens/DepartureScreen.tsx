@@ -241,7 +241,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         const txt = g.state === 'checking' ? 'Checking GPS…'
           : ok ? `✓ GPS confirms ${s.dep} — ${g.km} km from ${g.name}`
           : far ? `⚠ GPS is ${g.km} km from ${s.dep} (${g.name}) — departure airport looks incorrect. If repositioned/diverted, amend the route above.`
-          : g.state === 'nogps' ? `GPS not available (${g.msg || 'no location'}).`
+          : g.state === 'nogps' ? `ⓘ Optional GPS cross-check skipped — the iPad has no position fix (${g.msg || 'offline or indoors'}). The departure airport is not affected.`
           : g.state === 'error' ? `Cannot verify — ${g.msg}.`
           : 'Tap to verify the departure airport against device GPS.';
         return (

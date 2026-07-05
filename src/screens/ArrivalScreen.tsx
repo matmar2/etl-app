@@ -183,7 +183,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         const txt = g.state === 'checking' ? 'Checking GPS…'
           : ok ? `✓ GPS confirms landing at ${landApt} — ${g.km} km from ${g.name}`
           : far ? `⚠ GPS is ${g.km} km from ${landApt} (${g.name}) — landing airport looks incorrect. If diverted, switch on Diversion above and enter the airport.`
-          : g.state === 'nogps' ? `GPS not available (${g.msg || 'no location'}).`
+          : g.state === 'nogps' ? `ⓘ Optional GPS cross-check skipped — the iPad has no position fix (${g.msg || 'offline or indoors'}). The landing airport is not affected.`
           : g.state === 'error' ? `Cannot verify — ${g.msg}.`
           : 'Tap to verify the landing airport against device GPS.';
         return (
