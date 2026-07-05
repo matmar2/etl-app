@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import OnlineStatus from '../components/OnlineStatus';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, publicConfig, refreshReference, roleLabel, setCurrentAircraft, signoffsRecent, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, publicConfig, refreshReference, roleLabel, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -49,6 +49,15 @@ export default function MainMenuScreen({ navigation }: any) {
   const [ver, setVer] = useState<{ revision: string | null; approved_at?: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState('');
+  const [pending, setPending] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncNow() {
+    if (syncing) return;
+    setSyncing(true);
+    try { await syncPush().catch(() => {}); const n = await pendingSyncCount(); setPending(n); }
+    finally { setSyncing(false); }
+  }
 
   function versionLabel() {
     const rev = ver?.revision || (Constants.expoConfig as any)?.version || '—';
@@ -90,8 +99,10 @@ export default function MainMenuScreen({ navigation }: any) {
       aircraftStatus(cur.registration).then((s) => { if (isAlive()) setSt(s); }).catch(() => { if (isAlive()) setSt(null); }),
       aircraftUtilisation(cur.registration).then((u) => { if (isAlive()) setUtil(u); }).catch(() => { if (isAlive()) setUtil(null); }),
       loadCounts(cur.registration),
+      prefetchAircraftDefects(cur.registration),      // warm the offline defect cache for this tail
     );
     await Promise.all(jobs);
+    pendingSyncCount().then((n) => { if (isAlive()) setPending(n); }).catch(() => {});
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -133,6 +144,11 @@ export default function MainMenuScreen({ navigation }: any) {
           <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {pending > 0 ? (
+            <TouchableOpacity onPress={syncNow} disabled={syncing} style={styles.pendingPill}>
+              <Text style={styles.pendingTxt}>{syncing ? 'Syncing…' : `⇅ ${pending} to sync`}</Text>
+            </TouchableOpacity>
+          ) : null}
           <OnlineStatus />
           <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
             {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
@@ -255,6 +271,8 @@ const styles = StyleSheet.create({
   signOutTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
   refreshBtn: { borderWidth: 1, borderColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 88, alignItems: 'center' },
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
+  pendingPill: { backgroundColor: '#B45309', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12, alignItems: 'center' },
+  pendingTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
   testBanner: { backgroundColor: 'rgba(240,165,0,0.14)', borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   testTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
 

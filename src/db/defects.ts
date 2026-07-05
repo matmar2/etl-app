@@ -1,3 +1,4 @@
+import { getRef, setRef } from './reference';
 import { db } from './schema';
 
 function uuid() {
@@ -51,6 +52,17 @@ export async function cacheDefect(defect: any): Promise<void> {
     defect.id, defect.sector_id ?? null, defect.aircraft_id ?? '', defect.description ?? defect.title ?? '',
     defect.ata_chapter ?? null, defect.source ?? defect.category ?? 'defect', defect.status ?? 'open',
     defect.version ?? 1, defect.id, JSON.stringify(defect));
+}
+
+// Cache the whole aircraft's active + HIL defects (keyed by registration) so the Defects list
+// and the release blocker check work offline, and cache each individually so it opens offline.
+export async function cacheAircraftDefects(reg: string, defects: any[]): Promise<void> {
+  await setRef(`defects:${reg.trim().toUpperCase()}`, defects);
+  for (const d of defects) await cacheDefect(d).catch(() => {});
+}
+export async function getLocalAircraftDefects(reg: string): Promise<any[]> {
+  const { data } = await getRef<any[]>(`defects:${reg.trim().toUpperCase()}`);
+  return data || [];
 }
 
 // Optimistically apply an action to the LOCAL defect payload (for display offline) — the

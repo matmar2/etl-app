@@ -30,6 +30,8 @@ export async function getSectorDefects(sectorId: string): Promise<any[]> {
 export async function getLocalDefect(_id: string): Promise<any | null> { return null; }
 export async function cacheDefect(_defect: any): Promise<void> { /* no-op on web */ }
 export async function appendLocalDefectAction(_id: string, _action: any, _patch?: { status?: string }): Promise<void> { /* no-op on web */ }
+export async function cacheAircraftDefects(_reg: string, _defects: any[]): Promise<void> { /* no-op on web */ }
+export async function getLocalAircraftDefects(_reg: string): Promise<any[]> { return []; }
 
 export async function createDefect(d: NewDefect): Promise<string> {
   const id = uuid();

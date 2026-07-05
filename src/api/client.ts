@@ -247,10 +247,55 @@ async function mutateOrQueue(path: string, init: RequestInit): Promise<any> {
 
 export const listOpenDefects = (aircraftId: string) =>
   api(`/defects/open?aircraft_id=${encodeURIComponent(aircraftId)}`);
-export const listActiveDefects = (aircraftId: string) =>
-  api(`/defects/active?aircraft_id=${encodeURIComponent(aircraftId)}`);
-export const listHIL = (aircraftId: string) =>
-  api(`/defects/hil?aircraft_id=${encodeURIComponent(aircraftId)}`);
+export const listActiveDefects = async (aircraftId: string): Promise<any[]> => {
+  try { return await api(`/defects/active?aircraft_id=${encodeURIComponent(aircraftId)}`); }
+  catch (e) {
+    if (!(e instanceof NetworkError)) throw e;
+    const { getLocalAircraftDefects } = require('../db/defects');                    // offline → cached aircraft defects
+    const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
+    return all.filter((d: any) => ['open', 'troubleshooting', 'rectified'].includes(d.status));
+  }
+};
+export const listHIL = async (aircraftId: string): Promise<any[]> => {
+  try { return await api(`/defects/hil?aircraft_id=${encodeURIComponent(aircraftId)}`); }
+  catch (e) {
+    if (!(e instanceof NetworkError)) throw e;
+    const { getLocalAircraftDefects } = require('../db/defects');
+    const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
+    return all.filter((d: any) => d.status === 'deferred');
+  }
+};
+// Warm the offline defect cache for a tail — the aircraft's active + HIL defects, so the
+// mechanic can see and rectify them (and the release check is accurate) with no signal.
+export async function prefetchAircraftDefects(reg: string): Promise<void> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web' || !reg) return;
+  try {
+    const [active, hil] = await Promise.all([
+      api(`/defects/active?aircraft_id=${encodeURIComponent(reg)}`),
+      api(`/defects/hil?aircraft_id=${encodeURIComponent(reg)}`),
+    ]);
+    await require('../db/defects').cacheAircraftDefects(reg, [...(active || []), ...(hil || [])]);
+  } catch { /* offline — keep existing cache */ }
+}
+// Count of items queued locally and not yet synced to the server (for the "pending sync" badge).
+export async function pendingSyncCount(): Promise<number> {
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web') return 0;
+  try {
+    const { db } = require('../db/schema');
+    const d = await db();
+    const n = async (sql: string) => ((await d.getFirstAsync(sql))?.n ?? 0) as number;
+    const [ob, s, df, ch, at] = await Promise.all([
+      n('SELECT COUNT(*) AS n FROM outbox'),
+      n('SELECT COUNT(*) AS n FROM sectors WHERE dirty = 1'),
+      n('SELECT COUNT(*) AS n FROM defects WHERE dirty = 1'),
+      n('SELECT COUNT(*) AS n FROM checks WHERE dirty = 1'),
+      n('SELECT COUNT(*) AS n FROM attachments WHERE dirty = 1'),
+    ]);
+    return ob + s + df + ch + at;
+  } catch { return 0; }
+}
 // Mechanic actions (new / cleared defects) awaiting the commander's read-and-accept.
 export const pendingAckDefects = (aircraftId: string): Promise<any[]> =>
   api(`/defects/pending-ack?aircraft_id=${encodeURIComponent(aircraftId)}`);

@@ -1,5 +1,5 @@
 import { deleteServerSector, getServerSector, NetworkError, serverSectors, syncPush } from '../api/client';
-import { getSectorDefects } from './defects';
+import { getLocalAircraftDefects, getSectorDefects } from './defects';
 import { db } from './schema';
 
 export type Sector = {
@@ -90,13 +90,15 @@ export async function getSector(id: string): Promise<any | null> {
 // offline (print/transfer, and an offline CRS). Approximate — the server view is authoritative online.
 export async function localReleaseStatus(sectorId: string): Promise<any> {
   const s = await getSector(sectorId);
-  const defs = await getSectorDefects(sectorId).catch(() => [] as any[]);
+  // Release eligibility is AIRCRAFT-WIDE — use the cached aircraft defects (mirrors the server's
+  // _aircraft_defect_state), falling back to this sector's defects if the aircraft cache is empty.
+  let defs = s?.aircraft_id ? await getLocalAircraftDefects(s.aircraft_id).catch(() => [] as any[]) : [];
+  if (!defs.length) defs = await getSectorDefects(sectorId).catch(() => [] as any[]);
   const brief = (d: any) => ({ id: d.id, title: d.title, description: d.description, ata_chapter: d.ata_chapter, mel_ref: d.mel_ref, status: d.status });
   const isCabin = (d: any) => d.area === 'cabin' || d.source === 'cabin';
-  const done = (d: any) => ['rectified', 'closed', 'deferred'].includes(d.status);
-  const blockers = defs.filter((d) => !isCabin(d) && !done(d) && d.blocks_serviceability !== false);
+  const blockers = defs.filter((d) => !isCabin(d) && d.crs_not_required !== true && ['open', 'troubleshooting'].includes(d.status));
   const deferred = defs.filter((d) => d.status === 'deferred');
-  const cabin_pending = defs.filter((d) => isCabin(d) && !['rectified', 'closed'].includes(d.status));
+  const cabin_pending = defs.filter((d) => isCabin(d) && ['open', 'troubleshooting'].includes(d.status) && d.dispatch_accepted == null);
   return {
     serviceable: blockers.length === 0,
     blockers: blockers.map(brief), deferred: deferred.map(brief), cabin_pending: cabin_pending.map(brief),
