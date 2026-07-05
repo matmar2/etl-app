@@ -836,21 +836,22 @@ export async function prefetchAmm(reg?: string): Promise<number> {
   if (Platform.OS === 'web' || !reg) return 0;
   try {
     const r = reg.toUpperCase();
-    const ammf = await api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`);   // all applicable ATA chapters
+    const ammf = await withTimeout(api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`), 15000);   // all ATA chapters
     const atas: string[] = (ammf?.ata || []).filter(Boolean);
     let amm: any[] = [];
     if (atas.length) {
       // Fetch per ATA and concatenate: the server caps /mel/amm at 3000 rows, and a tail has ~8250
       // cards, so a single call silently drops ~29 higher chapters. Each ATA has <700 cards, so
-      // per-ATA never truncates → the full list (every ATA) is cached offline.
+      // per-ATA never truncates → the full list (every ATA) is cached offline. Each call is
+      // time-boxed so one stalled chapter can't hang the offline-prep bar.
       for (const ata of atas) {
         try {
-          const rows = await api(`/mel/amm?reg=${encodeURIComponent(reg)}&ata=${encodeURIComponent(ata)}&limit=3000`);
+          const rows = await withTimeout(api(`/mel/amm?reg=${encodeURIComponent(reg)}&ata=${encodeURIComponent(ata)}&limit=3000`), 15000);
           if (Array.isArray(rows)) amm = amm.concat(rows);
-        } catch { /* skip this ATA on a blip — retried next run */ }
+        } catch { /* skip this ATA on a blip/stall — retried next run */ }
       }
     } else {
-      amm = await api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`);     // fallback (no filters)
+      amm = await withTimeout(api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`), 20000);     // fallback
     }
     if (Array.isArray(amm) && amm.length) {                // never clobber a good cache with an empty/blip response
       await setRef(`amm:${r}`, amm);
@@ -931,7 +932,7 @@ async function cacheAmmFigures(html: string): Promise<void> {
   for (const { abs } of ammFigureUrls(html)) {
     const key = figKey(abs);
     if ((await getRef(key)).data) continue;                        // already cached (shared)
-    const uri = await tileToDataUri(abs).catch(() => null);
+    const uri = await withTimeout(tileToDataUri(abs), 15000).catch(() => null);   // time-boxed so a stalled figure can't hang
     if (uri) await setRef(key, uri).catch(() => {});
   }
 }
@@ -971,7 +972,7 @@ async function cacheOneAmm(reg: string | undefined, ref: string): Promise<boolea
   if ((await getRef(ammTextKey(reg, ref))).data) return true;      // resumable — already resolved
   let r: any;
   try {
-    r = await api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`);
+    r = await withTimeout(api(`/mel/amm/content?ref=${encodeURIComponent(ref)}${reg ? '&reg=' + encodeURIComponent(reg) : ''}`), 20000);
   } catch (e: any) {
     if (/→ 404/.test(String(e?.message || ''))) { await setRef(ammTextKey(reg, ref), { task_card_ref: ref, empty: true }); return true; }
     throw e;                                                        // network / 5xx → retry on a later pass
@@ -1160,6 +1161,12 @@ export async function prefetchHelp(): Promise<void> {
 // show a single progress bar and a clear "ready for offline" state. Each step is best-effort;
 // a failure advances the bar rather than blocking. Does NOT fetch AMM instructions (opt-in via
 // the picker's "Save these for offline"). onProgress(fraction 0..1, label).
+// Cap a promise so a stalled network request can never freeze the caller (a fetch with no signal
+// otherwise waits forever). On timeout it rejects; the dangling request resolves later harmlessly.
+export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))]);
+}
+
 export async function prepareOffline(reg: string | undefined,
                                      onProgress: (frac: number, label: string) => void): Promise<void> {
   const { Platform } = require('react-native');
@@ -1174,7 +1181,9 @@ export async function prepareOffline(reg: string | undefined,
   ];
   for (let i = 0; i < steps.length; i++) {
     onProgress(i / steps.length, steps[i].label);
-    try { await steps[i].run(); } catch { /* best-effort — keep going */ }
+    // Each step is best-effort AND time-boxed (60 s) so one stuck request can't hang the whole bar;
+    // whatever it didn't finish is just re-tried next session (all steps are resumable/skip-cached).
+    try { await withTimeout(steps[i].run(), 60000); } catch { /* skip — keep going */ }
     onProgress((i + 1) / steps.length, steps[i].label);
   }
   onProgress(1, 'Ready for offline');
