@@ -808,13 +808,15 @@ export async function refreshReference() {
     // Cache AMM on every iPad so any device works offline for a mechanic (only ~1.9 MB/tail).
     // (A per-device "maintenance iPad" scope is under review with the team — see AMM-offline notes.)
     const ammKey = reg ? `amm:${reg.toUpperCase()}` : null;
-    const [{ data: cachedVer }, { data: melCache }, ammCache] = await Promise.all([
-      getRef('refversion'), getRef('mel'), ammKey ? getRef(ammKey) : Promise.resolve({ data: null }),
+    const [{ data: cachedVer }, { data: melCache }, { data: cdlCache }, { data: tcCache }, ammCache] = await Promise.all([
+      getRef('refversion'), getRef('mel'), getRef('cdl'), getRef('taskcards'),
+      ammKey ? getRef(ammKey) : Promise.resolve({ data: null }),
     ]);
-    const unchanged = melCache && cachedVer && JSON.stringify(cachedVer) === JSON.stringify(ver);
+    const unchanged = cachedVer && JSON.stringify(cachedVer) === JSON.stringify(ver);
+    const refMissing = !melCache || !cdlCache || !tcCache;  // any core reference piece absent (e.g. CDL never cached)
     const ammMissing = !!ammKey && !ammCache.data;         // this tail not cached yet (e.g. switched aircraft)
-    if (unchanged && !ammMissing) return;                  // nothing to do
-    if (!unchanged) {                                      // fleet reference changed → re-pull MEL/CDL/AMP
+    if (unchanged && !refMissing && !ammMissing) return;   // nothing to do
+    if (!unchanged || refMissing) {                        // version changed OR a core piece missing → re-pull MEL/CDL/AMP
       const [mel, cards, filters, cdl] = await Promise.all([
         api('/mel?limit=3000'), api('/mel/task-cards?limit=3000'), api('/mel/task-cards/filters'), api('/cdl?limit=3000'),
       ]);
@@ -834,10 +836,22 @@ export async function prefetchAmm(reg?: string): Promise<number> {
   if (Platform.OS === 'web' || !reg) return 0;
   try {
     const r = reg.toUpperCase();
-    const [amm, ammf] = await Promise.all([
-      api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`),
-      api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`),
-    ]);
+    const ammf = await api(`/mel/amm/filters?reg=${encodeURIComponent(reg)}`);   // all applicable ATA chapters
+    const atas: string[] = (ammf?.ata || []).filter(Boolean);
+    let amm: any[] = [];
+    if (atas.length) {
+      // Fetch per ATA and concatenate: the server caps /mel/amm at 3000 rows, and a tail has ~8250
+      // cards, so a single call silently drops ~29 higher chapters. Each ATA has <700 cards, so
+      // per-ATA never truncates → the full list (every ATA) is cached offline.
+      for (const ata of atas) {
+        try {
+          const rows = await api(`/mel/amm?reg=${encodeURIComponent(reg)}&ata=${encodeURIComponent(ata)}&limit=3000`);
+          if (Array.isArray(rows)) amm = amm.concat(rows);
+        } catch { /* skip this ATA on a blip — retried next run */ }
+      }
+    } else {
+      amm = await api(`/mel/amm?reg=${encodeURIComponent(reg)}&limit=20000`);     // fallback (no filters)
+    }
     if (Array.isArray(amm) && amm.length) {                // never clobber a good cache with an empty/blip response
       await setRef(`amm:${r}`, amm);
       await setRef(`ammfilters:${r}`, ammf);
