@@ -1,8 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { cabinLogHtml, cabinLogHtmlOne, hilHtml, hilHtmlOne, listActiveDefects, listHIL, syncPush } from '../api/client';
+import { cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listHIL, syncPush } from '../api/client';
 import { printHtml } from '../print';
+import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
 import { theme } from '../theme';
 
 type Tab = 'defects' | 'cabin' | 'hil';
@@ -39,21 +40,36 @@ export default function DefectsScreen({ route, navigation }: any) {
     </TouchableOpacity>
   );
 
+  // Offline fallback: render the HIL / Cabin Defect Log from the cached aircraft defects.
+  async function localForm(kind: 'hil' | 'cabin', items?: any[]): Promise<string> {
+    const { getLocalAircraftDefects } = require('../db/defects');
+    const defects = items ?? await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
+    const ac = currentAircraft() || { registration: acLabel };
+    const data: any = { sector: {}, aircraft: ac, defects, signatures: [] };
+    return kind === 'hil' ? localHilHtml(data) : localCabinHtml(data);
+  }
+
   async function printForm(kind: 'hil' | 'cabin') {
     setNote('Preparing form…');
     try {
       const { html } = kind === 'hil' ? await hilHtml(aircraftId) : await cabinLogHtml(aircraftId);
       setNote('');
       await printHtml(html);
-    } catch (e: any) { setNote(e.message || 'Could not load the form'); }
+    } catch (e: any) {
+      try { const html = await localForm(kind); setNote(''); await printHtml(html); }   // offline → cached render
+      catch { setNote(e.message || 'Could not load the form'); }
+    }
   }
-  async function printOne(kind: 'hil' | 'cabin', defectId: string) {
+  async function printOne(kind: 'hil' | 'cabin', item: any) {
     setNote('Preparing form…');
     try {
-      const { html } = kind === 'hil' ? await hilHtmlOne(defectId) : await cabinLogHtmlOne(defectId);
+      const { html } = kind === 'hil' ? await hilHtmlOne(item.id) : await cabinLogHtmlOne(item.id);
       setNote('');
       await printHtml(html);
-    } catch (e: any) { setNote(e.message || 'Could not load the form'); }
+    } catch (e: any) {
+      try { const html = await localForm(kind, [item]); setNote(''); await printHtml(html); }   // offline → single-item render
+      catch { setNote(e.message || 'Could not load the form'); }
+    }
   }
 
   const acLabel = /^[0-9a-f-]{12,}$/i.test(aircraftId) ? aircraftId.slice(0, 8) : aircraftId;
@@ -92,7 +108,7 @@ export default function DefectsScreen({ route, navigation }: any) {
               </Text>
             </View>
             {tab === 'hil' || tab === 'cabin' ? (
-              <TouchableOpacity style={styles.rowPrint} onPress={() => printOne(tab === 'hil' ? 'hil' : 'cabin', item.id)}>
+              <TouchableOpacity style={styles.rowPrint} onPress={() => printOne(tab === 'hil' ? 'hil' : 'cabin', item)}>
                 <Text style={styles.rowPrintTxt}>🖨 View/Print</Text>
               </TouchableOpacity>
             ) : null}
