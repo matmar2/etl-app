@@ -320,8 +320,18 @@ export const appRelease = (device?: string): Promise<{ revision: string | null; 
   api(`/app/release${device ? `?device=${encodeURIComponent(device)}` : ''}`);
 
 export type MaintTask = { id: string; registration: string; title: string; description?: string; ata?: string; reference?: string; due_date?: string | null; audience: string; status: string; completed_by_name?: string | null; completed_at?: string | null; completed_note?: string | null; tlb_no?: string | null };
-export const maintTasks = (reg: string): Promise<MaintTask[]> =>
-  api(`/maint-tasks?aircraft_id=${encodeURIComponent(reg)}`);
+export async function maintTasks(reg: string): Promise<MaintTask[]> {
+  const key = `mainttasks_${(reg ?? '').toUpperCase()}`;
+  try {
+    const t: MaintTask[] = await api(`/maint-tasks?aircraft_id=${encodeURIComponent(reg)}`);
+    if (Array.isArray(t)) setRef(key, t).catch(() => {});
+    return t;
+  } catch (e) {
+    const { data } = await getRef<MaintTask[]>(key);     // offline → cached planned tasks
+    if (data) return data;
+    throw e;
+  }
+}
 export const completeMaintTask = (id: string, body: { signer_name?: string; note?: string; tlb_no?: string; signature_image?: string }) =>
   mutateOrQueue(`/maint-tasks/${id}/complete`, { method: 'POST', body: JSON.stringify(body) });
 
@@ -621,8 +631,20 @@ export type CheckTask = { id: string; text: string; insp?: boolean; note?: strin
 export type CheckTemplate = { kind: string; title: string; rev: string; validity_days: number;
   description?: string; reason?: string; header_notes?: { label: string; text: string }[];
   sections: { title: string; tasks: CheckTask[] }[] };
-export const checkTemplate = (kind: string, reg?: string): Promise<CheckTemplate> =>
-  api(`/aircraft/checks/template/${kind}${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`);
+// The 2/10-day check FORM (tasks/sections to fill). Cached per kind+tail so the check can be
+// opened and completed offline — completion is already offline-first (queueCheck).
+export async function checkTemplate(kind: string, reg?: string): Promise<CheckTemplate> {
+  const key = `checktpl_${kind}_${(reg ?? '').toUpperCase()}`;
+  try {
+    const t: CheckTemplate = await api(`/aircraft/checks/template/${kind}${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`);
+    setRef(key, t).catch(() => {});
+    return t;
+  } catch (e) {
+    const { data } = await getRef<CheckTemplate>(key);   // offline → cached form
+    if (data) return data;
+    throw e;
+  }
+}
 // Local-first on the iPad: record the signed check immediately (countdown + serviceability
 // update with no delay, works offline) and let syncPush replay it to the server. On web
 // (no local DB) it posts directly.
@@ -1175,6 +1197,14 @@ export async function prepareOffline(reg: string | undefined,
     { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', run: () => refreshReference() },
     { label: 'Flight schedule (next 72 h)', run: () => prefetchOfflineFlights() },
     { label: 'Aircraft defects & HIL', run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
+    { label: '2/10-day check forms & planned tasks', run: async () => {
+      if (!reg) return;
+      await Promise.all([
+        checkTemplate('2day', reg).catch(() => {}),
+        checkTemplate('10day', reg).catch(() => {}),
+        maintTasks(reg).catch(() => {}),
+      ]);
+    } },
     { label: 'Previous-leg fuel', run: () => prefetchLastFuel() },
     { label: 'User guide & assistant', run: () => prefetchHelp() },
     { label: 'Route maps', run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
