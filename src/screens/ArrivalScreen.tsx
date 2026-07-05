@@ -106,9 +106,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
     setBadSet(new Set());
     if (!(await confirmAction('Confirm post-flight acceptance and close this sector?', 'Post-flight acceptance'))) return;
     try {
-      const r = await signRecord({ kind: 'postflight', sector_id: sectorId });
+      const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId });
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
-      setSignMsg(r.status === 'closed' ? 'Closed ✓' : 'Signed');
+      setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
     } catch (e: any) {
       const em = e?.message || '';
       setSignMsg(/complete|mandatory|required/i.test(em) ? em : 'Offline — queued');

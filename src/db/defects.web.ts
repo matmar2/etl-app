@@ -26,6 +26,11 @@ export async function getSectorDefects(sectorId: string): Promise<any[]> {
   return serverSectorDefects(sectorId);
 }
 
+// Web is always online — no local mirror. These are no-ops so shared screens compile.
+export async function getLocalDefect(_id: string): Promise<any | null> { return null; }
+export async function cacheDefect(_defect: any): Promise<void> { /* no-op on web */ }
+export async function appendLocalDefectAction(_id: string, _action: any, _patch?: { status?: string }): Promise<void> { /* no-op on web */ }
+
 export async function createDefect(d: NewDefect): Promise<string> {
   const id = uuid();
   await pushDefect({ ...d, id, status: 'open', blocks_serviceability: d.blocks_serviceability ?? true, version: 1 });

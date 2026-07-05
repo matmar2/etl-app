@@ -33,6 +33,37 @@ export async function getSectorDefects(sectorId: string): Promise<any[]> {
   return rows.map((r) => JSON.parse(r.payload));
 }
 
+// Read one defect from the local mirror (offline). Returns the parsed payload or null.
+export async function getLocalDefect(id: string): Promise<any | null> {
+  const dbc = await db();
+  const row = await dbc.getFirstAsync<{ payload: string }>('SELECT payload FROM defects WHERE id = ?', id);
+  if (!row) return null;
+  try { return JSON.parse(row.payload); } catch { return null; }
+}
+
+// Cache a server defect into the local mirror (dirty=0) so it opens offline next time.
+export async function cacheDefect(defect: any): Promise<void> {
+  if (!defect?.id) return;
+  const dbc = await db();
+  await dbc.runAsync(
+    `INSERT OR REPLACE INTO defects (id, sector_id, aircraft_id, description, ata_chapter, category, status, version, dirty, payload)
+     VALUES (?,?,?,?,?,?,?,?,COALESCE((SELECT dirty FROM defects WHERE id = ?),0),?)`,
+    defect.id, defect.sector_id ?? null, defect.aircraft_id ?? '', defect.description ?? defect.title ?? '',
+    defect.ata_chapter ?? null, defect.source ?? defect.category ?? 'defect', defect.status ?? 'open',
+    defect.version ?? 1, defect.id, JSON.stringify(defect));
+}
+
+// Optimistically apply an action to the LOCAL defect payload (for display offline) — the
+// server call itself is queued in the outbox, so we do NOT touch the dirty flag here.
+export async function appendLocalDefectAction(id: string, action: any, patch?: { status?: string }): Promise<void> {
+  const cur = await getLocalDefect(id);
+  if (!cur) return;
+  cur.actions = [...(cur.actions || []), { ...action, at: action.at || new Date().toISOString(), pending: true }];
+  if (patch?.status) cur.status = patch.status;
+  const dbc = await db();
+  await dbc.runAsync('UPDATE defects SET status = ?, payload = ? WHERE id = ?', cur.status ?? 'open', JSON.stringify(cur), id);
+}
+
 // Create a defect locally (offline) and queue it for sync.
 export async function createDefect(d: NewDefect): Promise<string> {
   const dbc = await db();

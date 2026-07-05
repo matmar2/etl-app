@@ -142,8 +142,8 @@ export default function DepartureScreen({ route, navigation }: any) {
     }
     setBadSet(new Set());
     if (!(await confirmAction('Confirm commander acceptance — fuel and oil as required, aircraft acceptable for service?', 'Commander acceptance'))) return;
-    try { const r = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r.record_hash ? "Accepted ✓" : "Accepted"); refresh(); }
-    catch { setSignMsg('Offline — queued'); }
+    try { const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted')); refresh(); }
+    catch { setSignMsg('Could not accept — try again'); }
   }
 
   async function undoAccept() {

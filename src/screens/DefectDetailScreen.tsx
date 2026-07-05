@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
 import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, taskLineWithHeader } from '../api/client';
+import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
 import TaskCardPicker from '../components/TaskCardPicker';
@@ -54,7 +55,14 @@ export default function DefectDetailScreen({ route, navigation }: any) {
 
   const [ampRev, setAmpRev] = useState('');
   const [ammRev, setAmmRev] = useState('');
-  async function load() { try { setD(await getDefect(defectId)); } catch (e: any) { setMsg(e.message); } }
+  async function load() {
+    try { const dd = await getDefect(defectId); setD(dd); cacheDefect(dd).catch(() => {}); }   // online → cache for offline
+    catch (e: any) {
+      const local = await getLocalDefect(defectId);                                             // offline → local mirror
+      if (local) { setD(local); setMsg(''); }
+      else setMsg('This defect isn’t available offline — open it once with a signal.');
+    }
+  }
   useEffect(() => { load(); }, [defectId]);
   useEffect(() => {
     ammRevision().then(setAmmRev).catch(() => {});
@@ -63,11 +71,21 @@ export default function DefectDetailScreen({ route, navigation }: any) {
 
   async function act(kind: string, body: any = {}) {
     setMsg('Saving…');
-    try { await addDefectAction(defectId, { kind, narrative: narr || undefined, ...body }); setNarr(''); setMsg('Done ✓'); load(); }
-    catch (e: any) { setMsg(`Failed: ${e.message}`); }
+    try {
+      const a = { kind, narrative: narr || undefined, ...body };
+      const r = await addDefectAction(defectId, a);
+      if (r?.queued) { await appendLocalDefectAction(defectId, a); setMsg('Saved offline — will sync ✓'); }
+      else setMsg('Done ✓');
+      setNarr(''); load();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
   async function close() {
-    try { await closeDefect(defectId); setMsg('Closed ✓'); load(); } catch (e: any) { setMsg(`Failed: ${e.message}`); }
+    try {
+      const r = await closeDefect(defectId);
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'close' }, { status: 'closed' }); setMsg('Closed offline — will sync ✓'); }
+      else setMsg('Closed ✓');
+      load();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
 
   // Rectify + CRS — a certification: all entries complete, confirm, sign, MFA.
@@ -81,9 +99,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   async function submitCRS(signature: string) {
     setMsg('Issuing CRS…');
     try {
-      await addDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo,
+      const r = await addDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo,
         licence_no: lic.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined });
-      setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); setMsg('Rectified + CRS issued ✓'); load();
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
+      else setMsg('Rectified + CRS issued ✓');
+      setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); load();
     } catch (e: any) {
       if (e instanceof MfaRequired) { setCrsSig(signature); setNeedOtp(true); setMsg('Enter your authenticator code to issue the CRS.'); }
       else setMsg(`Failed: ${e.message}`);
@@ -91,7 +111,12 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   }
   async function reverse() {
     if (!(await confirmAction('Reverse this Rectify + CRS? The rectification and its CRS signature will be voided and the defect re-opened.', 'Reverse CRS'))) return;
-    try { await reverseRectification(defectId); setMsg('Rectification reversed — defect re-opened'); load(); }
+    try {
+      const r: any = await reverseRectification(defectId);
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'reverse' }, { status: 'open' }); setMsg('Reversal saved offline — will sync'); }
+      else setMsg('Rectification reversed — defect re-opened');
+      load();
+    }
     catch (e: any) { setMsg(e?.message?.includes('409') ? 'Cannot reverse — defect is closed' : `Failed: ${e.message}`); }
   }
   function dispatch(ok: boolean) {
@@ -102,7 +127,12 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: ok ? 'Accept' : 'Not dispatchable', style: ok ? 'default' : 'destructive', onPress: async () => {
-          try { await acceptDispatch(defectId, ok); setMsg(ok ? 'Accepted as dispatchable ✓' : 'Marked not dispatchable'); load(); }
+          try {
+            const r = await acceptDispatch(defectId, ok);
+            if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'dispatch', dispatchable: ok }); setMsg('Saved offline — will sync ✓'); }
+            else setMsg(ok ? 'Accepted as dispatchable ✓' : 'Marked not dispatchable');
+            load();
+          }
           catch (e: any) { setMsg(`Failed: ${e.message}`); }
         } },
       ]);

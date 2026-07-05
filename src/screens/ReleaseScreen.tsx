@@ -44,7 +44,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
   const load = useCallback(() => {
-    releaseStatus(sectorId).then(setSt).catch(() => setMsg('Offline — release status unavailable'));
+    releaseStatus(sectorId).then(setSt).catch(() => setMsg('Offline — the Release & CRS page needs a connection. Reconnect to issue a release.'));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
     const reg = currentAircraft()?.registration;
     if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
@@ -101,7 +101,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
     } catch (e: any) { Alert.alert('Print', e.message); }
   }
 
-  if (!st) return <View style={s.wrap}><ActivityIndicator color={theme.accent} /><Text style={s.sub}>{msg || 'Loading…'}</Text></View>;
+  if (!st) return <View style={s.wrap}>{msg ? <Text style={s.sub}>{msg}</Text> : <><ActivityIndicator color={theme.accent} /><Text style={s.sub}>Loading…</Text></>}</View>;
 
   const svc = st.serviceable;
   return (

@@ -63,6 +63,13 @@ export async function db(): Promise<SQLite.SQLiteDatabase> {
       dirty INTEGER DEFAULT 1,
       payload TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS outbox (
+      id TEXT PRIMARY KEY,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      body TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
   return _db;
 }

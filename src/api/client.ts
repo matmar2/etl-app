@@ -3,6 +3,7 @@ import * as SecureStore from './secureStore';
 import { flushAttachments } from '../db/attachments';
 import { setCachedFlights } from '../db/flights';
 import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, localMel, localTaskCards, localTaskFilters, setApt, setRef, setTile } from '../db/reference';
+import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
 import { sha1Hex, verifyTotp } from '../util/totp';
@@ -230,6 +231,20 @@ async function api(path: string, init: RequestInit = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+// Run a mutating request; if OFFLINE, queue it for replay and return { queued:true } instead
+// of throwing, so the caller completes locally and shows "Saved offline — will sync". Online
+// behaviour is unchanged. Use only for fire-and-forget mutations (caller doesn't need the body).
+async function mutateOrQueue(path: string, init: RequestInit): Promise<any> {
+  try { return await api(path, init); }
+  catch (e) {
+    if (e instanceof NetworkError) {
+      await queueRequest((init.method as string) || 'POST', path, init.body as string | undefined);
+      return { queued: true };
+    }
+    throw e;
+  }
+}
+
 export const listOpenDefects = (aircraftId: string) =>
   api(`/defects/open?aircraft_id=${encodeURIComponent(aircraftId)}`);
 export const listActiveDefects = (aircraftId: string) =>
@@ -254,7 +269,7 @@ export type MaintTask = { id: string; registration: string; title: string; descr
 export const maintTasks = (reg: string): Promise<MaintTask[]> =>
   api(`/maint-tasks?aircraft_id=${encodeURIComponent(reg)}`);
 export const completeMaintTask = (id: string, body: { signer_name?: string; note?: string; tlb_no?: string; signature_image?: string }) =>
-  api(`/maint-tasks/${id}/complete`, { method: 'POST', body: JSON.stringify(body) });
+  mutateOrQueue(`/maint-tasks/${id}/complete`, { method: 'POST', body: JSON.stringify(body) });
 
 export type Notice = { id: string; title: string; body: string; severity: string; audience: string; created_at: string; read: boolean };
 export const myNotices = (): Promise<Notice[]> => api('/notices');
@@ -270,18 +285,18 @@ export const leonFlights = (reg: string): Promise<LeonFlight[]> =>
 
 export const signRecord = (payload: {
   kind: string; sector_id?: string; defect_id?: string; signature_image?: string; device_id?: string;
-}) => api('/signatures', { method: 'POST', body: JSON.stringify(payload) });
+}) => mutateOrQueue('/signatures', { method: 'POST', body: JSON.stringify(payload) });
 
 export const getDefect = (id: string) => api(`/defects/${id}`);
 export const addDefectAction = (id: string, body: any) =>
-  api(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify(body) });
+  mutateOrQueue(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify(body) });
 export const extendDefect = (id: string, body: { due_date: string; rect_interval?: string; mel_ref?: string; narrative?: string }) =>
-  api(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify({ kind: 'extension', ...body }) });
-export const closeDefect = (id: string) => api(`/defects/${id}/close`, { method: 'POST' });
+  mutateOrQueue(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify({ kind: 'extension', ...body }) });
+export const closeDefect = (id: string) => mutateOrQueue(`/defects/${id}/close`, { method: 'POST' });
 export const reverseRectification = (id: string): Promise<{ status: string }> =>
-  api(`/defects/${id}/reverse-rectification`, { method: 'POST' });
+  mutateOrQueue(`/defects/${id}/reverse-rectification`, { method: 'POST' });
 export const acceptDispatch = (id: string, dispatchable: boolean) =>
-  api(`/defects/${id}/accept-dispatch?dispatchable=${dispatchable}`, { method: 'POST' });
+  mutateOrQueue(`/defects/${id}/accept-dispatch?dispatchable=${dispatchable}`, { method: 'POST' });
 
 export type DefectBrief = {
   id: string; title?: string; description: string; ata_chapter?: string;
@@ -323,14 +338,14 @@ export const serverSectorDefects = (sectorId: string): Promise<any[]> =>
 export const deleteServerSector = (id: string, force = false): Promise<any> =>
   api(`/sectors/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' });
 export const revokeAcceptance = (sectorId: string): Promise<{ status: string }> =>
-  api(`/sectors/${sectorId}/revoke-acceptance`, { method: 'POST' });
+  mutateOrQueue(`/sectors/${sectorId}/revoke-acceptance`, { method: 'POST' });
 export const requestCrsReset = (sectorId: string, reason: string): Promise<{ status: string; id: string }> =>
-  api(`/sectors/${sectorId}/crs-reset-request`, { method: 'POST', body: JSON.stringify({ reason }) });
+  mutateOrQueue(`/sectors/${sectorId}/crs-reset-request`, { method: 'POST', body: JSON.stringify({ reason }) });
 
 export type Correction = { id: string; field?: string; old_value?: string; new_value?: string; reason: string; raised_by_name?: string; raised_at: string; status: string };
 export const listCorrections = (sectorId: string): Promise<Correction[]> => api(`/sectors/${sectorId}/corrections`);
 export const raiseCorrection = (sectorId: string, body: { field?: string; old_value?: string; new_value?: string; reason: string; signature_image?: string }): Promise<{ id: string }> =>
-  api(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
+  mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
 export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
@@ -364,7 +379,7 @@ export const listAttachments = (q: { defect_id?: string; sector_id?: string }): 
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}`;
 
 export const addServicing = (body: { sector_id: string; system: string; uplift_lt?: number; depart_lt?: number }) =>
-  api('/servicing', { method: 'POST', body: JSON.stringify(body) });
+  mutateOrQueue('/servicing', { method: 'POST', body: JSON.stringify(body) });
 
 export type Fleet = { registration: string; type: string; msn?: string };
 export const fleetList = (): Promise<Fleet[]> => api('/aircraft');
@@ -569,7 +584,7 @@ export type CheckRecord = { id: string; kind: string; completed_at: string; sign
 export const listChecks = (reg: string, days?: number): Promise<CheckRecord[]> =>
   api(`/aircraft/${encodeURIComponent(reg)}/checks${days ? `?days=${days}` : ''}`);
 export const amendCheck = (reg: string, id: string, body: any) =>
-  api(`/aircraft/${encodeURIComponent(reg)}/checks/${id}/amend`, { method: 'POST', body: JSON.stringify(body) });
+  mutateOrQueue(`/aircraft/${encodeURIComponent(reg)}/checks/${id}/amend`, { method: 'POST', body: JSON.stringify(body) });
 
 export type Utilisation = { registration: string; etl: { tsn_fh: number; csn_fc: number };
   camo: { tsn: number | null; csn: number | null } | null; configured: boolean;
@@ -656,7 +671,7 @@ export async function serverReachable(timeoutMs = 4000): Promise<boolean> {
 export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string }> =>
   api('/admin/settings');
 
-export const deleteDefect = (id: string) => api(`/defects/${id}`, { method: 'DELETE' });
+export const deleteDefect = (id: string) => mutateOrQueue(`/defects/${id}`, { method: 'DELETE' });
 
 export type MelItem = {
   id: string; ata: string; item: string; category?: string;
@@ -823,6 +838,7 @@ async function flushChecks() {
 export async function syncPush() {
   flushAttachments().catch(() => {});         // best-effort photo upload
   flushChecks().catch(() => {});              // best-effort check replay
+  await flushOutbox(api).catch(() => {});     // replay queued offline mutations (defect actions, signatures, …)
   const d = await db();
   const sectors = await d.getAllAsync<any>('SELECT payload FROM sectors WHERE dirty = 1');
   const defects = await d.getAllAsync<any>('SELECT payload FROM defects WHERE dirty = 1');
