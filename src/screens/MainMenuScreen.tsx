@@ -175,9 +175,7 @@ export default function MainMenuScreen({ navigation }: any) {
         <View>
           <Text style={styles.appName}>Electronic Tech Log</Text>
           {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-          <TouchableOpacity onPress={checkForUpdate} disabled={checking}>
-            <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}{checking ? ' · checking…' : ' · tap to update'}</Text>
-          </TouchableOpacity>
+          <Text style={styles.appVer}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {pending > 0 ? (
@@ -188,6 +186,9 @@ export default function MainMenuScreen({ navigation }: any) {
           <OnlineStatus />
           <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
             {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
+            {checking ? <ActivityIndicator size="small" color="#1a1300" /> : <Text style={styles.updateTxt}>⇩ Update</Text>}
           </TouchableOpacity>
           <HeaderLogo />
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
@@ -307,6 +308,8 @@ const styles = StyleSheet.create({
   signOutTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
   refreshBtn: { borderWidth: 1, borderColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 88, alignItems: 'center' },
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
+  updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },
+  updateTxt: { color: '#1a1300', fontWeight: '800', fontSize: 13 },
   pendingPill: { backgroundColor: '#B45309', borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12, alignItems: 'center' },
   pendingTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
   testBanner: { backgroundColor: 'rgba(240,165,0,0.14)', borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
