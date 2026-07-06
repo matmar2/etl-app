@@ -32,7 +32,10 @@ export default function SectorListScreen({ route, navigation }: any) {
   const pull = useCallback(async () => {           // converge with the server (web ↔ iPad)
     setSectors(await pullSectorList(reg));
   }, [reg]);
-  useFocusEffect(useCallback(() => { pull(); }, [pull]));   // re-sync whenever this screen is focused
+  // Re-sync sectors AND pull the latest Leon schedule the instant this screen is focused, so any
+  // change from Leon shows immediately when online (in addition to the 60 s live timer below).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useFocusEffect(useCallback(() => { pull(); loadFlights(); }, [pull]));
 
   // Show flights "from the last 3 hours" onward — drop anything scheduled to depart
   // more than 3 h ago so old/stale flights don't clutter the list (active sectors always stay).
