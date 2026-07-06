@@ -120,23 +120,24 @@ export default function MainMenuScreen({ navigation }: any) {
       return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${id}`;
     } catch { return ''; }
   }
+  // Apply a downloaded update by relaunching the app in place. A USER-initiated reload is safe
+  // (the earlier iOS crash was from FORCING it right after an auto-fetch). The session lives in the
+  // Keychain, so the app comes back signed in, on the main menu — no swipe-up, no re-login.
+  async function applyUpdateNow() {
+    if (!(await confirmAction('Restart the app now to apply the update?\n\nYou stay signed in and return to the menu — no need to close and reopen it.', 'Restart to update'))) return;
+    try { await Updates.reloadAsync(); }
+    catch { await confirmAction('Couldn’t restart automatically — close the app fully (swipe up) and reopen it to finish updating.', 'Almost there'); }
+  }
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
-    // Already downloaded and waiting (e.g. auto-fetched on launch)? A user-initiated restart is the
-    // safe way to apply it (the earlier iOS crash was from FORCING reload right after an auto-fetch).
-    if (upd.isUpdatePending) {
-      if (await confirmAction('An update is downloaded and ready.\n\nRestart the app now to apply it?', 'Update ready')) {
-        try { await Updates.reloadAsync(); } catch { await confirmAction('Close the app fully (swipe up) and reopen it to finish updating.', 'Almost there'); }
-      }
-      return;
-    }
+    if (upd.isUpdatePending) { await applyUpdateNow(); return; }   // already downloaded (e.g. auto-fetched on launch) → just restart
     setChecking(true);
     try {
       const r = await Updates.checkForUpdateAsync();
       if (r.isAvailable) {
-        await Updates.fetchUpdateAsync();   // downloads → useUpdates() flips isUpdatePending → the star stays lit
-        await confirmAction('Update downloaded ✓\n\nTap ⇩ Update again to restart now, or close the app fully and reopen to finish updating.', 'Update ready');
+        await Updates.fetchUpdateAsync();   // download, then apply in place
+        await applyUpdateNow();
       } else {
         await confirmAction(`You are already on the latest published version.${otaDiag()}`, 'Up to date');
       }
@@ -217,10 +218,14 @@ export default function MainMenuScreen({ navigation }: any) {
     <View style={styles.wrap}>
       {/* top bar */}
       <View style={styles.topRow}>
-        <View style={{ flexShrink: 1, marginRight: 8 }}>
-          <Text style={styles.appName}>Electronic Tech Log</Text>
-          {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-          <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: 8 }}>
+          <View style={{ marginRight: 10 }}><HeaderLogo /></View>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={styles.appName}>Electronic Tech Log</Text>
+            {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
+            <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
+            {(Constants.expoConfig as any)?.extra?.commit ? <Text style={styles.appVer}>Bundle {(Constants.expoConfig as any).extra.commit}</Text> : null}
+          </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <OnlineStatus />
@@ -233,7 +238,6 @@ export default function MainMenuScreen({ navigation }: any) {
             </TouchableOpacity>
             {updateAvail && !checking ? <View style={styles.updateBadge} /> : null}
           </View>
-          <HeaderLogo />
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
       </View>
