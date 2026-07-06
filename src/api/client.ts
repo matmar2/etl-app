@@ -539,35 +539,38 @@ export async function cacheRouteMaps(flights: LeonFlight[]): Promise<void> {
   }
 }
 
-export type PrevFuel = { fuel_kg: number | null; source: string | null; flight_no?: string | null; date?: string | null; dep?: string | null; arr?: string | null; continuity_ok?: boolean | null; cached?: boolean };
+export type PrevFuel = { fuel_kg: number | null; source: string | null; flight_no?: string | null; date?: string | null; dep?: string | null; arr?: string | null; continuity_ok?: boolean | null; cached?: boolean;
+  etl?: PrevFuel | null; leon?: PrevFuel | null };   // both source candidates, so the crew can compare/choose when they diverge
 
-// Previous-leg landing fuel for the Departure screen. Online: ask the server (ETL → Leon JL)
-// and keep a per-aircraft backup on the iPad. Offline: use that backup. Survives sync.
+// Previous-leg landing fuel for the Departure screen. Online: ask the server, which returns BOTH
+// the ETL and the Leon Journey Log value. Keeps a per-aircraft, per-source backup on the iPad so
+// both remain available offline. The flat top-level fields stay ETL-preferred (backward compatible);
+// `.etl` / `.leon` carry each candidate so the screen can prompt the pilot when they differ.
 export async function prevFuelCached(sectorId: string, reg: string): Promise<PrevFuel> {
-  // Precedence: ETL first (offline on this iPad, or online from the server), then Leon
-  // (cached offline, or online). ETL is the authoritative operator record; Leon is the fallback.
   const nk = _normReg(reg);
   const keyEtl = `lastfuel_etl_${nk}`, keyLeon = `lastfuel_leon_${nk}`;
   let localEtl: PrevFuel | null = null;
   try { const { localPrevFuel } = require('../db/sectors'); localEtl = await localPrevFuel(sectorId); } catch { /* web/no-op */ }
+  let srvEtl: PrevFuel | null = null, srvLeon: PrevFuel | null = null;
   try {
-    const r: PrevFuel = await api(`/sectors/${sectorId}/prev-fuel`);      // server does ETL-then-Leon
-    if (r && r.fuel_kg != null) {
-      const isEtl = String(r.source || '').toUpperCase().startsWith('ETL');
-      try { await setRef(isEtl ? keyEtl : keyLeon, r); } catch { /* ignore */ }
-      if (isEtl) return r;                       // ETL on the server (synced, authoritative)
-      if (localEtl) return localEtl;             // server had only Leon, but this iPad holds an ETL leg → ETL wins
-      return r;                                  // Leon
+    const r: any = await api(`/sectors/${sectorId}/prev-fuel`);          // server returns { ...primary, etl, leon }
+    srvEtl = r?.etl?.fuel_kg != null ? r.etl : null;
+    srvLeon = r?.leon?.fuel_kg != null ? r.leon : null;
+    if (!srvEtl && !srvLeon && r?.fuel_kg != null) {                     // older backend (flat only) → bucket by source
+      if (String(r.source || '').toUpperCase().startsWith('ETL')) srvEtl = r; else srvLeon = r;
     }
-  } catch { /* offline — apply the precedence below against local + cache */ }
-  if (localEtl) return { ...localEtl, cached: true };                            // 1a. ETL, this iPad (offline)
-  const etlC = await getRef<PrevFuel>(keyEtl).catch(() => ({ data: null }));
-  if (etlC.data?.fuel_kg != null) return { ...etlC.data, cached: true, source: `${etlC.data.source || 'ETL'} · cached` };   // 1b. ETL cached
-  const leonC = await getRef<PrevFuel>(keyLeon).catch(() => ({ data: null }));
-  if (leonC.data?.fuel_kg != null) return { ...leonC.data, cached: true, source: `${leonC.data.source || 'Leon'} · cached` }; // 2. Leon cached
-  const legacy = await getRef<PrevFuel>(`lastfuel_${nk}`).catch(() => ({ data: null }));   // prefetch fallback
-  if (legacy.data?.fuel_kg != null) return { ...legacy.data, cached: true, source: `${legacy.data.source || 'last leg'} · cached` };
-  return { fuel_kg: null, source: null };
+    if (srvEtl) await setRef(keyEtl, srvEtl).catch(() => {});
+    if (srvLeon) await setRef(keyLeon, srvLeon).catch(() => {});
+  } catch { /* offline — fall back to caches below */ }
+  const etlCache = (await getRef<PrevFuel>(keyEtl).catch(() => ({ data: null }))).data;
+  const leonCache = (await getRef<PrevFuel>(keyLeon).catch(() => ({ data: null }))).data;
+  const cachedMark = (c: PrevFuel | null): PrevFuel | null =>
+    c && c.fuel_kg != null ? { ...c, cached: true, source: `${c.source || 'cached'} · cached` } : null;
+  // ETL: the not-yet-synced leg on THIS iPad wins, then the server value, then the cache.
+  const etl: PrevFuel | null = (localEtl && localEtl.fuel_kg != null ? localEtl : null) || srvEtl || cachedMark(etlCache);
+  const leon: PrevFuel | null = srvLeon || cachedMark(leonCache);
+  const primary = etl || leon || { fuel_kg: null, source: null };
+  return { ...primary, etl, leon };
 }
 
 // Warm the per-aircraft previous-leg landing fuel cache for the whole fleet, so the
@@ -579,11 +582,15 @@ export async function prefetchLastFuel(): Promise<number> {
     const fleet = await fleetList();
     await Promise.all(fleet.map(async (a) => {
       try {
-        const r: PrevFuel = await api(`/aircraft/${encodeURIComponent(a.registration)}/last-fuel`);
+        const r: any = await api(`/aircraft/${encodeURIComponent(a.registration)}/last-fuel`);   // { ...primary, etl, leon }
         if (r && r.fuel_kg != null) {
           const nk = _normReg(a.registration);
-          const isEtl = String(r.source || '').toUpperCase().startsWith('ETL');
-          await setRef(isEtl ? `lastfuel_etl_${nk}` : `lastfuel_leon_${nk}`, r);
+          if (r.etl?.fuel_kg != null) await setRef(`lastfuel_etl_${nk}`, r.etl);
+          if (r.leon?.fuel_kg != null) await setRef(`lastfuel_leon_${nk}`, r.leon);
+          if (r.etl == null && r.leon == null) {   // older backend (flat only)
+            const isEtl = String(r.source || '').toUpperCase().startsWith('ETL');
+            await setRef(isEtl ? `lastfuel_etl_${nk}` : `lastfuel_leon_${nk}`, r);
+          }
           await setRef(`lastfuel_${nk}`, r);
           n++;
         }
@@ -674,7 +681,7 @@ export const checkHtml = (checkId: string): Promise<{ html: string }> =>
   api(`/aircraft/checks/record/${checkId}/html`);
 export const previewCheck = (reg: string, kind: string, body: any): Promise<{ html: string }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/checks/${kind}/preview`, { method: 'POST', body: JSON.stringify(body) });
-export type CheckRecord = { id: string; kind: string; completed_at: string; signer_name?: string; licence_no?: string; tlb_no?: string; data?: any; amendable?: boolean };
+export type CheckRecord = { id: string; kind: string; completed_at: string; signer_name?: string; licence_no?: string; insp_signer_name?: string; insp_licence_no?: string; tlb_no?: string; data?: any; amendable?: boolean };
 export const listChecks = (reg: string, days?: number): Promise<CheckRecord[]> =>
   api(`/aircraft/${encodeURIComponent(reg)}/checks${days ? `?days=${days}` : ''}`);
 export const amendCheck = (reg: string, id: string, body: any) =>

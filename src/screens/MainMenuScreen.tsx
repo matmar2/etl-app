@@ -105,23 +105,43 @@ export default function MainMenuScreen({ navigation }: any) {
   }
 
   const [checking, setChecking] = useState(false);
-  const [updateAvail, setUpdateAvail] = useState(false);   // a new OTA is waiting → red badge on ⇩ Update
+  // Light the star for BOTH states: a new OTA available to download, AND one already downloaded and
+  // pending a restart. expo auto-downloads on launch, so crew almost always land in the "pending"
+  // case — without it the star would essentially never show (the manual check finds nothing waiting).
+  const upd = Updates.useUpdates();
+  const updateAvail = Updates.isEnabled && (upd.isUpdateAvailable || upd.isUpdatePending);
+  // Which channel/runtimeVersion THIS installed build listens on. An OTA only reaches it (and only
+  // then does the red star light) when it's published to this exact channel at this runtimeVersion.
+  function otaDiag() {
+    try {
+      const ch = (Updates as any).channel || '—';
+      const rv = (Updates as any).runtimeVersion || '—';
+      const id = (Updates.updateId || '').slice(0, 8) || (Updates.isEmbeddedLaunch ? 'built-in' : '—');
+      return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${id}`;
+    } catch { return ''; }
+  }
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
+    // Already downloaded and waiting (e.g. auto-fetched on launch)? A user-initiated restart is the
+    // safe way to apply it (the earlier iOS crash was from FORCING reload right after an auto-fetch).
+    if (upd.isUpdatePending) {
+      if (await confirmAction('An update is downloaded and ready.\n\nRestart the app now to apply it?', 'Update ready')) {
+        try { await Updates.reloadAsync(); } catch { await confirmAction('Close the app fully (swipe up) and reopen it to finish updating.', 'Almost there'); }
+      }
+      return;
+    }
     setChecking(true);
     try {
       const r = await Updates.checkForUpdateAsync();
       if (r.isAvailable) {
-        await Updates.fetchUpdateAsync();
-        // Do NOT force Updates.reloadAsync() — an immediate in-place reload can hard-crash on iOS.
-        // The downloaded update applies safely on the next launch; ask the user to reopen.
-        await confirmAction('Update downloaded ✓\n\nClose the app fully (swipe up from the bottom) and reopen it to finish updating.', 'Update ready');
+        await Updates.fetchUpdateAsync();   // downloads → useUpdates() flips isUpdatePending → the star stays lit
+        await confirmAction('Update downloaded ✓\n\nTap ⇩ Update again to restart now, or close the app fully and reopen to finish updating.', 'Update ready');
       } else {
-        await confirmAction('You are already on the latest published version.', 'Up to date');
+        await confirmAction(`You are already on the latest published version.${otaDiag()}`, 'Up to date');
       }
     } catch (e: any) {
-      await confirmAction(`Could not check for updates: ${e?.message || 'no connection'}. Make sure wifi is on and try again.`, 'Update check failed');
+      await confirmAction(`Could not check for updates: ${e?.message || 'no connection'}. Make sure wifi is on and try again.${otaDiag()}`, 'Update check failed');
     } finally { setChecking(false); }
   }
 
@@ -152,8 +172,7 @@ export default function MainMenuScreen({ navigation }: any) {
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
       deviceId().then((d) => appRelease(d)).then((r) => { if (isAlive()) setVer(r); }).catch(() => {}),
-      Promise.resolve().then(() => (Updates.isEnabled ? Updates.checkForUpdateAsync() : null))
-        .then((r: any) => { if (isAlive()) setUpdateAvail(!!r?.isAvailable); }).catch(() => {}),   // OTA waiting?
+      Promise.resolve().then(() => (Updates.isEnabled ? Updates.checkForUpdateAsync() : null)).catch(() => {}),   // probe; the useUpdates() hook drives the star (available OR downloaded-pending)
     ];
     if (cur) jobs.push(
       aircraftStatus(cur.registration).then((s) => { if (isAlive()) setSt(s); }).catch(() => { if (isAlive()) setSt(null); }),

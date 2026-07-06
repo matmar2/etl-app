@@ -15,8 +15,11 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   const [state, setState] = useState<Record<string, any>>({});   // taskId -> {mech, insp, fields:{}}
   const [signer, setSigner] = useState('');
   const [licence, setLicence] = useState('');
+  const [inspSigner, setInspSigner] = useState('');
+  const [inspLicence, setInspLicence] = useState('');
+  const [inspSig, setInspSig] = useState('');          // captured inspector signature (dataURL)
   const [tlb, setTlb] = useState('');
-  const [signing, setSigning] = useState(false);
+  const [sigTarget, setSigTarget] = useState<'mech' | 'insp' | null>(null);   // which signature the pad is capturing
   const [msg, setMsg] = useState('');
   const [doneId, setDoneId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);   // signed offline → recorded locally, printable once synced
@@ -60,11 +63,15 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
     setTpl(null); setState({}); setDraftLoaded(false); setDoneId(null); setQueued(false); setMsg('');
     checkTemplate(kind, reg).then(setTpl).catch((e) => setMsg(e.message));
     setAmendingId(null); setAmendReason('');
+    setInspSigner(''); setInspLicence(''); setInspSig('');
     loadCheckDraft(reg, kind).then((d) => {
       if (d && d.state && Object.keys(d.state).length) {
         setState(d.state);
         if (d.signer != null) setSigner(d.signer);
         if (d.licence != null) setLicence(d.licence);
+        if (d.inspSigner != null) setInspSigner(d.inspSigner);
+        if (d.inspLicence != null) setInspLicence(d.inspLicence);
+        if (d.inspSig != null) setInspSig(d.inspSig);
         if (d.amendingId) { setAmendingId(d.amendingId); setAmendReason(d.amendReason || ''); }
         setMsg(d.amendingId ? 'Resumed your amendment — correct, enter a reason, then re-sign.' : 'Resumed your saved entries for this check.');
       }
@@ -75,14 +82,15 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   // auto-save entries as they are made, so leaving and returning resumes the check
   useEffect(() => {
     if (!draftLoaded) return;
-    saveCheckDraft(reg, kind, { state, signer, licence, amendingId, amendReason });
-  }, [state, signer, licence, amendingId, amendReason, draftLoaded, reg, kind]);
+    saveCheckDraft(reg, kind, { state, signer, licence, inspSigner, inspLicence, inspSig, amendingId, amendReason });
+  }, [state, signer, licence, inspSigner, inspLicence, inspSig, amendingId, amendReason, draftLoaded, reg, kind]);
 
   const set = (id: string, patch: any) => setState((s) => ({ ...s, [id]: { ...s[id], ...patch } }));
   const setField = (id: string, key: string, v: string) =>
     setState((s) => ({ ...s, [id]: { ...s[id], fields: { ...(s[id]?.fields || {}), [key]: v } } }));
 
   const tasks = tpl?.sections.flatMap((sec) => sec.tasks) ?? [];
+  const hasInsp = tasks.some((t) => t.insp);          // check carries independent-inspection items → dual signature required
   const filled = (id: string, key: string) => String(state[id]?.fields?.[key] ?? '').trim().length > 0;
   const taskDone = (t: any) => state[t.id]?.mech && (!t.insp || state[t.id]?.insp) && (t.fields ?? []).every((f: any) => filled(t.id, f.key));
   const remaining = tasks.filter((t) => !taskDone(t)).length;
@@ -111,7 +119,12 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
         : `Sign MECH${t?.insp ? ' & INSP' : ''} — ${(t?.text || '').slice(0, 70)}…`);
       return;
     }
-    setBadId(null); setMsg(''); setSigning(true);
+    if (hasInsp) {   // independent-inspection items → a second, different person must sign
+      if (!inspSigner.trim() || !inspLicence.trim()) { setMsg('Enter the inspector name and licence for the independent inspection.'); return; }
+      if (!inspSig) { setMsg('Capture the inspector signature for the independent inspection.'); return; }
+      if (inspSigner.trim().toLowerCase() === signer.trim().toLowerCase()) { setMsg('The independent inspection must be signed by a different person than the mechanic.'); return; }
+    }
+    setBadId(null); setMsg(''); setSigTarget('mech');
   }
 
   async function submit(signature: string) {
@@ -120,14 +133,15 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
     setMsg('Saving…');
     try {
       const body = { data: state, signer_name: signer.trim(), licence_no: licence.trim(),
-        tlb_no: tlb.trim() || undefined, signature_image: signature };
+        tlb_no: tlb.trim() || undefined, signature_image: signature,
+        ...(hasInsp ? { insp_signer_name: inspSigner.trim(), insp_licence_no: inspLicence.trim(), insp_signature_image: inspSig } : {}) };
       const r = amendingId
         ? await amendCheck(reg, amendingId, { ...body, reason: amendReason.trim() })
         : await completeCheck(reg, kind, body);
       const wasQueued = !!(r as any).queued;
       setQueued(wasQueued); setDoneId(r.id); setAmendingId(null); setAmendReason('');
       clearCheckDraft(reg, kind).catch(() => {});   // signed — drop the resume draft
-      setState({});
+      setState({}); setInspSigner(''); setInspLicence(''); setInspSig('');
       setMsg(wasQueued
         ? `${tpl?.title} certified ✓ — recorded on this iPad; the countdown has reset now. It syncs automatically when online (printable once synced).`
         : `${tpl?.title} ${wasAmend ? 'amended' : 'certified'} ✓ — preview / print below.`);
@@ -137,7 +151,8 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   async function startAmend(c: CheckRecord) {
     if (!(await confirmAction('Amend this signed check?\n\nThe original is kept (superseded) and you re-sign a corrected copy. Allowed only before the next departure release.', 'Amend check'))) return;
     setState(c.data || {}); setAmendingId(c.id); setAmendReason(''); setDoneId(null);
-    setMsg('Amending — correct the entries, enter a reason, then re-sign.');
+    setInspSigner(c.insp_signer_name || ''); setInspLicence(c.insp_licence_no || ''); setInspSig('');
+    setMsg('Amending — correct the entries, enter a reason, then re-sign (inspector re-signs too if INSP items apply).');
     scrollRef.current?.scrollTo({ y: 0, animated: true });
   }
 
@@ -154,6 +169,8 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
       const { html } = await previewCheck(reg, kind, {
         data: state, signer_name: signer.trim() || undefined, licence_no: licence.trim() || undefined,
         tlb_no: tlb.trim() || undefined,
+        insp_signer_name: inspSigner.trim() || undefined, insp_licence_no: inspLicence.trim() || undefined,
+        insp_signature_image: inspSig || undefined,
       });
       await printHtml(html);                         // opens the print preview (official format)
     } catch (e: any) { Alert.alert('Preview', e.message); }
@@ -258,10 +275,23 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
             </View>
           ))}
 
-          <Text style={s.section}>Certification</Text>
+          <Text style={s.section}>{hasInsp ? 'Certification — Mechanic' : 'Certification'}</Text>
           {!canEdit ? <RoBanner text="only certifying staff (mechanic) may complete checks" /> : null}
           <TextInput style={s.input} editable={canEdit} value={signer} onChangeText={setSigner} placeholder="Mechanic name" placeholderTextColor={theme.sub} />
           <TextInput style={s.input} editable={canEdit} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no." placeholderTextColor={theme.sub} />
+          {hasInsp ? (
+            <View style={{ marginTop: 8, borderWidth: 1, borderColor: theme.accent, borderRadius: 10, padding: 12, backgroundColor: theme.panel }}>
+              <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13, textTransform: 'uppercase' }}>Independent Inspection (INSP)</Text>
+              <Text style={[s.sub, { marginTop: 2 }]}>This check has INSP item(s) — a second qualified person must certify, separately from the mechanic.</Text>
+              <TextInput style={s.input} editable={canEdit} value={inspSigner} onChangeText={setInspSigner} placeholder="Inspector name" placeholderTextColor={theme.sub} />
+              <TextInput style={s.input} editable={canEdit} value={inspLicence} onChangeText={setInspLicence} placeholder="Inspector licence / auth no." placeholderTextColor={theme.sub} />
+              {canEdit ? (
+                <TouchableOpacity style={[s.btn, { backgroundColor: inspSig ? theme.tile : theme.accent, marginTop: 10 }]} onPress={() => setSigTarget('insp')}>
+                  <Text style={[s.btnTxt, inspSig ? null : { color: '#1a1300' }]}>{inspSig ? 'Inspector signature captured ✓ — tap to re-sign' : 'Capture inspector signature'}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
           <TextInput style={s.input} editable={canEdit} value={tlb} onChangeText={setTlb} placeholder="Tech Log number (auto-filled — editable / clearable)" placeholderTextColor={theme.sub} />
           {amendingId ? (
             <TextInput style={[s.input, { borderColor: theme.accent }]} editable={canEdit} value={amendReason} onChangeText={setAmendReason}
@@ -282,7 +312,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
               <Text style={{ color: theme.green, fontWeight: '800', fontSize: 15 }}>✓ {tpl.title} certified</Text>
               <Text style={[s.sub, { marginTop: 4 }]}>Signed and recorded — the countdown has reset. Print or save it below, or start another check.</Text>
               <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 10, alignSelf: 'flex-start' }]}
-                onPress={() => { setDoneId(null); setQueued(false); setState({}); setSigner(''); setLicence(''); setMsg(''); }}>
+                onPress={() => { setDoneId(null); setQueued(false); setState({}); setSigner(''); setLicence(''); setInspSigner(''); setInspLicence(''); setInspSig(''); setMsg(''); }}>
                 <Text style={s.btnTxt}>Start another check</Text>
               </TouchableOpacity>
             </View>
@@ -318,9 +348,13 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
         </>
       )}
 
-      <SignaturePad visible={signing} title={`Certify ${tpl?.title || 'check'}`}
-        onClose={() => setSigning(false)}
-        onDone={(dataUrl) => { setSigning(false); submit(dataUrl); }} />
+      <SignaturePad visible={sigTarget !== null}
+        title={sigTarget === 'insp' ? 'Independent inspector signature' : `Certify ${tpl?.title || 'check'}`}
+        onClose={() => setSigTarget(null)}
+        onDone={(dataUrl) => {
+          if (sigTarget === 'insp') { setInspSig(dataUrl); setSigTarget(null); }
+          else { setSigTarget(null); submit(dataUrl); }
+        }} />
     </ScrollView>
   );
 }

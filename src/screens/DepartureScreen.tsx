@@ -31,6 +31,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [routeEdit, setRouteEdit] = useState<any>({});
   const [minFuel, setMinFuel] = useState<number | null>(null);
   const [prevF, setPrevF] = useState<PrevFuel | null>(null);
+  const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
   const [servMin, setServMin] = useState<any>(null);
   const [pfiName, setPfiName] = useState('');
   const [pfiSigning, setPfiSigning] = useState(false);
@@ -59,7 +60,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!s) return;
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});
-    prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // ETL → Leon JL → iPad backup
+    setPrevChoice(null);
+    prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // returns both ETL + Leon candidates
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
       fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg,
@@ -87,7 +89,15 @@ export default function DepartureScreen({ route, navigation }: any) {
   const tankVals = tanks.map((t) => Number(fuel[t.field])).filter((n) => !isNaN(n) && n > 0);
   const tankSumKg = tankVals.reduce((a, b) => a + b, 0);
   const upliftKg = upliftManual ? (Number(fuel.fuel_uplift_kg) || 0) : tankSumKg;   // total uplift = Σ tanks unless manually overridden
-  const prevKg = prevF?.fuel_kg ?? null;
+  // Two previous-leg sources: ETL (operator record) and Leon JL. If they disagree, the pilot
+  // must pick which to use before the departure-fuel calculation runs.
+  const etlC = prevF?.etl && prevF.etl.fuel_kg != null ? prevF.etl : null;
+  const leonC = prevF?.leon && prevF.leon.fuel_kg != null ? prevF.leon : null;
+  const prevDiverge = !!etlC && !!leonC && Math.abs(Number(etlC.fuel_kg) - Number(leonC.fuel_kg)) >= 1;
+  const prevResolved: PrevFuel | null = prevDiverge
+    ? (prevChoice === 'etl' ? etlC : prevChoice === 'leon' ? leonC : null)   // paused until a source is chosen
+    : (prevF && prevF.fuel_kg != null ? prevF : null);
+  const prevKg = prevResolved?.fuel_kg ?? null;
   const depCalc: number | null = prevKg != null ? Math.round(prevKg + upliftKg) : null;   // departure fuel = prev landing fuel + total uplift
   const depCalcSrc = `prev landing ${fmt(round1(prevKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
   const depEff: number | null = depCalc != null ? depCalc : (fuel.dep_fuel_kg === '' || fuel.dep_fuel_kg == null ? null : Number(fuel.dep_fuel_kg));
@@ -257,15 +267,40 @@ export default function DepartureScreen({ route, navigation }: any) {
 
       {!canDep ? <RoBanner text="fuel, off-block and acceptance are entered by flight crew" /> : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['fuel'] = e.nativeEvent.layout.y; }}>Departure fuel</Text>
-      {prevF?.fuel_kg != null ? (
-        <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: prevF.continuity_ok === false ? theme.red : theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
-          <Text style={{ color: theme.sub, fontSize: 12 }}>Previous leg fuel on landing · {prevF.source} (reference)</Text>
-          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', marginTop: 2 }}>{fmt(round1(Number(prevF.fuel_kg)))} kg</Text>
+      {prevDiverge ? (
+        <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          <Text style={{ color: theme.red, fontSize: 13, fontWeight: '800' }}>⚠ Previous-leg fuel differs — choose the value to use</Text>
           <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>
-            {prevF.flight_no || 'prev leg'}{prevF.date ? ` · ${prevF.date}` : ''}{(prevF.dep || prevF.arr) ? ` · ${prevF.dep || '?'} → ${prevF.arr || '?'}` : ''}
+            ETL and Leon disagree by {fmt(round1(Math.abs(Number(etlC!.fuel_kg) - Number(leonC!.fuel_kg))))} kg. Confirm which source is correct for this departure.
           </Text>
-          {prevF.continuity_ok === false ? (
-            <Text style={{ color: theme.red, fontSize: 11, marginTop: 3, fontWeight: '800' }}>⚠ Previous destination {prevF.arr} ≠ this departure {s.dep} — check continuity</Text>
+          {([['etl', etlC!], ['leon', leonC!]] as const).map(([k, c]) => (
+            <TouchableOpacity key={k} disabled={!canDep} onPress={() => setPrevChoice(k)}
+              style={{ marginTop: 8, borderWidth: 2, borderColor: prevChoice === k ? theme.green : theme.border, borderRadius: 8, padding: 10, backgroundColor: theme.panel }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ color: theme.text, fontWeight: '800' }}>{prevChoice === k ? '✓ ' : ''}{c.source}</Text>
+                <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16 }}>{fmt(round1(Number(c.fuel_kg)))} kg</Text>
+              </View>
+              <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>
+                {c.flight_no || 'prev leg'}{c.date ? ` · ${c.date}` : ''}{(c.dep || c.arr) ? ` · ${c.dep || '?'} → ${c.arr || '?'}` : ''}
+              </Text>
+              {c.continuity_ok === false ? (
+                <Text style={{ color: theme.red, fontSize: 11, marginTop: 2, fontWeight: '800' }}>⚠ dest {c.arr} ≠ this departure {s.dep}</Text>
+              ) : null}
+            </TouchableOpacity>
+          ))}
+          {prevChoice == null ? (
+            <Text style={{ color: theme.red, fontSize: 11, marginTop: 6, fontWeight: '700' }}>Departure-fuel calculation is paused until you pick a source.</Text>
+          ) : null}
+        </View>
+      ) : prevResolved?.fuel_kg != null ? (
+        <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: prevResolved.continuity_ok === false ? theme.red : theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          <Text style={{ color: theme.sub, fontSize: 12 }}>Previous leg fuel on landing · {prevResolved.source} (reference){etlC && leonC ? ' · ETL = Leon ✓' : ''}</Text>
+          <Text style={{ color: theme.text, fontSize: 18, fontWeight: '800', marginTop: 2 }}>{fmt(round1(Number(prevResolved.fuel_kg)))} kg</Text>
+          <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>
+            {prevResolved.flight_no || 'prev leg'}{prevResolved.date ? ` · ${prevResolved.date}` : ''}{(prevResolved.dep || prevResolved.arr) ? ` · ${prevResolved.dep || '?'} → ${prevResolved.arr || '?'}` : ''}
+          </Text>
+          {prevResolved.continuity_ok === false ? (
+            <Text style={{ color: theme.red, fontSize: 11, marginTop: 3, fontWeight: '800' }}>⚠ Previous destination {prevResolved.arr} ≠ this departure {s.dep} — check continuity</Text>
           ) : null}
         </View>
       ) : null}
