@@ -120,24 +120,21 @@ export default function MainMenuScreen({ navigation }: any) {
       return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${id}`;
     } catch { return ''; }
   }
-  // Apply a downloaded update by relaunching the app in place. A USER-initiated reload is safe
-  // (the earlier iOS crash was from FORCING it right after an auto-fetch). The session lives in the
-  // Keychain, so the app comes back signed in, on the main menu — no swipe-up, no re-login.
-  async function applyUpdateNow() {
-    if (!(await confirmAction('Restart the app now to apply the update?\n\nYou stay signed in and return to the menu — no need to close and reopen it.', 'Restart to update'))) return;
-    try { await Updates.reloadAsync(); }
-    catch { await confirmAction('Couldn’t restart automatically — close the app fully (swipe up) and reopen it to finish updating.', 'Almost there'); }
-  }
+  // Tell the user a downloaded update is ready and how to apply it. We deliberately do NOT call
+  // Updates.reloadAsync() — an in-app reload HARD-CRASHES on this iOS build. The safe path is a
+  // normal close-and-reopen: expo applies the pending update on the next fresh launch, and the
+  // session lives in the Keychain so the user comes back signed in, on the menu.
+  const READY_MSG = 'Update downloaded ✓\n\nClose the app fully (swipe up from the bottom) and reopen it to finish updating. You stay signed in.';
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
-    if (upd.isUpdatePending) { await applyUpdateNow(); return; }   // already downloaded (e.g. auto-fetched on launch) → just restart
+    if (upd.isUpdatePending) { await confirmAction(READY_MSG, 'Update ready'); return; }   // already downloaded → just reopen
     setChecking(true);
     try {
       const r = await Updates.checkForUpdateAsync();
       if (r.isAvailable) {
-        await Updates.fetchUpdateAsync();   // download, then apply in place
-        await applyUpdateNow();
+        await Updates.fetchUpdateAsync();   // download; it applies on the next fresh launch
+        await confirmAction(READY_MSG, 'Update ready');
       } else {
         await confirmAction(`You are already on the latest published version.${otaDiag()}`, 'Up to date');
       }
