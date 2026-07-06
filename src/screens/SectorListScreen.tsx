@@ -62,9 +62,11 @@ export default function SectorListScreen({ route, navigation }: any) {
   const visibleSectors = histOpen
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
     : sectors.filter((s) => s.flight_date === today || inProgress(s));
-  // A flight may only be opened once the previous one is closed (one open sector at a time),
-  // and flights are opened in departure-time order (earliest first).
-  const openSector = sectors.find((s) => !['closed', 'exported'].includes(s.status));
+  // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time),
+  // and flights are opened in departure-time order (earliest first). A ground MAINTENANCE log is
+  // independent of flight dispatch, so it never blocks opening a Leon leg.
+  const isMaint = (s: Sector) => (s as any).page_kind === 'maintenance_only' || s.flight_no === 'MAINT';
+  const openSector = sectors.find((s) => !isMaint(s) && !['closed', 'exported'].includes(s.status));
   const nextFlight = available[0];                       // earliest by STD
 
   // Try Leon when online; on success cache the full 72 h window; on failure fall back to cache.
