@@ -62,6 +62,20 @@ export default function SectorListScreen({ route, navigation }: any) {
   // Your-sectors list: default shows today's legs plus anything still in progress (never hide an
   // open sector, even from an earlier day). "List previous flights" switches to the chosen date range.
   const inProgress = (s: Sector) => !['closed', 'exported'].includes(s.status);
+  // If Leon has changed the schedule for a still-open logged flight, surface it (auto, on focus/timer —
+  // no Refresh needed). We do NOT overwrite the tech-log record automatically; the crew decides.
+  const leonDelta = (s: Sector): string | null => {
+    if (!inProgress(s) || s.flight_no === 'MAINT') return null;
+    const f = flights.find((x) => x.flight_no === s.flight_no && (x.std ?? '').slice(0, 10) === (s.flight_date ?? ''));
+    if (!f) return null;
+    if (f.cancelled) return '⚠ Leon shows this flight CANCELLED';
+    const d: string[] = [];
+    const pair = (o?: string, n?: string, lbl?: string) => { const a = (o ?? '').slice(11, 16), b = (n ?? '').slice(11, 16); if (a && b && a !== b) d.push(`${lbl} ${b}z (was ${a}z)`); };
+    pair(s.std, f.std, 'STD'); pair(s.sta, f.sta, 'STA');
+    if (f.dep && s.dep && f.dep.toUpperCase() !== s.dep.toUpperCase()) d.push(`DEP ${f.dep} (was ${s.dep})`);
+    if (f.arr && s.arr && f.arr.toUpperCase() !== s.arr.toUpperCase()) d.push(`ARR ${f.arr} (was ${s.arr})`);
+    return d.length ? `⚠ Leon updated — ${d.join(' · ')}` : null;
+  };
   const visibleSectors = histOpen
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
     : sectors.filter((s) => s.flight_date === today || inProgress(s));
@@ -262,17 +276,21 @@ export default function SectorListScreen({ route, navigation }: any) {
           <Text style={[styles.feed, { marginTop: 8 }]}>{visibleSectors.length} flight(s) in range · released &amp; closed Tech Logs are kept on the server and always reappear here.</Text>
         </View>
       ) : null}
-      {visibleSectors.length === 0 ? <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text> : visibleSectors.map((item) => (
+      {visibleSectors.length === 0 ? <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text> : visibleSectors.map((item) => {
+        const delta = leonDelta(item);
+        return (
         <View key={item.id} style={styles.row}>
           <TouchableOpacity style={styles.rowOpen} onPress={() => navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
             <Text style={styles.rowFlight}>{item.flight_no}</Text>
             <Text style={styles.rowRoute}>{item.dep} → {item.arr}</Text>
             <Text style={styles.rowMeta}>{item.flight_date}</Text>
+            {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => removeOne(item)} hitSlop={10} style={styles.delBtn}><Text style={styles.del}>✕</Text></TouchableOpacity>
         </View>
-      ))}
+        );
+      })}
     </ScrollView>
   );
 }
