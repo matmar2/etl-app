@@ -1175,7 +1175,7 @@ export const myFeedback = (): Promise<MyFeedback[]> => api('/feedback/mine');
 export const techlogPage = (sectorId: string): Promise<any> => api(`/sectors/${sectorId}/techlog-page`);
 
 export const authMe = (): Promise<{ id: string; username: string; name?: string; role: string; email?: string }> => api('/auth/me');
-export type FeedbackIn = { message: string; category: string; screen?: string; contact_email?: string; email_copy?: boolean };
+export type FeedbackIn = { message: string; category: string; screen?: string; contact_email?: string; email_copy?: boolean; destination?: 'occ' | 'mcc' | 'both' };
 export async function submitFeedback(f: FeedbackIn): Promise<{ queued: boolean }> {
   const body = { ...f, app_version: _appVersion() };
   try { await api('/feedback', { method: 'POST', body: JSON.stringify(body) }); return { queued: false }; }

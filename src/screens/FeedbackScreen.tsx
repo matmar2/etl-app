@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { authMe, myFeedback, MyFeedback, submitFeedback } from '../api/client';
+import { appSettings, authMe, myFeedback, MyFeedback, submitFeedback } from '../api/client';
 import { theme } from '../theme';
 
 const CATS: { key: string; label: string }[] = [
@@ -20,18 +20,36 @@ export default function FeedbackScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [emailCopy, setEmailCopy] = useState(true);
+  const [routing, setRouting] = useState<{ occ_enabled?: boolean; mcc_enabled?: boolean; default?: string }>({});
+  const [dest, setDest] = useState<'occ' | 'mcc' | 'both'>('occ');
 
   const loadMine = useCallback(() => { myFeedback().then(setMine).catch(() => {}); }, []);
   useFocusEffect(useCallback(() => {
     loadMine();
     authMe().then((m) => { setName(m.name || m.username || ''); setEmail((e) => e || m.email || ''); }).catch(() => {});
+    appSettings().then((sx: any) => {
+      const r = sx.feedback_routing || {};
+      setRouting(r);
+      const occOn = !!r.occ_enabled, mccOn = !!r.mcc_enabled;
+      let d = r.default || 'occ';
+      if (d === 'both' && !(occOn && mccOn)) d = occOn ? 'occ' : (mccOn ? 'mcc' : 'occ');
+      if (d === 'occ' && !occOn) d = mccOn ? 'mcc' : 'occ';
+      if (d === 'mcc' && !mccOn) d = occOn ? 'occ' : 'mcc';
+      setDest(d);
+    }).catch(() => {});
   }, [loadMine]));
+
+  const destOpts = [
+    ...(routing.occ_enabled ? [{ key: 'occ', label: 'OCC' }] : []),
+    ...(routing.mcc_enabled ? [{ key: 'mcc', label: 'MCC' }] : []),
+    ...(routing.occ_enabled && routing.mcc_enabled ? [{ key: 'both', label: 'OCC + MCC' }] : []),
+  ];
 
   async function send() {
     if (!message.trim() || busy) return;
     setBusy(true); setStatus('');
     try {
-      const { queued } = await submitFeedback({ message: message.trim(), category, screen: 'iPad', contact_email: email.trim() || undefined, email_copy: emailCopy });
+      const { queued } = await submitFeedback({ message: message.trim(), category, screen: 'iPad', contact_email: email.trim() || undefined, email_copy: emailCopy, destination: destOpts.length ? dest : undefined });
       setMessage('');
       setStatus(queued ? 'Saved offline — it will be sent automatically when you reconnect. ✓' : (emailCopy ? 'Thank you — your feedback was sent (and emailed to the team). ✓' : 'Thank you — your feedback was sent. ✓'));
       loadMine();
@@ -53,6 +71,19 @@ export default function FeedbackScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {destOpts.length > 1 ? (
+        <>
+          <Text style={s.label}>Send to</Text>
+          <View style={s.catRow}>
+            {destOpts.map((c) => (
+              <TouchableOpacity key={c.key} style={[s.cat, dest === c.key && s.catOn]} onPress={() => setDest(c.key as any)}>
+                <Text style={[s.catText, dest === c.key && s.catTextOn]}>{c.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      ) : null}
 
       <Text style={s.label}>From</Text>
       <View style={s.fromRow}>
