@@ -9,7 +9,7 @@ const KIND: Record<string, string> = {
   crs: 'Maintenance Release (CRS)', release: 'Maintenance Release (CRS)', defect: 'Defect action',
 };
 
-export default function SignOffScreen() {
+export default function SignOffScreen({ navigation }: any) {
   const [days, setDays] = useState(15);
   const [list, setList] = useState<SignOff[] | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
@@ -20,12 +20,21 @@ export default function SignOffScreen() {
   useEffect(() => { signoffsRecent(days).then((r) => { setList(r.signoffs); setCached(!!r.cached); }).catch(() => setList([])); }, [days]);
 
   async function open(g: SignOff) {
-    if (!g.sector_id) { setMsg('This sign-off has no printable Tech Log.'); return; }
-    setMsg(''); setOpeningId(g.id);
-    try { const { html } = await sectorTlHtmlCached(g.sector_id); await printHtml(html); }
-    catch (e: any) { setMsg(e?.message?.includes('cached') || e?.message?.includes('Offline') ? 'Offline — open this Tech Log once online to make it available offline.' : (e?.message || 'Could not open the document.')); }
-    finally { setOpeningId(null); }
+    setMsg('');
+    if (g.sector_id) {                                   // sector-linked (flight / maintenance-log CRS) → the Tech Log page
+      setOpeningId(g.id);
+      try { const { html } = await sectorTlHtmlCached(g.sector_id); await printHtml(html); }
+      catch (e: any) { setMsg(e?.message?.includes('cached') || e?.message?.includes('Offline') ? 'Offline — open this Tech Log once online to make it available offline.' : (e?.message || 'Could not open the document.')); }
+      finally { setOpeningId(null); }
+      return;
+    }
+    if (g.defect_id) {                                   // defect-rectification CRS (no sector) → open the defect + its CRS
+      navigation.navigate('DefectDetail', { defectId: g.defect_id });
+      return;
+    }
+    setMsg('This sign-off has no printable Tech Log.');
   }
+  const openable = (g: SignOff) => !!(g.sector_id || g.defect_id);
 
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
@@ -35,7 +44,7 @@ export default function SignOffScreen() {
       {list === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :
         list.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>No sign-offs in the last {days} days.</Text> :
         list.map((g) => (
-          <TouchableOpacity key={g.id} style={s.row} activeOpacity={g.sector_id ? 0.6 : 1} onPress={() => open(g)} disabled={!g.sector_id || openingId === g.id}>
+          <TouchableOpacity key={g.id} style={s.row} activeOpacity={openable(g) ? 0.6 : 1} onPress={() => open(g)} disabled={!openable(g) || openingId === g.id}>
             <View style={{ flex: 1 }}>
               <Text style={s.k}>{KIND[g.kind] || g.kind}</Text>
               <Text style={s.meta}>
@@ -43,7 +52,7 @@ export default function SignOffScreen() {
               </Text>
               <Text style={s.meta}>{g.signer_name || ''}{g.licence_no ? ` · ${g.licence_no}` : ''}</Text>
               {g.defects_summary ? <Text style={s.defs}>Defects: {g.defects_summary}</Text> : null}
-              {g.sector_id ? <Text style={s.open}>{openingId === g.id ? 'Opening…' : 'Tap to open signed Tech Log / CRS ›'}</Text> : null}
+              {openable(g) ? <Text style={s.open}>{openingId === g.id ? 'Opening…' : (g.sector_id ? 'Tap to open signed Tech Log / CRS ›' : 'Tap to open the defect & CRS ›')}</Text> : null}
             </View>
             <Text style={s.when}>{g.signed_at?.slice(0, 16).replace('T', ' ')}z</Text>
           </TouchableOpacity>
