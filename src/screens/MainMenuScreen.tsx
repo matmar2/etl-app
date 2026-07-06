@@ -119,21 +119,29 @@ export default function MainMenuScreen({ navigation }: any) {
       return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${id}`;
     } catch { return ''; }
   }
-  // Tell the user a downloaded update is ready and how to apply it. We deliberately do NOT call
-  // Updates.reloadAsync() — an in-app reload HARD-CRASHES on this iOS build. The safe path is a
-  // normal close-and-reopen: expo applies the pending update on the next fresh launch, and the
-  // session lives in the Keychain so the user comes back signed in, on the menu.
-  const READY_MSG = 'Update downloaded ✓\n\nTo apply it you must FULLY CLOSE the app — open the app switcher and flick the ETL card up and off the screen (just going to the Home screen is NOT enough), then reopen ETL. You stay signed in.';
+  // Apply a downloaded update by relaunching the app in place — seamless, no manual quit, stays
+  // signed in (like Jeppesen FD Pro). The earlier crash was calling Updates.reloadAsync() WHILE the
+  // native confirm Alert was still on screen: reloadAsync tears down the view hierarchy under the
+  // modal → native crash. Deferring the reload until AFTER the Alert has fully dismissed fixes it.
+  function reloadSoon() {
+    setTimeout(() => {
+      Updates.reloadAsync().catch(() =>
+        confirmAction('Couldn’t restart automatically. Close the app fully and reopen it to finish updating — you stay signed in.', 'Almost there'));
+    }, 600);   // let the confirm dialog finish dismissing before tearing the JS runtime down
+  }
+  async function applyUpdateNow() {
+    if (await confirmAction('Restart now to apply the update?\n\nThe app reloads and returns to the Main Menu — you stay signed in, no need to close it.', 'Restart to update')) reloadSoon();
+  }
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
-    if (upd.isUpdatePending) { await confirmAction(READY_MSG, 'Update ready'); return; }   // already downloaded → just reopen
+    if (upd.isUpdatePending) { await applyUpdateNow(); return; }   // already downloaded (auto-fetched on launch) → restart to apply
     setChecking(true);
     try {
       const r = await Updates.checkForUpdateAsync();
       if (r.isAvailable) {
-        await Updates.fetchUpdateAsync();   // download; it applies on the next fresh launch
-        await confirmAction(READY_MSG, 'Update ready');
+        await Updates.fetchUpdateAsync();   // download, then restart in place
+        await applyUpdateNow();
       } else {
         await confirmAction(`You are already on the latest published version.${otaDiag()}`, 'Up to date');
       }
