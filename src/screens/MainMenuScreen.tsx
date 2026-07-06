@@ -123,7 +123,7 @@ export default function MainMenuScreen({ navigation }: any) {
   // Updates.reloadAsync() — an in-app reload HARD-CRASHES on this iOS build. The safe path is a
   // normal close-and-reopen: expo applies the pending update on the next fresh launch, and the
   // session lives in the Keychain so the user comes back signed in, on the menu.
-  const READY_MSG = 'Update downloaded ✓\n\nClose the app fully (swipe up from the bottom) and reopen it to finish updating. You stay signed in.';
+  const READY_MSG = 'Update downloaded ✓\n\nTo apply it you must FULLY CLOSE the app — open the app switcher and flick the ETL card up and off the screen (just going to the Home screen is NOT enough), then reopen ETL. You stay signed in.';
   async function checkForUpdate() {
     if (checking) return;
     if (!Updates.isEnabled) { await confirmAction('Live updates are not enabled in this build (dev/web).', 'Updates'); return; }
