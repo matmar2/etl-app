@@ -20,8 +20,8 @@ export default function FeedbackScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [emailCopy, setEmailCopy] = useState(true);
-  const [routing, setRouting] = useState<{ occ_enabled?: boolean; mcc_enabled?: boolean; default?: string }>({});
-  const [dest, setDest] = useState<'occ' | 'mcc' | 'both'>('occ');
+  const [routing, setRouting] = useState<{ recipients?: { label: string; email: string; enabled: boolean }[]; default?: string }>({});
+  const [dest, setDest] = useState<string>('');
 
   const loadMine = useCallback(() => { myFeedback().then(setMine).catch(() => {}); }, []);
   useFocusEffect(useCallback(() => {
@@ -30,19 +30,17 @@ export default function FeedbackScreen() {
     appSettings().then((sx: any) => {
       const r = sx.feedback_routing || {};
       setRouting(r);
-      const occOn = !!r.occ_enabled, mccOn = !!r.mcc_enabled;
-      let d = r.default || 'occ';
-      if (d === 'both' && !(occOn && mccOn)) d = occOn ? 'occ' : (mccOn ? 'mcc' : 'occ');
-      if (d === 'occ' && !occOn) d = mccOn ? 'mcc' : 'occ';
-      if (d === 'mcc' && !mccOn) d = occOn ? 'occ' : 'mcc';
+      const enabled = (r.recipients || []).filter((x: any) => x.enabled && x.email);
+      let d = r.default || (enabled[0]?.label) || '';
+      if (d !== 'all' && !enabled.some((x: any) => x.label === d)) d = enabled[0]?.label || '';
       setDest(d);
     }).catch(() => {});
   }, [loadMine]));
 
+  const enabledRecips = (routing.recipients || []).filter((x) => x.enabled && x.email);
   const destOpts = [
-    ...(routing.occ_enabled ? [{ key: 'occ', label: 'OCC' }] : []),
-    ...(routing.mcc_enabled ? [{ key: 'mcc', label: 'MCC' }] : []),
-    ...(routing.occ_enabled && routing.mcc_enabled ? [{ key: 'both', label: 'OCC + MCC' }] : []),
+    ...enabledRecips.map((x) => ({ key: x.label, label: x.label })),
+    ...(enabledRecips.length > 1 ? [{ key: 'all', label: 'All' }] : []),
   ];
 
   async function send() {

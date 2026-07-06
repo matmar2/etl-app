@@ -7,7 +7,9 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/51b77aad-255f-49bd-a831-945ecde869c8"
+      "url": "https://u.expo.dev/51b77aad-255f-49bd-a831-945ecde869c8",
+      "fallbackToCacheTimeout": 10000,
+      "checkAutomatically": "ON_LOAD"
     },
     "orientation": "landscape",
     "icon": "./assets/icon.png",
