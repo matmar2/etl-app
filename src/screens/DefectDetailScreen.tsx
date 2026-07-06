@@ -137,14 +137,13 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         } },
       ]);
   }
-  function del() {
-    Alert.alert('Delete defect', 'Remove this defect (raised by mistake)? Signed defects need an administrator and notify CAMO.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try { await deleteDefect(defectId); navigation?.goBack(); }
-        catch (e: any) { setMsg(`Failed: ${e.message}`); }
-      } },
-    ]);
+  async function del() {
+    // Double confirmation for a permanent removal. Allowed only before the flight departs
+    // (the server also enforces this and returns 409 once the flight has departed).
+    if (!(await confirmAction('Delete this defect that was entered by mistake?\n\nIt is permanently removed — this is only for entries made in error, before the flight departs.', 'Delete defect'))) return;
+    if (!(await confirmAction('Are you sure? This cannot be undone — the defect and any photos are deleted.', 'Confirm delete'))) return;
+    try { await deleteDefect(defectId); navigation?.goBack(); }
+    catch (e: any) { setMsg(e?.message?.includes('409') || /departed/i.test(e?.message || '') ? 'The flight has departed — this defect is now part of the record; raise a correction instead.' : `Failed: ${e.message}`); }
   }
 
   if (!d) return <View style={styles.wrap}><Text style={styles.sub}>{msg || 'Loading…'}</Text></View>;
