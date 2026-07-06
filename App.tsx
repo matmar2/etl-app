@@ -2,7 +2,8 @@ import { createNavigationContainerRef, NavigationContainer } from '@react-naviga
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Text, View } from 'react-native';
-import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
+import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, reportDeviceError, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalScreen from './src/screens/ArrivalScreen';
 import DefectDetailScreen from './src/screens/DefectDetailScreen';
 import DefectsScreen from './src/screens/DefectsScreen';
@@ -63,6 +64,24 @@ export default function App() {
       }
     });
     return () => { sub.remove(); if (idleTimer.current) clearTimeout(idleTimer.current); };
+  }, []);
+
+  // Global JS-error handler: report uncaught fatals (that the React boundary can't see — async,
+  // native module) to the back office so QA/CAMO get the cause + a recommended corrective action.
+  useEffect(() => {
+    const g: any = (global as any).ErrorUtils;
+    if (!g?.getGlobalHandler) return;
+    const prev = g.getGlobalHandler();
+    g.setGlobalHandler((err: any, isFatal?: boolean) => {
+      reportDeviceError({
+        kind: isFatal ? 'crash' : 'error',
+        message: (err?.message || String(err) || 'uncaught error').slice(0, 500),
+        detail: (err?.stack || '').slice(0, 4000),
+        screen: navRef.isReady() ? navRef.getCurrentRoute()?.name : undefined,
+      }).catch(() => {});
+      prev?.(err, isFatal);
+    });
+    return () => { if (prev) g.setGlobalHandler(prev); };
   }, []);
 
   // Auto-upload: whenever connectivity is available, push any pending (dirty) local data to the server.
@@ -134,6 +153,7 @@ export default function App() {
   };
 
   return (
+    <ErrorBoundary>
     <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { resetIdle(); return false; }}>
     <NavigationContainer ref={navRef}>
       <Stack.Navigator initialRouteName="Login" screenOptions={headerOpts}>
@@ -162,5 +182,6 @@ export default function App() {
     </NavigationContainer>
     <AckOverlay navRef={navRef} />
     </View>
+    </ErrorBoundary>
   );
 }

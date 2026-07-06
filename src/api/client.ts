@@ -702,8 +702,28 @@ export const listIpads = (reg: string): Promise<{ registration: string; ipads: I
 export const setMaster = (reg: string, deviceId: string, unset = false): Promise<{ master: string | null; label: string }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/master`, { method: 'POST', body: JSON.stringify({ device_id: deviceId, unset }) });
 export type Heartbeat = { you_are_master: boolean; auto_promoted: boolean; master: string | null; master_role: string | null; window_s: number };
-export const heartbeat = (reg: string): Promise<Heartbeat> =>
-  api(`/aircraft/${encodeURIComponent(reg)}/heartbeat`, { method: 'POST' });
+function _appTelemetry() {
+  try {
+    const Constants = require('expo-constants').default;
+    const ex = (Constants.expoConfig as any) || {};
+    return { bundle: ex.extra?.commit || '', app_version: ex.version || '' };
+  } catch { return { bundle: '', app_version: '' }; }
+}
+// Liveness ping — also reports the iPad's unsynced-entry count + running version, so the back office
+// QA can confirm all crew/cabin/mechanic entries have reached the server.
+export async function heartbeat(reg: string): Promise<Heartbeat> {
+  let pending = 0;
+  try { pending = await pendingSyncCount(); } catch { /* ignore */ }
+  return api(`/aircraft/${encodeURIComponent(reg)}/heartbeat`, { method: 'POST', body: JSON.stringify({ pending, ..._appTelemetry() }) });
+}
+// Report a crash / malfunction / error from this iPad. Best-effort — never throws (it is called from
+// the crash handler). The server records the cause and a recommended corrective action for QA.
+export async function reportDeviceError(body: { kind?: 'crash' | 'malfunction' | 'error'; message: string; detail?: string; screen?: string; reg?: string }): Promise<void> {
+  try {
+    const reg = body.reg || currentAircraft()?.registration || undefined;
+    await api('/aircraft/device-report', { method: 'POST', body: JSON.stringify({ ...body, reg, ..._appTelemetry() }) });
+  } catch { /* best-effort: reporting must never crash the app */ }
+}
 
 export type DocItem = { id: string; title: string; filename: string; content_type: string; size?: number; audience?: string; created_at: string };
 export const documentsList = (kind: 'document' | 'form' = 'document'): Promise<DocItem[]> =>

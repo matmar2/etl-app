@@ -8,7 +8,7 @@
     },
     "updates": {
       "url": "https://u.expo.dev/51b77aad-255f-49bd-a831-945ecde869c8",
-      "fallbackToCacheTimeout": 10000,
+      "fallbackToCacheTimeout": 5000,
       "checkAutomatically": "ON_LOAD"
     },
     "orientation": "landscape",
