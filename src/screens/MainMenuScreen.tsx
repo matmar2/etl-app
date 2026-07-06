@@ -86,21 +86,20 @@ export default function MainMenuScreen({ navigation }: any) {
     const date = d && !isNaN(d.getTime())
       ? ` · ${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${d.getUTCFullYear()}`
       : '';
-    return `Version ${rev}${date}${otaLabel()}`;
+    return `Version ${rev}${date}`;
   }
 
   // The TRUTH about which JS bundle is actually running (independent of the release-governance
-  // revision above). Shows the live OTA publish date so you can confirm an update landed.
-  function otaLabel() {
+  // revision above). Shows the live OTA publish date so you can confirm an update landed. Rendered
+  // on its own line below the version. Returns '' when there is nothing to show.
+  function otaLine() {
     try {
       if (!Updates.isEnabled) return '';
-      if (Updates.isEmbeddedLaunch) return ' · built-in';
+      if (Updates.isEmbeddedLaunch) return 'built-in';
       const c: any = Updates.createdAt;
       const cd = c ? new Date(c) : null;
-      const dt = cd && !isNaN(cd.getTime())
-        ? `${String(cd.getUTCDate()).padStart(2, '0')}/${String(cd.getUTCMonth() + 1).padStart(2, '0')} ${String(cd.getUTCHours()).padStart(2, '0')}:${String(cd.getUTCMinutes()).padStart(2, '0')}z`
-        : '';
-      return ` · OTA ${dt}`;
+      if (!cd || isNaN(cd.getTime())) return '';
+      return `OTA ${String(cd.getUTCDate()).padStart(2, '0')}/${String(cd.getUTCMonth() + 1).padStart(2, '0')} ${String(cd.getUTCHours()).padStart(2, '0')}:${String(cd.getUTCMinutes()).padStart(2, '0')}z`;
     } catch { return ''; }
   }
 
@@ -221,6 +220,7 @@ export default function MainMenuScreen({ navigation }: any) {
             <Text style={styles.appName}>Electronic Tech Log</Text>
             {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
             <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
+            {otaLine() ? <Text style={styles.appVer}>{otaLine()}</Text> : null}
             {(Constants.expoConfig as any)?.extra?.commit ? <Text style={styles.appVer}>Bundle {(Constants.expoConfig as any).extra.commit}</Text> : null}
           </View>
         </View>
