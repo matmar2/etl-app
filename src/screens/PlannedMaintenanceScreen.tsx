@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck } from '../api/client';
+import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck, syncPush } from '../api/client';
 import RoBanner from '../components/RoBanner';
 import { printHtml, shareHtml } from '../print';
 import SignaturePad from '../components/SignaturePad';
@@ -23,6 +23,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   const [msg, setMsg] = useState('');
   const [doneId, setDoneId] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);   // signed offline → recorded locally, printable once synced
+  const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-sign progress (record→sync→serviceable)
   const [recent, setRecent] = useState<CheckRecord[]>([]);
   const [checks, setChecks] = useState<CheckStatus[]>([]);
   const [mtasks, setMtasks] = useState<MaintTask[]>([]);
@@ -130,7 +131,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   async function submit(signature: string) {
     if (!signer.trim() || !licence.trim()) { setMsg('Enter mechanic name and licence.'); return; }
     const wasAmend = !!amendingId;
-    setMsg('Saving…');
+    setMsg(''); setFinalize({ frac: 0.15, label: 'Recording the check…' });
     try {
       const body = { data: state, signer_name: signer.trim(), licence_no: licence.trim(),
         tlb_no: tlb.trim() || undefined, signature_image: signature,
@@ -142,10 +143,19 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
       setQueued(wasQueued); setDoneId(r.id); setAmendingId(null); setAmendReason('');
       clearCheckDraft(reg, kind).catch(() => {});   // signed — drop the resume draft
       setState({}); setInspSigner(''); setInspLicence(''); setInspSig('');
+      // Walk the post-sign steps so the crew see the aircraft return to serviceable, not a silent wait.
+      setFinalize({ frac: 0.45, label: 'Check recorded ✓ — syncing to the server…' });
+      try { await syncPush(); } catch { /* offline — stays queued, still counts */ }
+      setFinalize({ frac: 0.75, label: 'Updating aircraft serviceability…' });
+      let svc: boolean | null = null;
+      try { const st = await aircraftStatus(reg); setChecks(st.checks || []); svc = st.serviceable; } catch { /* offline — optimistic */ }
+      setFinalize({ frac: 1, label: svc === false ? '✓ Recorded — other item(s) still keep the aircraft unserviceable' : '✓ Aircraft serviceable — countdown reset' });
       setMsg(wasQueued
         ? `${tpl?.title} certified ✓ — recorded on this iPad; the countdown has reset now. It syncs automatically when online (printable once synced).`
         : `${tpl?.title} ${wasAmend ? 'amended' : 'certified'} ✓ — preview / print below.`);
-    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
+      loadRecent();
+      setTimeout(() => setFinalize(null), 2600);
+    } catch (e: any) { setFinalize(null); setMsg(`Failed: ${e.message}`); }
   }
 
   async function startAmend(c: CheckRecord) {
@@ -315,6 +325,17 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
                 onPress={() => { setDoneId(null); setQueued(false); setState({}); setSigner(''); setLicence(''); setInspSigner(''); setInspLicence(''); setInspSig(''); setMsg(''); }}>
                 <Text style={s.btnTxt}>Start another check</Text>
               </TouchableOpacity>
+            </View>
+          ) : null}
+          {finalize ? (
+            <View style={{ marginTop: 12, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flexShrink: 1, marginRight: 8 }}>{finalize.label}</Text>
+                <Text style={{ color: theme.green, fontSize: 13, fontWeight: '800' }}>{Math.round(finalize.frac * 100)}%</Text>
+              </View>
+              <View style={{ height: 8, backgroundColor: theme.tile, borderRadius: 4, overflow: 'hidden' }}>
+                <View style={{ width: `${Math.round(finalize.frac * 100)}%`, height: '100%', backgroundColor: finalize.frac >= 1 ? theme.green : theme.accent }} />
+              </View>
             </View>
           ) : null}
           {msg ? <Text style={s.msg}>{msg}</Text> : null}
