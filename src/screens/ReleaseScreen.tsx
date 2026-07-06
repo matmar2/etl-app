@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml } from '../api/client';
+import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
 import { getSectorDefects } from '../db/defects';
@@ -29,6 +30,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
   const [signing, setSigning] = useState(false);     // signature pad open
   const [sig, setSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
@@ -82,6 +84,18 @@ export default function ReleaseScreen({ route, navigation }: any) {
       } else {
         setMsg(`Released · ${KIND[r.kind] || r.kind}`); load();
       }
+      // Walk record→sync→serviceability so the crew see the aircraft cleared for departure.
+      setFinalize({ frac: 0.15, label: 'Issuing the CRS…' });
+      const reg = currentAircraft()?.registration;
+      if (reg) {
+        const { status } = await finalizeServiceable(reg, setFinalize, {
+          finalLabel: (online, svc) => online
+            ? (svc === false ? '✓ Released — deferred item(s) remain on the Hold Item List' : '✓ Released — aircraft cleared for departure')
+            : '✓ Released offline — syncs when back online',
+        });
+        if (status?.checks) setChecks(status.checks);
+        setTimeout(() => setFinalize(null), 2800);
+      } else { setFinalize(null); }
       Alert.alert('Before leaving the aircraft',
         'Confirm before you leave:\n\n•  all flight-crew iPads are synced\n•  the tech log is backed up to the server (when you reconnect)');
     } catch (e: any) {
@@ -201,6 +215,17 @@ export default function ReleaseScreen({ route, navigation }: any) {
           {st.blockers.length ? <Text style={[s.sub, { color: theme.red }]}>Cannot release: {st.blockers.length} open defect(s) must be deferred (MEL/HIL) or rectified first.</Text> : null}
         </>
       )}
+      {finalize ? (
+        <View style={{ marginTop: 12, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text style={{ color: theme.text, fontSize: 13, fontWeight: '700', flexShrink: 1, marginRight: 8 }}>{finalize.label}</Text>
+            <Text style={{ color: theme.green, fontSize: 13, fontWeight: '800' }}>{Math.round(finalize.frac * 100)}%</Text>
+          </View>
+          <View style={{ height: 8, backgroundColor: theme.tile, borderRadius: 4, overflow: 'hidden' }}>
+            <View style={{ width: `${Math.round(finalize.frac * 100)}%`, height: '100%', backgroundColor: finalize.frac >= 1 ? theme.green : theme.accent }} />
+          </View>
+        </View>
+      ) : null}
       {msg ? <Text style={s.msg}>{msg}</Text> : null}
 
       <SignaturePad visible={signing} title="Sign maintenance release (CRS)"

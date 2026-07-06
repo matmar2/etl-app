@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck, syncPush } from '../api/client';
+import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck } from '../api/client';
+import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import { printHtml, shareHtml } from '../print';
 import SignaturePad from '../components/SignaturePad';
@@ -144,17 +145,13 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
       clearCheckDraft(reg, kind).catch(() => {});   // signed — drop the resume draft
       setState({}); setInspSigner(''); setInspLicence(''); setInspSig('');
       // Walk the post-sign steps so the crew see the aircraft return to serviceable, not a silent wait.
-      setFinalize({ frac: 0.45, label: 'Check recorded ✓ — syncing to the server…' });
-      try { await syncPush(); } catch { /* offline — stays queued, still counts */ }
-      setFinalize({ frac: 0.75, label: 'Updating aircraft serviceability…' });
-      let svc: boolean | null = null;
-      try { const st = await aircraftStatus(reg); setChecks(st.checks || []); svc = st.serviceable; } catch { /* offline — optimistic */ }
-      setFinalize({ frac: 1, label: svc === false ? '✓ Recorded — other item(s) still keep the aircraft unserviceable' : '✓ Aircraft serviceable — countdown reset' });
+      const { status } = await finalizeServiceable(reg, setFinalize);
+      if (status?.checks) setChecks(status.checks);
       setMsg(wasQueued
         ? `${tpl?.title} certified ✓ — recorded on this iPad; the countdown has reset now. It syncs automatically when online (printable once synced).`
         : `${tpl?.title} ${wasAmend ? 'amended' : 'certified'} ✓ — preview / print below.`);
       loadRecent();
-      setTimeout(() => setFinalize(null), 2600);
+      setTimeout(() => setFinalize(null), 2800);
     } catch (e: any) { setFinalize(null); setMsg(`Failed: ${e.message}`); }
   }
 
