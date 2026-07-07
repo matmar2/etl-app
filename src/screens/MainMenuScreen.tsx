@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
+import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
@@ -239,6 +240,8 @@ export default function MainMenuScreen({ navigation }: any) {
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
       </View>
+
+      <DeviceRegisterGate />
 
       {pending > 0 ? (
         <TouchableOpacity onPress={syncNow} disabled={syncing} style={styles.pendingBar}>

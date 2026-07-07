@@ -725,6 +725,14 @@ export async function reportDeviceError(body: { kind?: 'crash' | 'malfunction' |
   } catch { /* best-effort: reporting must never crash the app */ }
 }
 
+// Device self-registration / approval state (first-login "aircraft or personal iPad" prompt + pending banner).
+export type DeviceSelf = { enabled: boolean; known?: boolean; kind?: 'aircraft' | 'personal' | null;
+  approval?: 'approved' | 'pending' | 'rejected'; needs_kind?: boolean; grace_days?: number;
+  grace_days_left?: number | null; blocked?: boolean; reason?: string; label?: string };
+export const deviceSelf = (): Promise<DeviceSelf> => api('/aircraft/device-self');
+export const classifyDevice = (kind: 'aircraft' | 'personal'): Promise<DeviceSelf> =>
+  api('/aircraft/device-classify', { method: 'POST', body: JSON.stringify({ kind }) });
+
 export type DocItem = { id: string; title: string; filename: string; content_type: string; size?: number; audience?: string; created_at: string };
 export const documentsList = (kind: 'document' | 'form' = 'document'): Promise<DocItem[]> =>
   api(`/documents?kind=${kind}`);
