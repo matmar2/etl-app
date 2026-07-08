@@ -21,6 +21,19 @@ rm -rf dist
 # reuse cached config constants (e.g. extra.commit → a stale "Bundle <sha>" stamp).
 npx expo export --platform web --clear
 
+# Guard: the exported bundle MUST contain the current git commit (the "Bundle <sha>" stamp).
+# If a stale cache baked in an old commit, abort before shipping so the web never runs behind.
+EXPECT="$(git rev-parse --short=7 HEAD 2>/dev/null || true)"
+if [ -n "$EXPECT" ]; then
+  if grep -rqF "$EXPECT" dist/_expo/static/js/web/ 2>/dev/null; then
+    echo "✓ web bundle stamped $EXPECT"
+  else
+    echo "✗ exported web bundle does NOT contain commit $EXPECT (stale bundler cache?)."
+    echo "  Try: rm -rf .expo node_modules/.cache && ./deploy-web.sh"
+    exit 1
+  fi
+fi
+
 echo "› syncing to box ($HOST)…"
 rsync -az --delete -e "ssh ${SSH_OPTS[*]}" dist/ "$HOST:/home/ubuntu/etl-web/"
 
