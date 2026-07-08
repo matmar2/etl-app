@@ -17,7 +17,9 @@ SSH_OPTS=(-i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
 
 echo "› exporting web build…"
 rm -rf dist
-npx expo export --platform web
+# --clear busts the Metro/Expo bundler cache. Without it, expo export can re-bundle the JS but
+# reuse cached config constants (e.g. extra.commit → a stale "Bundle <sha>" stamp).
+npx expo export --platform web --clear
 
 echo "› syncing to box ($HOST)…"
 rsync -az --delete -e "ssh ${SSH_OPTS[*]}" dist/ "$HOST:/home/ubuntu/etl-web/"
