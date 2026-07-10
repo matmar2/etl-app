@@ -429,6 +429,8 @@ export const listCorrections = (sectorId: string): Promise<Correction[]> => api(
 export const raiseCorrection = (sectorId: string, body: { field?: string; old_value?: string; new_value?: string; reason: string; signature_image?: string }): Promise<{ id: string }> =>
   mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
 export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
+// Preview the Tech Log / CRS page a defect rectification will be recorded on, before signing (writes nothing).
+export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => api(`/defects/${defectId}/crs-preview`);
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
 export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: string; cached?: boolean }> {

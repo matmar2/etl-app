@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, taskLineWithHeader } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, taskLineWithHeader } from '../api/client';
+import { printHtml } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
@@ -35,6 +36,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [crsSig, setCrsSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const isMech = can('defects', 'rectify');     // rectification / CRS action — maintenance
   const canDefer = can('defects', 'defer');     // defer against MEL / CDL — maintenance
   const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
@@ -86,6 +88,14 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       else setMsg('Closed ✓');
       load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
+  }
+
+  // Preview the Tech Log / CRS page this rectification will be recorded on, before signing.
+  async function previewCRS() {
+    setPreviewing(true); setMsg('');
+    try { const { html } = await defectCrsPreview(defectId); if (html) await printHtml(html); }
+    catch (e: any) { setMsg(e?.message?.includes('Network') ? 'Preview needs a connection.' : (e?.message || 'Could not open the preview.')); }
+    finally { setPreviewing(false); }
   }
 
   // Rectify + CRS — a certification: all entries complete, confirm, sign, MFA.
@@ -229,9 +239,12 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={() => crsSig && submitCRS(crsSig)}><Text style={styles.act2t}>Submit CRS</Text></TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green, alignSelf: 'flex-start', marginTop: 8 }]} onPress={rectifyCRS}><Text style={styles.act2t}>Rectify + CRS · sign</Text></TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile }]} onPress={previewCRS} disabled={previewing}><Text style={styles.act2t}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={rectifyCRS}><Text style={styles.act2t}>Rectify + CRS · sign</Text></TouchableOpacity>
+            </View>
           )}
-          <Text style={styles.sub}>Requires the work narrative, AMO/licence, a signature and MFA before it goes ahead.</Text>
+          <Text style={styles.sub}>Preview the Tech Log / CRS page before you sign. The CRS requires the work narrative, AMO/licence, a signature and MFA before it goes ahead.</Text>
           <SignaturePad visible={signing} title="Sign rectification CRS"
             onClose={() => setSigning(false)} onDone={(dataUrl) => { setSigning(false); submitCRS(dataUrl); }} />
           </>)}
