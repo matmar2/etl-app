@@ -32,6 +32,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [msg, setMsg] = useState('');
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
   const [signing, setSigning] = useState(false);     // signature pad open
+  const [previewing, setPreviewing] = useState(false);
   const [sig, setSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
@@ -66,6 +67,14 @@ export default function ReleaseScreen({ route, navigation }: any) {
     catch (e: any) { setMsg(/departed|correction/i.test(e?.message || '') ? 'Aircraft has departed / closed — the CRS cannot be reset. Raise a correction instead.' : (e?.message || 'Could not submit the reset request.')); }
   }
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Preview the Tech Log / CRS page for this sector before signing (writes nothing).
+  async function previewCRS() {
+    setPreviewing(true); setMsg('');
+    try { const { html } = await sectorTlHtml(sectorId); if (html) await printHtml(html); }
+    catch (e: any) { setMsg(e?.message?.includes('Network') ? 'Preview needs a connection.' : (e?.message || 'Could not open the preview.')); }
+    finally { setPreviewing(false); }
+  }
 
   // Sign first, then submit the release with signature (+ MFA code).
   async function submitRelease(signature: string) {
@@ -204,6 +213,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
             <TextInput style={s.input} value={otp} onChangeText={setOtp} keyboardType="number-pad"
               placeholder="Authenticator code" placeholderTextColor={theme.sub} />
           ) : null}
+          <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} disabled={previewing}
+            onPress={previewCRS}>
+            <Text style={s.btnTxt}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[s.btn, { backgroundColor: st.blockers.length ? '#444' : theme.green }]} disabled={busy || st.blockers.length > 0}
             onPress={() => {
               if (st.blockers.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before release.'); return; }
