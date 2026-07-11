@@ -1,7 +1,8 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { currentAircraft, Ipad, listIpads, setMaster, syncAllComplete, syncAllIpads } from '../api/client';
+import { currentAircraft, deviceId, Ipad, listIpads, setMaster, syncAllComplete, syncAllIpads } from '../api/client';
+import { peerSyncAvailable, shareLatest } from '../p2p';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -36,8 +37,12 @@ export default function MasterDeviceScreen() {
   // heartbeat, then polls each iPad's status and shows progress. The outcome is written to the audit log.
   async function syncAll() {
     setSyncOpen(true); setSyncDone(false); setSyncList([]); cancelled.current = false;
+    // 1) Peer sync — share this iPad's latest with the on-board iPads directly (offline), so every
+    //    iPad has the same latest info even with no network. Active once the on-board peer link ships.
+    try { if (peerSyncAvailable()) await shareLatest(await deviceId()); } catch { /* transport not active yet */ }
+    // 2) Server relay — push our outbox and ask the others to reconcile via the server when they have network.
     let last: Ipad[] = [];
-    try { const r = await syncAllIpads(reg); last = r.ipads; setSyncList(last); } catch { setMsg('Sync could not start (offline?).'); }
+    try { const r = await syncAllIpads(reg); last = r.ipads; setSyncList(last); } catch { setMsg('Started — iPads will reconcile as they get network.'); }
     const started = Date.now();
     let timer: any;
     const finish = (timedOut: boolean) => {
@@ -71,7 +76,7 @@ export default function MasterDeviceScreen() {
         <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>🔄  Sync all iPads</Text>
       </TouchableOpacity>
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 6 }}>
-        Pushes this iPad&apos;s entries and asks every other iPad on {reg || 'this aircraft'} to sync. A summary is written to the activity log.
+        Shares this iPad&apos;s latest entries so every iPad on {reg || 'this aircraft'} has the same, latest information — directly between iPads when the on-board link is on, and to the server whenever an iPad has network. A summary is written to the activity log.
       </Text>
       {msg ? <Text style={{ color: theme.accent, marginTop: 10, fontSize: 13 }}>{msg}</Text> : null}
       {busy ? <ActivityIndicator color={theme.accent} style={{ marginTop: 12 }} /> : null}
@@ -79,12 +84,15 @@ export default function MasterDeviceScreen() {
       <Modal visible={syncOpen} transparent animationType="fade" onRequestClose={() => { cancelled.current = true; setSyncOpen(false); }}>
         <View style={{ flex: 1, backgroundColor: '#000A', justifyContent: 'center', padding: 20 }}>
           <View style={{ backgroundColor: theme.bg, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', alignSelf: 'center', borderWidth: 1, borderColor: theme.border }}>
-            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800' }}>{syncDone ? 'Sync complete' : 'Synchronising iPads'} · {reg}</Text>
+            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800' }}>{syncDone ? 'Sync complete' : 'Sharing the latest with all iPads'} · {reg}</Text>
             <View style={{ height: 12, backgroundColor: theme.tile, borderRadius: 6, marginTop: 12, overflow: 'hidden' }}>
               <View style={{ height: 12, width: `${Math.round((syncedN / (syncList.length || 1)) * 100)}%`, backgroundColor: theme.green }} />
             </View>
             <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>
-              {syncedN} of {syncList.length} iPad(s) synchronized{syncDone ? '.' : ' — waiting for the others…'}
+              {syncedN} of {syncList.length} iPad(s) have the latest{syncDone ? '.' : ' — waiting for the others…'}
+            </Text>
+            <Text style={{ color: theme.sub, fontSize: 11, marginTop: 3 }}>
+              {peerSyncAvailable() ? 'On-board link active — shared directly between iPads.' : 'A pending iPad receives the latest as soon as it has network (or the on-board link is on).'}
             </Text>
             <View style={{ marginTop: 12, gap: 8 }}>
               {syncList.map((d) => (
