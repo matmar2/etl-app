@@ -715,12 +715,19 @@ export const aircraftUtilisation = (reg: string): Promise<Utilisation> =>
 
 // Per-aircraft iPads + master designation (sync precedence master → FO → Backup → Cabin).
 export type Ipad = { id: string; label: string; role: string; role_label: string; is_master: boolean;
-  this_device: boolean; last_sync: string | null };
+  this_device: boolean; last_sync: string | null; pending_count?: number; online?: boolean; synced?: boolean };
 export const listIpads = (reg: string): Promise<{ registration: string; ipads: Ipad[] }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/ipads`);
 export const setMaster = (reg: string, deviceId: string, unset = false): Promise<{ master: string | null; label: string }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/master`, { method: 'POST', body: JSON.stringify({ device_id: deviceId, unset }) });
-export type Heartbeat = { you_are_master: boolean; auto_promoted: boolean; master: string | null; master_role: string | null; window_s: number };
+// Master-initiated "sync all iPads": pushes this iPad's outbox, then asks the others to sync on their next heartbeat.
+export const syncAllIpads = async (reg: string): Promise<{ registration: string; ipads: Ipad[] }> => {
+  await syncPush().catch(() => {});                              // push our own outbox first
+  return api(`/aircraft/${encodeURIComponent(reg)}/sync-all`, { method: 'POST', body: '{}' });
+};
+export const syncAllComplete = (reg: string, body: { synced: number; pending: number; pending_labels: string[]; timed_out?: boolean }): Promise<{ ok: boolean }> =>
+  api(`/aircraft/${encodeURIComponent(reg)}/sync-all/complete`, { method: 'POST', body: JSON.stringify(body) });
+export type Heartbeat = { you_are_master: boolean; auto_promoted: boolean; master: string | null; master_role: string | null; sync_now?: boolean; window_s: number };
 function _appTelemetry() {
   try {
     const Constants = require('expo-constants').default;

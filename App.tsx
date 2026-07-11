@@ -104,6 +104,7 @@ export default function App() {
       if (!(navRef.isReady() && !['Login', 'MfaSetup'].includes(navRef.getCurrentRoute()?.name || ''))) return;
       try {
         const r = await heartbeat(ac.registration);
+        if (alive && r.sync_now) syncPush().catch(() => {});   // master pressed "Sync all iPads" — push our outbox now
         if (alive && r.auto_promoted && !notified.current) {
           notified.current = true;
           const msg = 'Master role automatically transferred to your iPad — the master (in most cases the Captain iPad) is not responding.';

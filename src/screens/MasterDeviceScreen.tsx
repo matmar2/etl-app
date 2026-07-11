@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { currentAircraft, Ipad, listIpads, setMaster } from '../api/client';
+import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { currentAircraft, Ipad, listIpads, setMaster, syncAllComplete, syncAllIpads } from '../api/client';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -12,6 +12,10 @@ export default function MasterDeviceScreen() {
   const [ipads, setIpads] = useState<Ipad[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncList, setSyncList] = useState<Ipad[]>([]);
+  const [syncDone, setSyncDone] = useState(false);
+  const cancelled = useRef(false);
 
   const load = useCallback(() => {
     if (!reg) return;
@@ -28,14 +32,84 @@ export default function MasterDeviceScreen() {
     finally { setBusy(false); }
   }
 
+  // Master-initiated "sync all iPads": pushes our outbox, asks the others to sync on their next
+  // heartbeat, then polls each iPad's status and shows progress. The outcome is written to the audit log.
+  async function syncAll() {
+    setSyncOpen(true); setSyncDone(false); setSyncList([]); cancelled.current = false;
+    let last: Ipad[] = [];
+    try { const r = await syncAllIpads(reg); last = r.ipads; setSyncList(last); } catch { setMsg('Sync could not start (offline?).'); }
+    const started = Date.now();
+    let timer: any;
+    const finish = (timedOut: boolean) => {
+      if (timer) clearTimeout(timer);
+      setSyncDone(true);
+      const pendingLabels = last.filter((d) => !d.synced).map((d) => d.label);
+      syncAllComplete(reg, { synced: last.filter((d) => d.synced).length, pending: pendingLabels.length, pending_labels: pendingLabels, timed_out: timedOut }).catch(() => {});
+      load();
+    };
+    const tick = async () => {
+      if (cancelled.current) return;
+      if (Date.now() - started > 75000) return finish(true);
+      try {
+        const r = await listIpads(reg); last = r.ipads; setSyncList(last);
+        if (last.length && last.every((d) => d.synced)) return finish(false);
+      } catch { /* offline — retry */ }
+      timer = setTimeout(tick, 2500);
+    };
+    timer = setTimeout(tick, 2500);
+  }
+  const syncedN = syncList.filter((d) => d.synced).length;
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.bg }} contentContainerStyle={{ padding: 16, maxWidth: 720, alignSelf: 'center', width: '100%' }}>
       <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Master iPad · {reg}</Text>
       <Text style={{ color: theme.sub, marginTop: 6, fontSize: 13 }}>
         The master iPad&apos;s entries take priority when several iPads sync the same flight. Order of precedence: master → First Officer → Backup → Cabin Crew. The Captain (or the current master) can transfer the master here.
       </Text>
+      <TouchableOpacity onPress={syncAll} disabled={busy || !reg}
+        style={{ backgroundColor: theme.green, borderRadius: 10, padding: 13, marginTop: 14, alignItems: 'center' }}>
+        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>🔄  Sync all iPads</Text>
+      </TouchableOpacity>
+      <Text style={{ color: theme.sub, fontSize: 11, marginTop: 6 }}>
+        Pushes this iPad&apos;s entries and asks every other iPad on {reg || 'this aircraft'} to sync. A summary is written to the activity log.
+      </Text>
       {msg ? <Text style={{ color: theme.accent, marginTop: 10, fontSize: 13 }}>{msg}</Text> : null}
       {busy ? <ActivityIndicator color={theme.accent} style={{ marginTop: 12 }} /> : null}
+
+      <Modal visible={syncOpen} transparent animationType="fade" onRequestClose={() => { cancelled.current = true; setSyncOpen(false); }}>
+        <View style={{ flex: 1, backgroundColor: '#000A', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: theme.bg, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', alignSelf: 'center', borderWidth: 1, borderColor: theme.border }}>
+            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800' }}>{syncDone ? 'Sync complete' : 'Synchronising iPads'} · {reg}</Text>
+            <View style={{ height: 12, backgroundColor: theme.tile, borderRadius: 6, marginTop: 12, overflow: 'hidden' }}>
+              <View style={{ height: 12, width: `${Math.round((syncedN / (syncList.length || 1)) * 100)}%`, backgroundColor: theme.green }} />
+            </View>
+            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>
+              {syncedN} of {syncList.length} iPad(s) synchronized{syncDone ? '.' : ' — waiting for the others…'}
+            </Text>
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {syncList.map((d) => (
+                <View key={d.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.panel, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: d.synced ? theme.green : theme.border }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{d.label}{d.this_device ? ' · this iPad' : ''}</Text>
+                    <Text style={{ color: theme.sub, fontSize: 11 }}>{d.role_label}{d.is_master ? ' · ★ MASTER' : ''}</Text>
+                  </View>
+                  {d.synced
+                    ? <Text style={{ color: theme.green, fontWeight: '800', fontSize: 12 }}>✓ Synced</Text>
+                    : d.online
+                      ? <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 12 }}>{d.pending_count ? `⏳ ${d.pending_count} pending` : '⏳ syncing…'}</Text>
+                      : <Text style={{ color: theme.sub, fontWeight: '800', fontSize: 12 }}>● offline</Text>}
+                </View>
+              ))}
+              {!syncList.length ? <Text style={{ color: theme.sub }}>No iPads registered for this aircraft yet.</Text> : null}
+            </View>
+            {!syncDone ? <ActivityIndicator color={theme.green} style={{ marginTop: 12 }} /> : null}
+            <TouchableOpacity onPress={() => { cancelled.current = true; setSyncOpen(false); }}
+              style={{ marginTop: 14, backgroundColor: syncDone ? theme.green : theme.tile, borderRadius: 10, padding: 11, alignItems: 'center' }}>
+              <Text style={{ color: syncDone ? '#fff' : theme.text, fontWeight: '800' }}>{syncDone ? 'Done' : 'Close'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <View style={{ marginTop: 14, gap: 10 }}>
         {ipads.length === 0 ? <Text style={{ color: theme.sub }}>No iPads registered for this aircraft yet. An iPad appears here after it first syncs.</Text> : null}
