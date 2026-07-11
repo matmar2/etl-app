@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listHIL, syncPush } from '../api/client';
+import { cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listHIL, role, syncPush } from '../api/client';
 import { printHtml } from '../print';
 import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
 import { theme } from '../theme';
@@ -10,7 +10,8 @@ type Tab = 'defects' | 'cabin' | 'hil';
 
 export default function DefectsScreen({ route, navigation }: any) {
   const aircraftId = route?.params?.aircraftId ?? 'LZ-FSA';
-  const [tab, setTab] = useState<Tab>('defects');
+  const isCabin = role() === 'cabin';   // cabin crew only deal with cabin defects — no technical / HIL tabs
+  const [tab, setTab] = useState<Tab>(isCabin ? 'cabin' : 'defects');
   const [active, setActive] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);
   const [note, setNote] = useState('Loading…');
@@ -78,9 +79,9 @@ export default function DefectsScreen({ route, navigation }: any) {
       <Text style={styles.title}>Defects · {acLabel}</Text>
       {note ? <Text style={{ color: theme.sub, marginTop: 2, fontSize: 12 }}>{note}</Text> : null}
       <View style={styles.tabs}>
-        <Tab id="defects" label="Defects" n={tech.length} />
+        {!isCabin ? <Tab id="defects" label="Defects" n={tech.length} /> : null}
         <Tab id="cabin" label="Cabin" n={cabin.length} />
-        <Tab id="hil" label="HIL" n={hil.length} />
+        {!isCabin ? <Tab id="hil" label="HIL" n={hil.length} /> : null}
       </View>
       {tab === 'cabin' ? (
         <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('ReportDefect', { aircraftId })}>
