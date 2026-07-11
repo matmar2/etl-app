@@ -7,17 +7,17 @@ import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
 
-type Tile = { key: string; title: string; sub?: string; nav?: string; perm?: string; noCabin?: boolean; icon: string; group: string; tint: string };
+type Tile = { key: string; title: string; sub?: string; nav?: string; perm?: string; icon: string; group: string; tint: string };
 const TILES: Tile[] = [
   { key: 'flight', title: 'Flight Details', sub: 'Leon · today', nav: 'Sectors', icon: '✈️', group: 'Operations', tint: '#3d9be0' },
   { key: 'defects', title: 'Defects', sub: 'PIREP / MAREP / HIL', nav: 'Defects', icon: '🔧', group: 'Operations', tint: theme.accent },
   { key: 'signoff', title: 'Flight Sign Off', sub: 'Recent sign-offs', nav: 'SignOff', icon: '🖊️', group: 'Operations', tint: theme.red },
-  { key: 'planned', title: 'Planned Maint.', sub: '2-Day / 10-Day checks', nav: 'Planned', noCabin: true, icon: '🛠️', group: 'Maintenance', tint: theme.green },
+  { key: 'planned', title: 'Planned Maint.', sub: '2-Day / 10-Day checks', nav: 'Planned', perm: 'checks', icon: '🛠️', group: 'Maintenance', tint: theme.green },
   { key: 'maint', title: 'Maintenance', sub: 'Ground · no crew (CRS)', nav: 'Maintenance', perm: 'maintenance', icon: '⚙️', group: 'Maintenance', tint: theme.green },
   { key: 'docs', title: 'Documents', sub: 'Controlled documents', nav: 'Documents', icon: '📄', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'forms', title: 'Forms', sub: 'Role forms to fill', nav: 'Forms', icon: '📝', group: 'Documents & forms', tint: '#5a8bd0' },
@@ -338,7 +338,7 @@ export default function MainMenuScreen({ navigation }: any) {
       {/* grouped tiles */}
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {GROUPS.map((g) => {
-          const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none') && !(t.noCabin && role() === 'cabin'));
+          const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none'));
           if (!tiles.length) return null;
           return (
             <View key={g} style={{ marginTop: 18 }}>

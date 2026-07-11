@@ -274,6 +274,18 @@ export const listHIL = async (aircraftId: string): Promise<any[]> => {
     return all.filter((d: any) => d.status === 'deferred');
   }
 };
+// Cleared (closed) cabin defects — cabin crew can review their rectified/closed items.
+export const listClearedCabin = async (aircraftId: string): Promise<any[]> => {
+  try {
+    const all = await api(`/defects?aircraft_id=${encodeURIComponent(aircraftId)}&status_=closed`);
+    return (all || []).filter((d: any) => d.area === 'cabin');
+  } catch (e) {
+    if (!(e instanceof NetworkError)) throw e;
+    const { getLocalAircraftDefects } = require('../db/defects');
+    const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
+    return all.filter((d: any) => d.area === 'cabin' && d.status === 'closed');
+  }
+};
 // Warm the offline defect cache for a tail — the aircraft's active + HIL defects, so the
 // mechanic can see and rectify them (and the release check is accurate) with no signal.
 export async function prefetchAircraftDefects(reg: string): Promise<void> {

@@ -117,7 +117,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={styles.refBtn} onPress={() => setMelOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO MEL ▾</Text></TouchableOpacity>
         <TouchableOpacity style={styles.refBtn} onPress={() => setCdlOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO CDL ▾</Text></TouchableOpacity>
-        {role() === 'mechanic' ? (<>
+        {can('defects', 'taskcards') ? (<>
           <TouchableOpacity style={styles.refBtn} onPress={() => setTaskPick(true)}><Text style={styles.refBtnTxt}>＋ Task card (i.a.w)</Text></TouchableOpacity>
           <TouchableOpacity style={styles.refBtn} onPress={() => setMpdOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card2 (MPD)</Text></TouchableOpacity>
           <TouchableOpacity style={styles.refBtn} onPress={() => setAmmOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card3 (AMM)</Text></TouchableOpacity>

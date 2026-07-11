@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listHIL, role, syncPush } from '../api/client';
+import { access, cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listClearedCabin, listHIL, syncPush } from '../api/client';
 import { printHtml } from '../print';
 import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
 import { theme } from '../theme';
@@ -10,10 +10,14 @@ type Tab = 'defects' | 'cabin' | 'hil';
 
 export default function DefectsScreen({ route, navigation }: any) {
   const aircraftId = route?.params?.aircraftId ?? 'LZ-FSA';
-  const isCabin = role() === 'cabin';   // cabin crew only deal with cabin defects — no technical / HIL tabs
-  const [tab, setTab] = useState<Tab>(isCabin ? 'cabin' : 'defects');
+  // Tab visibility is admin-controlled via the permission matrix, not hard-coded by role:
+  // technical Defects + HIL follow the 'defects' page; Cabin follows the 'cabin' page.
+  const canTech = access('defects') !== 'none';
+  const canCabin = access('cabin') !== 'none';
+  const [tab, setTab] = useState<Tab>(canTech ? 'defects' : canCabin ? 'cabin' : 'hil');
   const [active, setActive] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);
+  const [clearedCabin, setClearedCabin] = useState<any[]>([]);
   const [note, setNote] = useState('Loading…');
 
   const load = useCallback(async () => {
@@ -23,17 +27,18 @@ export default function DefectsScreen({ route, navigation }: any) {
       const [a, h] = await Promise.all([listActiveDefects(aircraftId), listHIL(aircraftId)]);
       setActive(a); setHil(h); setNote('');
     } catch { setNote('Offline — will sync when connected'); }
+    listClearedCabin(aircraftId).then(setClearedCabin).catch(() => {});   // cleared cabin items (read-only)
   }, [aircraftId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const tech = active.filter((d) => (d.area ?? 'technical') !== 'cabin');
-  const cabin = active.filter((d) => d.area === 'cabin');
+  const cabin = [...active.filter((d) => d.area === 'cabin'), ...clearedCabin];   // active + cleared
   const data = tab === 'defects' ? tech : tab === 'cabin' ? cabin : hil;
   const empty = tab === 'defects' ? 'No active defects' : tab === 'cabin' ? 'No cabin defects' : 'No hold items';
 
   const badge = (s: string) =>
-    s === 'deferred' ? theme.accent : s === 'rectified' ? '#3aa655' : s === 'troubleshooting' ? theme.sub : theme.red;
+    s === 'deferred' ? theme.accent : s === 'rectified' ? '#3aa655' : s === 'closed' ? theme.sub : s === 'troubleshooting' ? theme.sub : theme.red;
 
   const Tab = ({ id, label, n }: { id: Tab; label: string; n: number }) => (
     <TouchableOpacity style={[styles.tab, tab === id && styles.tabOn]} onPress={() => setTab(id)}>
@@ -79,9 +84,9 @@ export default function DefectsScreen({ route, navigation }: any) {
       <Text style={styles.title}>Defects · {acLabel}</Text>
       {note ? <Text style={{ color: theme.sub, marginTop: 2, fontSize: 12 }}>{note}</Text> : null}
       <View style={styles.tabs}>
-        {!isCabin ? <Tab id="defects" label="Defects" n={tech.length} /> : null}
-        <Tab id="cabin" label="Cabin" n={cabin.length} />
-        {!isCabin ? <Tab id="hil" label="HIL" n={hil.length} /> : null}
+        {canTech ? <Tab id="defects" label="Defects" n={tech.length} /> : null}
+        {canCabin ? <Tab id="cabin" label="Cabin" n={cabin.length} /> : null}
+        {canTech ? <Tab id="hil" label="HIL" n={hil.length} /> : null}
       </View>
       {tab === 'cabin' ? (
         <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('ReportDefect', { aircraftId })}>
