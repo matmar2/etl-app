@@ -708,7 +708,8 @@ export const amendCheck = (reg: string, id: string, body: any) =>
 export type Utilisation = { registration: string; etl: { tsn_fh: number; csn_fc: number };
   camo: { tsn: number | null; csn: number | null } | null; configured: boolean;
   baseline: { tsn_fh: number | null; csn_fc: number | null; source: string | null; at: string | null } | null;
-  pending_sectors: number; match: boolean | null; diff_fh: number | null; diff_fc: number | null; error: string | null };
+  pending_sectors: number; match: boolean | null; diff_fh: number | null; diff_fc: number | null; error: string | null;
+  oases_lag?: { legs: number; fh: number; review: boolean; oases_tsn?: number; oases_csn?: number; at?: string } | null };
 export const aircraftUtilisation = (reg: string): Promise<Utilisation> =>
   api(`/aircraft/${encodeURIComponent(reg)}/utilisation`);
 

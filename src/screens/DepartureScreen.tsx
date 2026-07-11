@@ -182,6 +182,10 @@ export default function DepartureScreen({ route, navigation }: any) {
               : util.baseline ? <Text style={{ color: theme.sub, fontSize: 12 }}>Baseline {fmtHM(util.baseline.tsn_fh)} (h:mm) · {fmt(util.baseline.csn_fc)} FC ({util.baseline.source || 'seed'}{util.baseline.at ? `, ${String(util.baseline.at).slice(0, 10)}` : ''}) + sectors since — OASES interface pending</Text>
               : <Text style={{ color: theme.sub, fontSize: 12 }}>{util.configured ? (util.error || 'OASES baseline unavailable') : 'OASES not configured (showing ETL totals)'}</Text>}
             {mismatch ? <Text style={{ color: theme.text, fontSize: 12, marginTop: 2 }}>Δ {util.diff_fh} FH · {util.diff_fc} FC — report to CAMO before departure.</Text> : null}
+            {util.oases_lag ? <Text style={{ color: util.oases_lag.review ? theme.red : theme.accent, fontSize: 12, marginTop: 2, fontWeight: '700' }}>
+              {util.oases_lag.review
+                ? `⚠ OASES ahead by ${util.oases_lag.legs} leg(s) — under review`
+                : `OASES behind by ${util.oases_lag.legs} leg(s) / ${fmtHM(util.oases_lag.fh)} — ETL figures in use`}</Text> : null}
           </View>
         );
       })() : null}
