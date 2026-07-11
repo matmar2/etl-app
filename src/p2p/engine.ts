@@ -8,6 +8,7 @@ import { db } from '../db/schema';
 export type SyncEnvelope = {
   device: string;
   at: string;
+  kind?: 'snapshot' | 'request';   // 'request' = a master asking peers to send their latest (gather step)
   sectors: any[];
   defects: any[];
   attachments: any[];
@@ -18,7 +19,7 @@ const TABLES = ['sectors', 'defects', 'attachments'] as const;
 // Everything this device holds (not just dirty) so a fresh peer catches up fully.
 export async function snapshot(deviceId: string): Promise<SyncEnvelope> {
   const dbc = await db();
-  const out: any = { device: deviceId, at: new Date().toISOString() };
+  const out: any = { device: deviceId, at: new Date().toISOString(), kind: 'snapshot' };
   for (const tbl of TABLES) {
     const rows = await dbc.getAllAsync<{ payload: string }>(`SELECT payload FROM ${tbl}`);
     out[tbl] = rows.map((r) => JSON.parse(r.payload));

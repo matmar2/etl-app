@@ -27,7 +27,11 @@ export function onlinePeers(): string[] {
 
 export async function startPeerSync(deviceId: string) {
   if (!_transport) return;
-  _transport.onReceive((env) => { merge(env).catch(() => {}); });
+  _transport.onReceive((env) => {
+    // A master's "gather" request → reply with our latest so it can merge our new entries.
+    if (env?.kind === 'request') { shareLatest(deviceId).catch(() => {}); return; }
+    merge(env).catch(() => {});
+  });
   await _transport.start(deviceId);
 }
 
@@ -38,6 +42,18 @@ export async function stopPeerSync() {
 // Push this device's latest records to the other onboard iPads.
 export async function shareLatest(deviceId: string) {
   if (!_transport) throw new Error('Peer transport not configured (needs EAS dev build + MultipeerConnectivity)');
+  await _transport.broadcast(await snapshot(deviceId));
+}
+
+// Master-orchestrated "Sync all iPads": GATHER each iPad's newer entries the master doesn't yet
+// have, MERGE them into the master's complete latest, then DISTRIBUTE the complete package to all.
+export async function masterSyncAll(deviceId: string, collectMs = 2500) {
+  if (!_transport) throw new Error('Peer transport not configured (needs EAS dev build + MultipeerConnectivity)');
+  // 1) GATHER — ask every peer for its latest; their snapshots arrive via onReceive and merge into us.
+  await _transport.broadcast({ device: deviceId, at: new Date().toISOString(), kind: 'request',
+                               sectors: [], defects: [], attachments: [] });
+  await new Promise((r) => setTimeout(r, collectMs));       // brief window for peers to respond & merge
+  // 2) DISTRIBUTE — send the now-complete merged package back to all iPads.
   await _transport.broadcast(await snapshot(deviceId));
 }
 
