@@ -94,10 +94,8 @@ export default function MasterDeviceScreen() {
                     <Text style={{ color: theme.sub, fontSize: 11 }}>{d.role_label}{d.is_master ? ' · ★ MASTER' : ''}</Text>
                   </View>
                   {d.synced
-                    ? <Text style={{ color: theme.green, fontWeight: '800', fontSize: 12 }}>✓ Synced</Text>
-                    : d.online
-                      ? <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 12 }}>{d.pending_count ? `⏳ ${d.pending_count} pending` : '⏳ syncing…'}</Text>
-                      : <Text style={{ color: theme.sub, fontWeight: '800', fontSize: 12 }}>● offline</Text>}
+                    ? <Text style={{ color: theme.green, fontWeight: '800', fontSize: 12 }}>✓ Synced{d.online ? '' : ' · offline'}</Text>
+                    : <Text style={{ color: d.online ? theme.accent : theme.sub, fontWeight: '800', fontSize: 12 }}>⏳ {d.pending_count} pending{d.online ? '' : ' · offline'}</Text>}
                 </View>
               ))}
               {!syncList.length ? <Text style={{ color: theme.sub }}>No iPads registered for this aircraft yet.</Text> : null}
