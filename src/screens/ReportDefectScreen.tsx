@@ -117,9 +117,11 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={styles.refBtn} onPress={() => setMelOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO MEL ▾</Text></TouchableOpacity>
         <TouchableOpacity style={styles.refBtn} onPress={() => setCdlOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO CDL ▾</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.refBtn} onPress={() => setTaskPick(true)}><Text style={styles.refBtnTxt}>＋ Task card (i.a.w)</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.refBtn} onPress={() => setMpdOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card2 (MPD)</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.refBtn} onPress={() => setAmmOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card3 (AMM)</Text></TouchableOpacity>
+        {role() === 'mechanic' ? (<>
+          <TouchableOpacity style={styles.refBtn} onPress={() => setTaskPick(true)}><Text style={styles.refBtnTxt}>＋ Task card (i.a.w)</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.refBtn} onPress={() => setMpdOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card2 (MPD)</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.refBtn} onPress={() => setAmmOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card3 (AMM)</Text></TouchableOpacity>
+        </>) : null}
       </View>
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>Selected MEL / task cards are added to the defect description above.</Text>
       <MelPicker visible={melOpen} ata={(ata || '').split('-')[0] || undefined} onClose={() => setMelOpen(false)} onPick={pickMel} />
