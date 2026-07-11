@@ -159,9 +159,10 @@ export function cabinDefectHtml(data: TLData): string {
     (x) => [`${esc(x.title)}${x.title ? ': ' : ''}${esc(x.description)}`, t(x.raised_at), decision(x), esc((x.status || '').toUpperCase())]);
 }
 
-// Stand-alone HOLD ITEM LIST (HIL) — deferred items carried forward per MEL/CDL.
+// Stand-alone HOLD ITEM LIST (HIL) — items carried forward per MEL/CDL, incl. cleared
+// ones (kept on the log as history), matching the server render which filters by hil_seq.
 export function hilHtml(data: TLData): string {
-  const hil = (data.defects ?? []).filter((x) => x.status === 'deferred');
+  const hil = (data.defects ?? []).filter((x) => x.status === 'deferred' || x.hil_seq != null || x.hil_no);
   return _listDoc(data, 'HOLD ITEM LIST (HIL)', hil,
     ['Item', 'ATA', 'MEL/CDL', 'Cat', 'Raised', 'Due'],
     (x) => [`${esc(x.title)}${x.title ? ': ' : ''}${esc(x.description)}`, esc(x.ata_chapter),
