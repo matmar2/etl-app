@@ -15,6 +15,8 @@ export const role = () => _role;
 
 let _name: string | null = null;
 export const userName = () => _name;
+let _licence: string | null = null;
+export const userLicence = () => _licence;   // certifying-staff auth / pilot licence, pre-fills sign forms
 
 // Display label for a backend role. 'pilot' is shown as First Officer / Co-pilot.
 export function roleLabel(r: string | null = _role): string {
@@ -79,7 +81,7 @@ async function cacheOfflineCred(username: string, password: string, token: strin
     const salt = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     await SecureStore.setItem(offKey(username), JSON.stringify({
       username, salt, pwHash: sha1Hex(salt + password), secret,
-      role: me.role, name: me.name, mfa_enabled: !!me.mfa_enabled, testing,
+      role: me.role, name: me.name, licence: me.licence ?? null, mfa_enabled: !!me.mfa_enabled, testing,
       clearance: !!me.clearance_authorized, perms: _perms, token, at: Date.now(),
     }));
   } catch { /* best-effort */ }
@@ -139,7 +141,7 @@ export async function login(username: string, password: string, otp?: string) {
   await SecureStore.setItem('token', json.access_token);
   _role = json.role ?? null;
   _clearanceAuthorized = !!json.clearance_authorized;
-  try { _name = (await api('/auth/me')).name ?? null; } catch {}   // full name for the page header
+  try { const me = await api('/auth/me'); _name = me.name ?? null; _licence = me.licence ?? null; } catch {}   // name + licence for header / sign forms
   await loadPermissions();
   cacheOfflineCred(username, password, json.access_token).catch(() => {});
   flushAuthEvents().catch(() => {});               // report any offline logins now we're online
@@ -185,6 +187,7 @@ export async function loginOffline(username: string, password: string, otp?: str
   await SecureStore.setItem('token', c.token || '');
   _role = c.role ?? null;
   _name = c.name ?? null;
+  _licence = c.licence ?? null;
   _clearanceAuthorized = !!c.clearance;
   _perms = c.perms ?? _perms;
   queueAuthEvent('login').catch(() => {});         // recorded to the server when next online
@@ -213,6 +216,7 @@ export async function logout() {
   await SecureStore.deleteItem('token');
   _role = null;
   _name = null;
+  _licence = null;
   _clearanceAuthorized = false;
 }
 

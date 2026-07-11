@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FlatList, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ammIawLine, ammRevision, ampRevision, appSettings, can, CdlItem, iawText, MelItem, mpdIawLine, role, syncPush, taskLineWithHeader } from '../api/client';
+import { ammIawLine, ammRevision, ampRevision, appSettings, can, CdlItem, iawText, MelItem, mpdIawLine, role, userLicence, syncPush, taskLineWithHeader } from '../api/client';
 import { ATA_CHAPTERS } from '../ata';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
@@ -29,7 +29,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
   const [taskPick, setTaskPick] = useState(false);
   const [mpdOpen, setMpdOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
-  const [lic, setLic] = useState('');
+  const [lic, setLic] = useState(userLicence() ?? '');   // pre-filled from the user's profile, editable
   const [signing, setSigning] = useState(false);
   const [required, setRequired] = useState<string[]>(['title', 'description', 'ata_chapter']);
   const [ampRev, setAmpRev] = useState('');

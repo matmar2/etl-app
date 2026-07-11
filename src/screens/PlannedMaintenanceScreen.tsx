@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck } from '../api/client';
+import { aircraftStatus, amendCheck, appSettings, can, CheckRecord, CheckStatus, CheckTemplate, checkHtml, checkTemplate, completeCheck, completeMaintTask, listChecks, MaintTask, maintTasks, nextTl, previewCheck, userLicence } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import { printHtml, shareHtml } from '../print';
@@ -15,9 +15,9 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   const [tpl, setTpl] = useState<CheckTemplate | null>(null);
   const [state, setState] = useState<Record<string, any>>({});   // taskId -> {mech, insp, fields:{}}
   const [signer, setSigner] = useState('');
-  const [licence, setLicence] = useState('');
+  const [licence, setLicence] = useState(userLicence() ?? '');   // pre-filled from profile, editable
   const [inspSigner, setInspSigner] = useState('');
-  const [inspLicence, setInspLicence] = useState('');
+  const [inspLicence, setInspLicence] = useState('');   // inspector is a DIFFERENT person — never pre-filled
   const [inspSig, setInspSig] = useState('');          // captured inspector signature (dataURL)
   const [tlb, setTlb] = useState('');
   const [sigTarget, setSigTarget] = useState<'mech' | 'insp' | null>(null);   // which signature the pad is capturing

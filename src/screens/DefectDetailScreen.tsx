@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, taskLineWithHeader } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, userLicence, taskLineWithHeader } from '../api/client';
 import { printHtml } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -31,7 +31,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [mpdOpen, setMpdOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
   // Rectify + CRS: validate entries -> confirm -> signature -> MFA
-  const [lic, setLic] = useState('');
+  const [lic, setLic] = useState(userLicence() ?? '');   // pre-filled from profile, editable
   const [signing, setSigning] = useState(false);
   const [crsSig, setCrsSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
