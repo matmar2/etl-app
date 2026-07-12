@@ -1229,6 +1229,13 @@ async function localAssist(question: string): Promise<AssistAnswer> {
   return { answer: 'You’re offline and I couldn’t match a guide section. Open the User Guide, or send Feedback.', sources: [], mode: 'offline-none' };
 }
 
+// Admin broadcasts — targeted pop-ups shown right after login.
+export type Broadcast = { id: string; title: string; body: string; severity: string; created_at: string; from?: string };
+export const pendingBroadcasts = (reg?: string): Promise<Broadcast[]> =>
+  api(`/broadcasts/pending${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`).catch(() => [] as Broadcast[]);
+export const ackBroadcast = (id: string): Promise<any> =>
+  api(`/broadcasts/${id}/ack`, { method: 'POST' }).catch(() => {});
+
 export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null };
 // Per-user offline cache: the signed-in user's own feedback + replies survive offline,
 // keyed by login ID so a shared iPad never shows one user's feedback to another.
