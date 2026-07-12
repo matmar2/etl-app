@@ -84,6 +84,23 @@ export async function deleteSector(id: string, force = false): Promise<void> {
   await d.runAsync('DELETE FROM sectors WHERE id = ?', id);
 }
 
+// "Remove from list" for a record that can't be deleted (released/exported) — a per-device
+// hide that keeps the DB record intact and just filters it out of "Your sectors". Persisted
+// locally (not synced), so it survives pulls but doesn't affect other iPads or the record.
+export async function hiddenSectorIds(): Promise<Set<string>> {
+  const { data } = await getRef<string[]>('sectors_hidden');
+  return new Set(data || []);
+}
+export async function hideSectorFromList(id: string): Promise<void> {
+  const set = await hiddenSectorIds();
+  set.add(id);
+  await setRef('sectors_hidden', Array.from(set));
+}
+export async function unhideSectorFromList(id: string): Promise<void> {
+  const set = await hiddenSectorIds();
+  if (set.delete(id)) await setRef('sectors_hidden', Array.from(set));
+}
+
 // Clear the local "Your sectors" list. By default keeps rows not yet synced
 // (dirty=1) so unsynced work isn't lost; pass true to clear everything.
 export async function clearSectors(includeUnsynced = false): Promise<number> {

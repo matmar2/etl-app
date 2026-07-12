@@ -4,7 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, syncPush } from '../api/client';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import IcaoHint from '../components/IcaoHint';
-import { createSector, dedupeSectors, deleteSector, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
+import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -14,6 +14,7 @@ export default function SectorListScreen({ route, navigation }: any) {
   const reg = route?.params?.aircraftId ?? 'LZ-FSA';
   const [flights, setFlights] = useState<LeonFlight[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());   // per-device "removed from list" (record kept)
   const [status, setStatus] = useState('');
   const [feed, setFeed] = useState('Loading…');
   const [manualForm, setManualForm] = useState<any | null>(null);
@@ -27,6 +28,7 @@ export default function SectorListScreen({ route, navigation }: any) {
 
   async function refresh() {                       // instant local view
     await dedupeSectors().catch(() => {});
+    setHidden(await hiddenSectorIds().catch(() => new Set<string>()));
     setSectors(await listSectors());
   }
   const pull = useCallback(async () => {           // converge with the server (web ↔ iPad)
@@ -76,9 +78,10 @@ export default function SectorListScreen({ route, navigation }: any) {
     if (f.arr && s.arr && f.arr.toUpperCase() !== s.arr.toUpperCase()) d.push(`ARR ${f.arr} (was ${s.arr})`);
     return d.length ? `⚠ Leon updated — ${d.join(' · ')}` : null;
   };
-  const visibleSectors = histOpen
+  const visibleSectors = (histOpen
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
-    : sectors.filter((s) => s.flight_date === today || inProgress(s));
+    : sectors.filter((s) => s.flight_date === today || inProgress(s)))
+    .filter((s) => !hidden.has(s.id));               // drop per-device "removed from list" records
   // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time),
   // and flights are opened in departure-time order (earliest first). A ground MAINTENANCE log is
   // independent of flight dispatch, so it never blocks opening a Leon leg.
@@ -170,9 +173,17 @@ export default function SectorListScreen({ route, navigation }: any) {
     if (!(await confirmAction(`Remove ${s.flight_no} (${s.flight_date})?`, 'Remove sector'))) return;
     try { await deleteSector(s.id); setStatus(`Removed ${s.flight_no}`); pull(); return; }
     catch (e: any) {
-      if (!e?.message?.includes('409')) { setStatus(`Cannot remove — ${e.message}`); return; }
-      // Released/exported records can never be deleted — don't offer a force option.
-      if (!e.message.includes('Force remove')) { setStatus(`Cannot remove ${s.flight_no} — released/exported sectors cannot be deleted.`); return; }
+      // Released/exported records can never be DELETED (airworthiness/OASES record). Offer to hide
+      // it from this list instead — the record is kept, it just leaves "Your sectors" on this iPad.
+      const undeletable = !e?.message?.includes('409') || !e.message.includes('Force remove');
+      if (undeletable) {
+        if (await confirmAction(`${s.flight_no} is a released/exported record and can’t be deleted. Remove it from this list only? The Tech Log record is kept.`, 'Remove from list')) {
+          await hideSectorFromList(s.id);
+          setHidden((h) => new Set(h).add(s.id));
+          setStatus(`Removed ${s.flight_no} from the list (record kept)`);
+        }
+        return;
+      }
     }
     // 409 — closed / signed. Offer a force remove.
     if (!(await confirmAction(`${s.flight_no} is closed or signed. Force‑remove it and delete its signatures? This cannot be undone.`, 'Force remove'))) return;
