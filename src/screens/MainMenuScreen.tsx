@@ -74,6 +74,15 @@ export default function MainMenuScreen({ navigation }: any) {
     }).catch(() => { _offlinePreparedThisSession = false; });
   }
 
+  // Manual re-load of the offline cache (schedule, MEL/CDL/AMM pickers, defects, maps) on demand —
+  // e.g. before flying into a no-signal area, to be sure the latest data is on the iPad.
+  function loadOfflineNow() {
+    const reg = currentAircraft()?.registration;
+    if (!reg || offlineProg) return;
+    _offlinePreparedThisSession = false;               // allow the once-per-session prep to run again
+    prepOffline(reg, () => true);
+  }
+
   async function syncNow() {
     if (syncing) return;
     setSyncing(true);
@@ -230,6 +239,9 @@ export default function MainMenuScreen({ navigation }: any) {
           <OnlineStatus />
           <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
             {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={loadOfflineNow} disabled={!!offlineProg} style={[styles.refreshBtn, offlineProg && { opacity: 0.6 }]}>
+            <Text style={styles.refreshTxt}>⤓ Offline</Text>
           </TouchableOpacity>
           <View>
             <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
