@@ -8,6 +8,12 @@ import { theme } from '../theme';
 
 type Tab = 'defects' | 'cabin' | 'hil';
 
+const fmtD = (iso?: string) => {                      // ISO -> DD/MM/YY
+  if (!iso) return '';
+  const p = iso.slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(2)}` : iso.slice(0, 10);
+};
+
 export default function DefectsScreen({ route, navigation }: any) {
   const aircraftId = route?.params?.aircraftId ?? 'LZ-FSA';
   // Tab visibility is admin-controlled via the permission matrix, not hard-coded by role:
@@ -112,6 +118,9 @@ export default function DefectsScreen({ route, navigation }: any) {
                 {item.mel_ref ? ` · MEL ${item.mel_ref}` : ''}
                 {item.due_date ? ` · due ${item.due_date}` : ''}
               </Text>
+              <Text style={styles.dDates}>
+                Opened {fmtD(item.raised_at)}{item.closed_at ? `   ·   Closed ${fmtD(item.closed_at)}` : ''}
+              </Text>
             </View>
             {tab === 'hil' || tab === 'cabin' ? (
               <TouchableOpacity style={styles.rowPrint} onPress={() => printOne(tab === 'hil' ? 'hil' : 'cabin', item)}>
@@ -144,6 +153,7 @@ const styles = StyleSheet.create({
   dTitle: { color: theme.text, fontSize: 15, fontWeight: '700' },
   dNo: { color: theme.accent, fontWeight: '800' },
   dSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
+  dDates: { color: theme.sub, fontSize: 11, marginTop: 3, fontWeight: '600' },
   rowPrint: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, marginHorizontal: 8 },
   rowPrintTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
   status: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
