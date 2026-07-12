@@ -14,6 +14,7 @@ export type PeerTransport = {
 };
 
 let _transport: PeerTransport | null = null;
+const _approved = new Set<string>();   // peer deviceIds the master has approved onto this aircraft's network
 
 export function registerPeerTransport(tx: PeerTransport) {
   _transport = tx;
@@ -24,6 +25,10 @@ export function peerSyncAvailable() {
 export function onlinePeers(): string[] {
   return _transport?.peers() ?? [];
 }
+// The master approves/denies an additional iPad (e.g. a mechanic's) joining the aircraft network.
+export function approvePeer(deviceId: string) { _approved.add(deviceId); }
+export function denyPeer(deviceId: string) { _approved.delete(deviceId); }
+export function isPeerApproved(deviceId: string) { return _approved.has(deviceId); }
 
 // Peer session. `getReg` returns this iPad's current aircraft (so it answers gather requests with
 // its data for that tail). `onMasterReg` fires when a MASTER iPad is heard on the network — a
@@ -31,16 +36,32 @@ export function onlinePeers(): string[] {
 // master is working and adopt/focus that tail.
 export async function startPeerSync(
   deviceId: string,
-  opts?: { getReg?: () => string | undefined; onMasterReg?: (reg: string) => void },
+  opts?: {
+    getReg?: () => string | undefined;
+    label?: string;
+    isMaster?: () => boolean;
+    onMasterReg?: (reg: string) => void;
+    onJoinRequest?: (deviceId: string, label?: string) => void;   // master shows an approve/deny prompt
+  },
 ) {
   if (!_transport) return;
   _transport.onReceive((env) => {
+    // An iPad announcing it wants to join → only the MASTER prompts, and only for a not-yet-approved iPad.
+    if (env?.kind === 'join') {
+      if (opts?.isMaster?.() && env.device && !_approved.has(env.device)) opts.onJoinRequest?.(env.device, env.label);
+      return;
+    }
     // A master's "gather" request → reply with our latest so it can merge our new entries.
-    if (env?.kind === 'request') { shareLatest(deviceId, { reg: opts?.getReg?.() }).catch(() => {}); return; }
+    if (env?.kind === 'request') { shareLatest(deviceId, { reg: opts?.getReg?.(), master: opts?.isMaster?.() }).catch(() => {}); return; }
+    // Data: trust the master's package always; otherwise only merge from an APPROVED peer.
+    if (!(env?.master || (env?.device && _approved.has(env.device)))) return;
     if (env?.master && env?.reg && opts?.onMasterReg) opts.onMasterReg(env.reg);   // detected the master's tail
     merge(env).catch(() => {});
   });
   await _transport.start(deviceId);
+  // Announce ourselves so the master can approve us onto the aircraft's network.
+  await _transport.broadcast({ device: deviceId, at: new Date().toISOString(), kind: 'join',
+                               label: opts?.label, reg: opts?.getReg?.(), sectors: [], defects: [], attachments: [] });
 }
 
 export async function stopPeerSync() {

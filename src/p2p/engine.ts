@@ -8,9 +8,10 @@ import { db } from '../db/schema';
 export type SyncEnvelope = {
   device: string;
   at: string;
-  kind?: 'snapshot' | 'request';   // 'request' = a master asking peers to send their latest (gather step)
+  kind?: 'snapshot' | 'request' | 'join';   // request = master gather; join = a new iPad announcing itself
   reg?: string;                    // the aircraft the sender is working — lets a joining iPad detect it
   master?: boolean;                // sender is the master iPad for `reg`
+  label?: string;                  // human label of a joining iPad (shown in the master's approve prompt)
   sectors: any[];
   defects: any[];
   attachments: any[];
