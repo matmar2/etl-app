@@ -248,8 +248,7 @@ export default function MainMenuScreen({ navigation }: any) {
           <View style={{ flexShrink: 1 }}>
             <Text style={styles.appName}>Electronic Tech Log</Text>
             {userName() ? <Text style={styles.appUser}>{userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}</Text> : null}
-            <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
-            {otaLine() ? <Text style={styles.appVer}>{otaLine()}</Text> : null}
+            <Text style={styles.appVer} numberOfLines={2}>{versionLabel()}{otaLine() ? ` · ${otaLine()}` : ''}{refreshedAt ? ` · updated ${refreshedAt}` : ''}</Text>
             {(Constants.expoConfig as any)?.extra?.commit ? <Text style={styles.appVer}>Bundle {(Constants.expoConfig as any).extra.commit}</Text> : null}
           </View>
         </View>
