@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { appSettings, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
@@ -28,8 +28,11 @@ export default function SignOffScreen({ navigation }: any) {
       finally { setOpeningId(null); }
       return;
     }
-    if (g.defect_id) {                                   // defect-rectification CRS (no sector) → open the defect + its CRS
-      navigation.navigate('DefectDetail', { defectId: g.defect_id });
+    if (g.defect_id) {                                   // defect-rectification CRS → render the signed CRS in standard Tech Log format
+      setOpeningId(g.id);
+      try { const { html } = await defectCrsPreview(g.defect_id); await printHtml(html); }
+      catch (e: any) { setMsg(e?.message || 'Could not open the CRS.'); }
+      finally { setOpeningId(null); }
       return;
     }
     setMsg('This sign-off has no printable Tech Log.');
@@ -52,7 +55,7 @@ export default function SignOffScreen({ navigation }: any) {
               </Text>
               <Text style={s.meta}>{g.signer_name || ''}{g.licence_no ? ` · ${g.licence_no}` : ''}</Text>
               {g.defects_summary ? <Text style={s.defs}>Defects: {g.defects_summary}</Text> : null}
-              {openable(g) ? <Text style={s.open}>{openingId === g.id ? 'Opening…' : (g.sector_id ? 'Tap to open signed Tech Log / CRS ›' : 'Tap to open the defect & CRS ›')}</Text> : null}
+              {openable(g) ? <Text style={s.open}>{openingId === g.id ? 'Opening…' : 'Tap to open the signed CRS ›'}</Text> : null}
             </View>
             <Text style={s.when}>{g.signed_at?.slice(0, 16).replace('T', ' ')}z</Text>
           </TouchableOpacity>
