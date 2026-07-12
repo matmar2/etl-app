@@ -15,6 +15,8 @@ export const role = () => _role;
 
 let _name: string | null = null;
 export const userName = () => _name;
+let _username: string | null = null;   // the login ID — scopes per-user offline caches (e.g. feedback)
+export const currentUsername = () => _username;
 let _licence: string | null = null;
 export const userLicence = () => _licence;   // certifying-staff auth / pilot licence, pre-fills sign forms
 
@@ -140,6 +142,7 @@ export async function login(username: string, password: string, otp?: string) {
   const json = await res.json();
   await SecureStore.setItem('token', json.access_token);
   _role = json.role ?? null;
+  _username = username;
   _clearanceAuthorized = !!json.clearance_authorized;
   try { const me = await api('/auth/me'); _name = me.name ?? null; _licence = me.licence ?? null; } catch {}   // name + licence for header / sign forms
   await loadPermissions();
@@ -149,6 +152,7 @@ export async function login(username: string, password: string, otp?: string) {
   prefetchOfflineFlights().catch(() => {});        // warm the offline Leon cache (all tails) for the next 72 h
   prefetchLastFuel().catch(() => {});              // warm previous-leg landing fuel (all tails, last 3 days)
   prefetchHelp().catch(() => {});                  // warm the offline User Guide + FAQ cache
+  myFeedback().catch(() => {});                    // warm this user's feedback + replies for offline
   return json as { access_token: string; role: string; mfa_enrollment_required?: boolean };
 }
 
@@ -186,6 +190,7 @@ export async function loginOffline(username: string, password: string, otp?: str
   }
   await SecureStore.setItem('token', c.token || '');
   _role = c.role ?? null;
+  _username = username;
   _name = c.name ?? null;
   _licence = c.licence ?? null;
   _clearanceAuthorized = !!c.clearance;
@@ -215,6 +220,7 @@ export async function logout() {
   catch { await queueAuthEvent('logout'); }        // offline -> report on next online
   await SecureStore.deleteItem('token');
   _role = null;
+  _username = null;
   _name = null;
   _licence = null;
   _clearanceAuthorized = false;
@@ -1224,7 +1230,19 @@ async function localAssist(question: string): Promise<AssistAnswer> {
 }
 
 export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null };
-export const myFeedback = (): Promise<MyFeedback[]> => api('/feedback/mine');
+// Per-user offline cache: the signed-in user's own feedback + replies survive offline,
+// keyed by login ID so a shared iPad never shows one user's feedback to another.
+export async function myFeedback(): Promise<MyFeedback[]> {
+  const key = `feedback_mine_${_username || 'anon'}`;
+  try {
+    const rows = await api('/feedback/mine') as MyFeedback[];
+    await _cacheSet(key, rows);
+    return rows;
+  } catch (e) {
+    if (e instanceof NetworkError) return (await _cacheGet<MyFeedback[]>(key)) || [];
+    throw e;
+  }
+}
 
 // Read-only Tech Log page (what goes to OASES) + matching Leon flight-watch — crew review after close.
 export const techlogPage = (sectorId: string): Promise<any> => api(`/sectors/${sectorId}/techlog-page`);
