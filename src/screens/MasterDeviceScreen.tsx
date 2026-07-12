@@ -40,7 +40,7 @@ export default function MasterDeviceScreen() {
     // 1) Peer path — the master GATHERS each iPad's newer entries, MERGES them into the complete
     //    latest, then DISTRIBUTES the complete package to all iPads. Offline, no server needed.
     //    Active once the on-board peer transport ships.
-    try { if (peerSyncAvailable()) await masterSyncAll(await deviceId()); } catch { /* transport not active yet */ }
+    try { if (peerSyncAvailable()) await masterSyncAll(await deviceId(), reg); } catch { /* transport not active yet */ }
     // 2) Server relay — push our outbox and ask the others to reconcile via the server when they have network.
     let last: Ipad[] = [];
     try { const r = await syncAllIpads(reg); last = r.ipads; setSyncList(last); } catch { setMsg('Started — iPads will reconcile as they get network.'); }
@@ -77,7 +77,7 @@ export default function MasterDeviceScreen() {
         <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>🔄  Sync all iPads</Text>
       </TouchableOpacity>
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 6 }}>
-        Collects the latest entries from every iPad on {reg || 'this aircraft'}, merges them, and sends the complete package back to all — directly between iPads when the on-board link is on, and via the server whenever an iPad has network. A summary is written to the activity log.
+        Collects the latest entries from every iPad on the on-board network — including a mechanic&apos;s iPad that joins over Bluetooth — merges them, and sends the complete {reg || 'aircraft'} package back to all. A joining mechanic iPad detects this master&apos;s tail ({reg || '—'}) and receives its data. Directly between iPads when the on-board link is on, via the server otherwise. Written to the activity log.
       </Text>
       {msg ? <Text style={{ color: theme.accent, marginTop: 10, fontSize: 13 }}>{msg}</Text> : null}
       {busy ? <ActivityIndicator color={theme.accent} style={{ marginTop: 12 }} /> : null}

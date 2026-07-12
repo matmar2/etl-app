@@ -9,6 +9,8 @@ export type SyncEnvelope = {
   device: string;
   at: string;
   kind?: 'snapshot' | 'request';   // 'request' = a master asking peers to send their latest (gather step)
+  reg?: string;                    // the aircraft the sender is working — lets a joining iPad detect it
+  master?: boolean;                // sender is the master iPad for `reg`
   sectors: any[];
   defects: any[];
   attachments: any[];
@@ -17,9 +19,10 @@ export type SyncEnvelope = {
 const TABLES = ['sectors', 'defects', 'attachments'] as const;
 
 // Everything this device holds (not just dirty) so a fresh peer catches up fully.
-export async function snapshot(deviceId: string): Promise<SyncEnvelope> {
+export async function snapshot(deviceId: string, opts?: { reg?: string; master?: boolean }): Promise<SyncEnvelope> {
   const dbc = await db();
-  const out: any = { device: deviceId, at: new Date().toISOString(), kind: 'snapshot' };
+  const out: any = { device: deviceId, at: new Date().toISOString(), kind: 'snapshot',
+                     reg: opts?.reg, master: !!opts?.master };
   for (const tbl of TABLES) {
     const rows = await dbc.getAllAsync<{ payload: string }>(`SELECT payload FROM ${tbl}`);
     out[tbl] = rows.map((r) => JSON.parse(r.payload));
