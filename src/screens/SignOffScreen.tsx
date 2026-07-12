@@ -55,7 +55,16 @@ export default function SignOffScreen({ navigation }: any) {
               </Text>
               <Text style={s.meta}>{g.signer_name || ''}{g.licence_no ? ` · ${g.licence_no}` : ''}</Text>
               {g.defects_summary ? <Text style={s.defs}>Defects: {g.defects_summary}</Text> : null}
-              {openable(g) ? <Text style={s.open}>{openingId === g.id ? 'Opening…' : 'Tap to open the signed CRS ›'}</Text> : null}
+              {openable(g) ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginTop: 6 }}>
+                  <Text style={s.open}>{openingId === g.id ? 'Opening…' : 'Tap to open the signed CRS ›'}</Text>
+                  {g.defect_id ? (
+                    <TouchableOpacity onPress={() => navigation.navigate('DefectDetail', { defectId: g.defect_id })}>
+                      <Text style={s.details}>details ›</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
             <Text style={s.when}>{g.signed_at?.slice(0, 16).replace('T', ' ')}z</Text>
           </TouchableOpacity>
@@ -72,6 +81,7 @@ const s = StyleSheet.create({
   k: { color: theme.text, fontWeight: '800', fontSize: 15 },
   meta: { color: theme.sub, fontSize: 12, marginTop: 2 },
   defs: { color: theme.text, fontSize: 12, marginTop: 4 },
-  open: { color: theme.accent, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  open: { color: theme.accent, fontSize: 12, fontWeight: '700' },
+  details: { color: theme.sub, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   when: { color: theme.accent, fontSize: 12, fontWeight: '700' },
 });
