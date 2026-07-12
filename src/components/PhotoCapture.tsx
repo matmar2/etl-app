@@ -5,7 +5,7 @@ import { Attachment, attachmentUrl, listAttachments, uploadAttachment } from '..
 import { queueAttachment } from '../db/attachments';
 import { theme } from '../theme';
 
-type Props = { defectId?: string; sectorId?: string; kind?: 'damage' | 'receipt' | 'document'; label?: string };
+type Props = { defectId?: string; sectorId?: string; kind?: 'damage' | 'receipt' | 'document'; label?: string; readOnly?: boolean };
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -16,7 +16,7 @@ function uuid() {
 
 // Capture/attach photos (damage, receipts, documents). Uploads when online,
 // otherwise queues locally and flushes on the next sync.
-export default function PhotoCapture({ defectId, sectorId, kind = 'damage', label = 'Photos' }: Props) {
+export default function PhotoCapture({ defectId, sectorId, kind = 'damage', label = 'Photos', readOnly = false }: Props) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -46,6 +46,7 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
   }
 
   const hasItems = items.length > 0 || busy;
+  if (readOnly && items.length === 0) return null;    // closed defect with no photos → nothing to show
   return (
     <View style={{ marginTop: label ? 12 : 0 }}>
       {label ? <Text style={s.lbl}>{label}</Text> : null}
@@ -57,10 +58,12 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
           {busy ? <View style={[s.thumb, s.center]}><ActivityIndicator color={theme.accent} /></View> : null}
         </ScrollView>
       ) : null}
-      <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-        <TouchableOpacity style={s.btn} onPress={() => add(true)}><Text style={s.btnTxt}>📷 Take photo</Text></TouchableOpacity>
-        <TouchableOpacity style={s.btn} onPress={() => add(false)}><Text style={s.btnTxt}>🖼 Library</Text></TouchableOpacity>
-      </View>
+      {!readOnly ? (
+        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+          <TouchableOpacity style={s.btn} onPress={() => add(true)}><Text style={s.btnTxt}>📷 Take photo</Text></TouchableOpacity>
+          <TouchableOpacity style={s.btn} onPress={() => add(false)}><Text style={s.btnTxt}>🖼 Library</Text></TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }

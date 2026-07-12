@@ -167,7 +167,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" />
+      <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed'} />
 
       {d.can_delete ? (
         <TouchableOpacity onPress={del} style={{ marginTop: 14 }}>
