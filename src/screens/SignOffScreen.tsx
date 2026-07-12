@@ -17,13 +17,14 @@ export default function SignOffScreen({ navigation }: any) {
   const [cached, setCached] = useState(false);
   const [cat, setCat] = useState('All');
   const [pick, setPick] = useState(false);
-  const CATS = ['All', 'PIREP', 'MAREP', 'CABIN', 'Others'];
+  const [catOpts, setCatOpts] = useState<string[]>([]);       // admin-configured categories (Settings)
+  const CATS = ['All', ...catOpts, 'Others'];
   const count = (c: string) => c === 'All' ? (list?.length || 0) : (list || []).filter((g) => (g.category || 'Others') === c).length;
   const filtered = (list || []).filter((g) => cat === 'All' ? true : (g.category || 'Others') === cat);
 
   const reg = currentAircraft()?.registration;
   useEffect(() => { appSettings().then((sx) => setDays(sx.signoff_view_days || 15)).catch(() => {}); }, []);
-  useEffect(() => { signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); }).catch(() => setList([])); }, [days, reg]);
+  useEffect(() => { signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); setCatOpts(r.categories || []); }).catch(() => setList([])); }, [days, reg]);
 
   async function open(g: SignOff) {
     setMsg('');
