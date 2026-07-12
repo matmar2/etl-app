@@ -219,6 +219,7 @@ export default function MainMenuScreen({ navigation }: any) {
     aircraftStatus(a.registration).then(setSt).catch(() => setSt(null));
     aircraftUtilisation(a.registration).then(setUtil).catch(() => setUtil(null));
     loadCounts(a.registration);
+    prefetchAircraftDefects(a.registration).catch(() => {});   // warm this tail's defects (incl. OASES-imported) for offline
   }
 
   async function signOut() {
