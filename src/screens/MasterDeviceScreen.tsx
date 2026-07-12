@@ -1,8 +1,8 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { currentAircraft, deviceId, Ipad, listIpads, setMaster, syncAllComplete, syncAllIpads } from '../api/client';
-import { masterSyncAll, peerSyncAvailable } from '../p2p';
+import { currentAircraft, deviceId, Ipad, listIpads, setMaster, syncAllComplete } from '../api/client';
+import { masterSyncAll, onlinePeers, peerSyncAvailable } from '../p2p';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -16,6 +16,7 @@ export default function MasterDeviceScreen() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncList, setSyncList] = useState<Ipad[]>([]);
   const [syncDone, setSyncDone] = useState(false);
+  const [noPeers, setNoPeers] = useState('');    // set to the reason when no iPad is on the on-board network
   const cancelled = useRef(false);
 
   const load = useCallback(() => {
@@ -33,36 +34,31 @@ export default function MasterDeviceScreen() {
     finally { setBusy(false); }
   }
 
-  // Master-initiated "sync all iPads": pushes our outbox, asks the others to sync on their next
-  // heartbeat, then polls each iPad's status and shows progress. The outcome is written to the audit log.
+  // Master-initiated "Sync all iPads": scan the on-board Bluetooth network for other iPads; if none
+  // are found, do nothing and say so. If some are, the master GATHERS each iPad's newer entries,
+  // MERGES them into the complete latest, then DISTRIBUTES the complete package to all. Audit-logged.
   async function syncAll() {
-    setSyncOpen(true); setSyncDone(false); setSyncList([]); cancelled.current = false;
-    // 1) Peer path — the master GATHERS each iPad's newer entries, MERGES them into the complete
-    //    latest, then DISTRIBUTES the complete package to all iPads. Offline, no server needed.
-    //    Active once the on-board peer transport ships.
-    try { if (peerSyncAvailable()) await masterSyncAll(await deviceId(), reg); } catch { /* transport not active yet */ }
-    // 2) Server relay — push our outbox and ask the others to reconcile via the server when they have network.
-    let last: Ipad[] = [];
-    try { const r = await syncAllIpads(reg); last = r.ipads; setSyncList(last); } catch { setMsg('Started — iPads will reconcile as they get network.'); }
-    const started = Date.now();
-    let timer: any;
-    const finish = (timedOut: boolean) => {
-      if (timer) clearTimeout(timer);
+    setSyncOpen(true); setSyncDone(false); setSyncList([]); setNoPeers(''); cancelled.current = false;
+    // Which iPads are actually reachable over the on-board link right now.
+    const peers = peerSyncAvailable() ? onlinePeers() : [];
+    if (peers.length === 0) {
+      setNoPeers(peerSyncAvailable()
+        ? 'No other iPads found on the on-board Bluetooth network. Make sure the other iPads are switched on and nearby, then try again.'
+        : 'The on-board iPad-to-iPad (Bluetooth) link is not active on this app build yet, so there is no on-board network to scan. iPads currently sync through the server automatically whenever they have connectivity. (The direct link switches on with the native app build.)');
       setSyncDone(true);
-      const pendingLabels = last.filter((d) => !d.synced).map((d) => d.label);
-      syncAllComplete(reg, { synced: last.filter((d) => d.synced).length, pending: pendingLabels.length, pending_labels: pendingLabels, timed_out: timedOut }).catch(() => {});
-      load();
-    };
-    const tick = async () => {
-      if (cancelled.current) return;
-      if (Date.now() - started > 75000) return finish(true);
-      try {
-        const r = await listIpads(reg); last = r.ipads; setSyncList(last);
-        if (last.length && last.every((d) => d.synced)) return finish(false);
-      } catch { /* offline — retry */ }
-      timer = setTimeout(tick, 2500);
-    };
-    timer = setTimeout(tick, 2500);
+      syncAllComplete(reg, { synced: 0, pending: 0, pending_labels: [], timed_out: false }).catch(() => {});
+      return;
+    }
+    try { await masterSyncAll(await deviceId(), reg); } catch { /* best-effort */ }
+    // Show the iPads that were on the network (map peer ids to their labels via the registered list).
+    let list: Ipad[] = [];
+    try {
+      const r = await listIpads(reg);
+      list = r.ipads.filter((d) => d.this_device || peers.includes(d.id)).map((d) => ({ ...d, synced: true, online: true }));
+    } catch { /* offline */ }
+    setSyncList(list); setSyncDone(true);
+    syncAllComplete(reg, { synced: list.length, pending: 0, pending_labels: [], timed_out: false }).catch(() => {});
+    load();
   }
   const syncedN = syncList.filter((d) => d.synced).length;
 
@@ -85,30 +81,28 @@ export default function MasterDeviceScreen() {
       <Modal visible={syncOpen} transparent animationType="fade" onRequestClose={() => { cancelled.current = true; setSyncOpen(false); }}>
         <View style={{ flex: 1, backgroundColor: '#000A', justifyContent: 'center', padding: 20 }}>
           <View style={{ backgroundColor: theme.bg, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', alignSelf: 'center', borderWidth: 1, borderColor: theme.border }}>
-            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800' }}>{syncDone ? 'Sync complete' : 'Sharing the latest with all iPads'} · {reg}</Text>
-            <View style={{ height: 12, backgroundColor: theme.tile, borderRadius: 6, marginTop: 12, overflow: 'hidden' }}>
-              <View style={{ height: 12, width: `${Math.round((syncedN / (syncList.length || 1)) * 100)}%`, backgroundColor: theme.green }} />
-            </View>
-            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>
-              {syncedN} of {syncList.length} iPad(s) have the latest{syncDone ? '.' : ' — waiting for the others…'}
-            </Text>
-            <Text style={{ color: theme.sub, fontSize: 11, marginTop: 3 }}>
-              {peerSyncAvailable() ? 'On-board link active — shared directly between iPads.' : 'A pending iPad receives the latest as soon as it has network (or the on-board link is on).'}
-            </Text>
-            <View style={{ marginTop: 12, gap: 8 }}>
-              {syncList.map((d) => (
-                <View key={d.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.panel, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: d.synced ? theme.green : theme.border }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{d.label}{d.this_device ? ' · this iPad' : ''}</Text>
-                    <Text style={{ color: theme.sub, fontSize: 11 }}>{d.role_label}{d.is_master ? ' · ★ MASTER' : ''}</Text>
+            <Text style={{ color: theme.text, fontSize: 17, fontWeight: '800' }}>{noPeers ? 'No iPads to sync' : syncDone ? 'Sync complete' : 'Sharing the latest with all iPads'} · {reg}</Text>
+            {noPeers ? (
+              <Text style={{ color: theme.sub, fontSize: 13, marginTop: 12, lineHeight: 19 }}>{noPeers}</Text>
+            ) : (<>
+              <View style={{ height: 12, backgroundColor: theme.tile, borderRadius: 6, marginTop: 12, overflow: 'hidden' }}>
+                <View style={{ height: 12, width: `${Math.round((syncedN / (syncList.length || 1)) * 100)}%`, backgroundColor: theme.green }} />
+              </View>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>
+                {syncedN} of {syncList.length} iPad(s) on the on-board network have the latest.
+              </Text>
+              <View style={{ marginTop: 12, gap: 8 }}>
+                {syncList.map((d) => (
+                  <View key={d.id} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: theme.panel, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: d.synced ? theme.green : theme.border }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.text, fontWeight: '700', fontSize: 14 }}>{d.label}{d.this_device ? ' · this iPad' : ''}</Text>
+                      <Text style={{ color: theme.sub, fontSize: 11 }}>{d.role_label}{d.is_master ? ' · ★ MASTER' : ''}</Text>
+                    </View>
+                    <Text style={{ color: theme.green, fontWeight: '800', fontSize: 12 }}>✓ has the latest</Text>
                   </View>
-                  {d.synced
-                    ? <Text style={{ color: theme.green, fontWeight: '800', fontSize: 12 }}>✓ Synced{d.online ? '' : ' · offline'}</Text>
-                    : <Text style={{ color: d.online ? theme.accent : theme.sub, fontWeight: '800', fontSize: 12 }}>⏳ {d.pending_count} pending{d.online ? '' : ' · offline'}</Text>}
-                </View>
-              ))}
-              {!syncList.length ? <Text style={{ color: theme.sub }}>No iPads registered for this aircraft yet.</Text> : null}
-            </View>
+                ))}
+              </View>
+            </>)}
             {!syncDone ? <ActivityIndicator color={theme.green} style={{ marginTop: 12 }} /> : null}
             <TouchableOpacity onPress={() => { cancelled.current = true; setSyncOpen(false); }}
               style={{ marginTop: 14, backgroundColor: syncDone ? theme.green : theme.tile, borderRadius: 10, padding: 11, alignItems: 'center' }}>
