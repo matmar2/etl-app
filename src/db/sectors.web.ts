@@ -54,6 +54,21 @@ export async function updateSector(id: string, patch: Record<string, any>): Prom
 export async function deleteSector(id: string, force = false): Promise<void> {
   await deleteServerSector(id, force);    // server rejects (409) if released/signed unless force
 }
+
+// "Remove from list" for an undeletable (released/exported) record — a local hide that keeps
+// the server record intact. Web uses localStorage (no SQLite); mirrors native db/sectors.ts.
+const HIDE_KEY = 'sectors_hidden';
+export async function hiddenSectorIds(): Promise<Set<string>> {
+  try { return new Set(JSON.parse(localStorage.getItem(HIDE_KEY) || '[]')); } catch { return new Set(); }
+}
+export async function hideSectorFromList(id: string): Promise<void> {
+  const set = await hiddenSectorIds(); set.add(id);
+  try { localStorage.setItem(HIDE_KEY, JSON.stringify([...set])); } catch { /* ignore */ }
+}
+export async function unhideSectorFromList(id: string): Promise<void> {
+  const set = await hiddenSectorIds();
+  if (set.delete(id)) { try { localStorage.setItem(HIDE_KEY, JSON.stringify([...set])); } catch { /* ignore */ } }
+}
 export async function clearSectors(_includeUnsynced = false): Promise<number> { return 0; }
 export async function dedupeSectors(): Promise<number> { return 0; }
 
