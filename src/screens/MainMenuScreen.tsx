@@ -169,7 +169,7 @@ export default function MainMenuScreen({ navigation }: any) {
       leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {}),
       documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {}),
       documentsList('form').then((d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))).catch(() => {}),
-      signoffsRecent(15).then((r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))).catch(() => {}),
+      signoffsRecent(15, reg).then((r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))).catch(() => {}),
     ]);
   }
 
