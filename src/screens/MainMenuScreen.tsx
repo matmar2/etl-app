@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   testTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
 
   hero: { backgroundColor: theme.panel, borderWidth: 1.5, borderRadius: 16, padding: 18, marginTop: 14, zIndex: 20 },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 30 },   // keep the Switch-aircraft dropdown above the checks/reasons rows below it (web stacking)
   heroReg: { color: theme.text, fontSize: 32, fontWeight: '900', letterSpacing: 1 },
   heroType: { color: theme.sub, fontSize: 13, marginTop: 3 },
   svcPill: { borderWidth: 1.5, borderRadius: 22, paddingVertical: 7, paddingHorizontal: 14 },
