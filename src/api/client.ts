@@ -785,7 +785,7 @@ export const createMaintenance = (body: { aircraft_id: string; station: string; 
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
-  registration?: string; sector_id?: string; defect_id?: string; defects_summary?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
+  registration?: string; sector_id?: string; defect_id?: string; category?: string; defects_summary?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
 // Recent sign-offs with offline fallback: cache the list, and warm the Tech Log/CRS
 // cache for each signed sector so they can be opened offline too.
 export async function signoffsRecent(days: number, reg?: string): Promise<{ days: number; signoffs: SignOff[]; cached?: boolean }> {
