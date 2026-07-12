@@ -16,9 +16,25 @@ function openInBrowser(html: string) {
   }
 }
 
+let _printing = false;   // iOS UIPrintInteractionController allows only one at a time
 export async function printHtml(html: string) {
   if (Platform.OS === 'web') { openInBrowser(html); return; }
-  await Print.printAsync({ html });
+  if (_printing) return;                                    // ignore a double-tap while a sheet is open
+  _printing = true;
+  try {
+    await Print.printAsync({ html });
+  } catch (e: any) {
+    // The user cancelled/closed the print preview, or iOS still thinks one is in progress.
+    // Swallow it (do NOT let it bubble to a data-fallback path) and, if it was a busy race,
+    // release and retry once so the NEXT view/print is never blocked.
+    if (/in progress/i.test(String(e?.message))) {
+      _printing = false;
+      await new Promise((r) => setTimeout(r, 500));
+      try { _printing = true; await Print.printAsync({ html }); } catch { /* give up quietly */ }
+    }
+  } finally {
+    _printing = false;                                      // always release the lock, even on cancel
+  }
 }
 export async function shareHtml(html: string) {
   if (Platform.OS === 'web') { openInBrowser(html); return; }   // browser → Save as PDF

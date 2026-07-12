@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Constants from 'expo-constants';
@@ -29,6 +29,7 @@ const TILES: Tile[] = [
 const GROUPS = ['Operations', 'Maintenance', 'Documents & forms', 'Help & feedback'];
 
 let _offlinePreparedThisSession = false;   // run the offline-prep bar once per app session
+let _loginUpdateNoticeShown = false;       // login "please update" pop-up — once per app session
 
 function fmtLeft(c: CheckStatus): string {
   if (!c.baseline) return 'not recorded';
@@ -152,6 +153,23 @@ export default function MainMenuScreen({ navigation }: any) {
       await confirmAction(`Could not check for updates: ${e?.message || 'no connection'}. Make sure wifi is on and try again.${otaDiag()}`, 'Update check failed');
     } finally { setChecking(false); }
   }
+
+  // On login, tell the user which bundle this iPad is running and — if a newer version is
+  // waiting — remind them to update. Once per app session, shortly after the menu appears.
+  useEffect(() => {
+    if (_loginUpdateNoticeShown || !Updates.isEnabled) return;
+    const t = setTimeout(async () => {
+      if (_loginUpdateNoticeShown) return;
+      _loginUpdateNoticeShown = true;
+      let avail = upd.isUpdateAvailable || upd.isUpdatePending;
+      if (!avail) { try { avail = (await Updates.checkForUpdateAsync()).isAvailable; } catch { /* offline */ } }
+      if (!avail) return;                                   // up to date → no interruption
+      const bundle = (Constants.expoConfig as any)?.extra?.commit || '—';
+      const msg = `A newer version of the ETL is available.\n\nThis iPad is running Bundle ${bundle}. To get the latest, tap "⇩ Update" at the top of the menu, then FULLY close and reopen the app — you stay signed in.`;
+      if (await confirmAction(msg, 'Please update the app')) checkForUpdate();
+    }, 2500);
+    return () => clearTimeout(t);
+  }, []);
 
   function loadCounts(reg: string) {
     return Promise.all([
