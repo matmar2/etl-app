@@ -4,7 +4,7 @@ import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, Ne
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
-  const [u, setU] = useState('admin');
+  const [u, setU] = useState('');
   const [p, setP] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [otp, setOtp] = useState('');
