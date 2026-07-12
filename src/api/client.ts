@@ -1238,13 +1238,21 @@ async function _bcastSeen(): Promise<Set<string>> { return new Set((await _cache
 async function _addBcastSeen(id: string) { const s = await _bcastSeen(); s.add(id); await _cacheSet('bcast_seen', [...s]); }
 
 export async function pendingBroadcasts(reg?: string): Promise<Broadcast[]> {
-  const seen = await _bcastSeen();
   try {
     const r: Broadcast[] = await api(`/broadcasts/pending${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`);
     await _cacheSet('bcast_pending', r);                       // cache so they still pop up offline
-    return r.filter((b) => !seen.has(b.id));
+    // The server already excludes acknowledged ones, so anything it returns is un-acked for this
+    // user — including a RESENT broadcast. Clear those from the local "seen" set so the resend
+    // overrides the on-device suppression. Only queued (offline, unsynced) acks stay suppressed.
+    const seen = await _bcastSeen();
+    let changed = false;
+    for (const b of r) if (seen.delete(b.id)) changed = true;
+    if (changed) await _cacheSet('bcast_seen', [...seen]);
+    const queued = new Set((await _cacheGet<string[]>('bcast_ack_queue')) || []);
+    return r.filter((b) => !queued.has(b.id));
   } catch {
     const cached = (await _cacheGet<Broadcast[]>('bcast_pending')) || [];
+    const seen = await _bcastSeen();
     return cached.filter((b) => !seen.has(b.id));             // offline → last cached, minus locally-acked
   }
 }
