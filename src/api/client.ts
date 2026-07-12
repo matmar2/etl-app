@@ -1229,12 +1229,42 @@ async function localAssist(question: string): Promise<AssistAnswer> {
   return { answer: 'You’re offline and I couldn’t match a guide section. Open the User Guide, or send Feedback.', sources: [], mode: 'offline-none' };
 }
 
-// Admin broadcasts — targeted pop-ups shown right after login.
+// Admin broadcasts — targeted pop-ups shown after login AND to already-active sessions (polled).
+// Offline-aware: the pending list is cached so it still pops up with no signal, and an ack made
+// offline is recorded locally (never re-shows) and queued to post when back online.
 export type Broadcast = { id: string; title: string; body: string; severity: string; created_at: string; from?: string };
-export const pendingBroadcasts = (reg?: string): Promise<Broadcast[]> =>
-  api(`/broadcasts/pending${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`).catch(() => [] as Broadcast[]);
-export const ackBroadcast = (id: string): Promise<any> =>
-  api(`/broadcasts/${id}/ack`, { method: 'POST' }).catch(() => {});
+
+async function _bcastSeen(): Promise<Set<string>> { return new Set((await _cacheGet<string[]>('bcast_seen')) || []); }
+async function _addBcastSeen(id: string) { const s = await _bcastSeen(); s.add(id); await _cacheSet('bcast_seen', [...s]); }
+
+export async function pendingBroadcasts(reg?: string): Promise<Broadcast[]> {
+  const seen = await _bcastSeen();
+  try {
+    const r: Broadcast[] = await api(`/broadcasts/pending${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`);
+    await _cacheSet('bcast_pending', r);                       // cache so they still pop up offline
+    return r.filter((b) => !seen.has(b.id));
+  } catch {
+    const cached = (await _cacheGet<Broadcast[]>('bcast_pending')) || [];
+    return cached.filter((b) => !seen.has(b.id));             // offline → last cached, minus locally-acked
+  }
+}
+
+export async function ackBroadcast(id: string): Promise<void> {
+  await _addBcastSeen(id);                                     // never re-show, even offline
+  try { await api(`/broadcasts/${id}/ack`, { method: 'POST' }); }
+  catch {                                                      // offline → queue the ack for later
+    const q = (await _cacheGet<string[]>('bcast_ack_queue')) || [];
+    if (!q.includes(id)) { q.push(id); await _cacheSet('bcast_ack_queue', q); }
+  }
+}
+
+export async function flushBroadcastAcks(): Promise<void> {
+  const q = (await _cacheGet<string[]>('bcast_ack_queue')) || [];
+  if (!q.length) return;
+  const left: string[] = [];
+  for (const id of q) { try { await api(`/broadcasts/${id}/ack`, { method: 'POST' }); } catch { left.push(id); } }
+  await _cacheSet('bcast_ack_queue', left);
+}
 
 export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null };
 // Per-user offline cache: the signed-in user's own feedback + replies survive offline,

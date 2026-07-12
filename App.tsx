@@ -27,6 +27,7 @@ import AssistantScreen from './src/screens/AssistantScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
 import AckOverlay from './src/components/AckOverlay';
+import BroadcastGate from './src/components/BroadcastGate';
 import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
 
@@ -182,6 +183,7 @@ export default function App() {
       </Stack.Navigator>
     </NavigationContainer>
     <AckOverlay navRef={navRef} />
+    <BroadcastGate />
     </View>
     </ErrorBoundary>
   );

@@ -7,8 +7,8 @@ import ClockBanner from '../components/ClockBanner';
 import HeaderLogo from '../components/HeaderLogo';
 import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
-import BroadcastModal from '../components/BroadcastModal';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, Broadcast, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingBroadcasts, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { pokeBroadcasts } from '../components/BroadcastGate';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -82,7 +82,6 @@ export default function MainMenuScreen({ navigation }: any) {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);   // admin pop-ups shown after login
 
   async function syncNow() {
     if (syncing) return;
@@ -192,8 +191,9 @@ export default function MainMenuScreen({ navigation }: any) {
     if (!cur && list.length) { cur = list[0]; await setCurrentAircraft(cur); }
     setAc(cur);
     runOfflinePrep(cur?.registration);         // background offline download (survives navigation, auto-resumes)
+    pokeBroadcasts();                                // check for admin pop-ups now (immediate on login)
     const jobs: Promise<any>[] = [
-      pendingBroadcasts(cur?.registration).then((b) => { if (isAlive() && b.length) setBroadcasts(b); }).catch(() => {}),   // admin pop-ups
+      flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
       publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
@@ -246,7 +246,6 @@ export default function MainMenuScreen({ navigation }: any) {
 
   return (
     <View style={styles.wrap}>
-      {broadcasts.length ? <BroadcastModal items={broadcasts} onClose={() => setBroadcasts([])} /> : null}
       {/* top bar */}
       <View style={styles.topRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1, marginRight: 8 }}>
