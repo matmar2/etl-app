@@ -782,16 +782,17 @@ export type SignOff = { id: string; kind: string; signer_name?: string; licence_
   registration?: string; sector_id?: string; defect_id?: string; defects_summary?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
 // Recent sign-offs with offline fallback: cache the list, and warm the Tech Log/CRS
 // cache for each signed sector so they can be opened offline too.
-export async function signoffsRecent(days: number): Promise<{ days: number; signoffs: SignOff[]; cached?: boolean }> {
+export async function signoffsRecent(days: number, reg?: string): Promise<{ days: number; signoffs: SignOff[]; cached?: boolean }> {
+  const scope = (list: SignOff[]) => reg ? list.filter((g) => (g.registration || '').toUpperCase() === reg.toUpperCase()) : list;
   try {
-    const r: { days: number; signoffs: SignOff[] } = await api(`/signoffs/recent?days=${days}`);
-    await setRef('signoffs', r);
+    const r: { days: number; signoffs: SignOff[] } = await api(`/signoffs/recent?days=${days}${reg ? `&reg=${encodeURIComponent(reg)}` : ''}`);
+    await setRef('signoffs', r);                              // cache the fleet/tail list for offline
     const ids = Array.from(new Set(r.signoffs.map((g) => g.sector_id).filter(Boolean))) as string[];
     Promise.all(ids.map((id) => sectorTlHtmlCached(id).catch(() => {}))).catch(() => {});   // warm offline docs
     return r;
   } catch {
     const { data } = await getRef<{ days: number; signoffs: SignOff[] }>('signoffs');
-    return data ? { ...data, cached: true } : { days, signoffs: [], cached: true };
+    return data ? { days: data.days, signoffs: scope(data.signoffs), cached: true } : { days, signoffs: [], cached: true };
   }
 }
 

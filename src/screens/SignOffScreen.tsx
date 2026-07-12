@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { appSettings, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, currentAircraft, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
@@ -16,8 +16,9 @@ export default function SignOffScreen({ navigation }: any) {
   const [msg, setMsg] = useState('');
   const [cached, setCached] = useState(false);
 
+  const reg = currentAircraft()?.registration;
   useEffect(() => { appSettings().then((sx) => setDays(sx.signoff_view_days || 15)).catch(() => {}); }, []);
-  useEffect(() => { signoffsRecent(days).then((r) => { setList(r.signoffs); setCached(!!r.cached); }).catch(() => setList([])); }, [days]);
+  useEffect(() => { signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); }).catch(() => setList([])); }, [days, reg]);
 
   async function open(g: SignOff) {
     setMsg('');
@@ -42,7 +43,7 @@ export default function SignOffScreen({ navigation }: any) {
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Flight Sign Off</Text>
-      <Text style={s.sub}>Sign-offs recorded in the last {days} days (configurable in admin). Tap a row to open the signed Tech Log / CRS.{cached ? ' · Offline — showing the last cached list.' : ''}</Text>
+      <Text style={s.sub}>{reg ? `${reg} · ` : ''}sign-offs in the last {days} days (configurable in admin). Tap a row to open the signed Tech Log / CRS.{cached ? ' · Offline — showing the last cached list.' : ''}</Text>
       {msg ? <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>{msg}</Text> : null}
       {list === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :
         list.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>No sign-offs in the last {days} days.</Text> :
