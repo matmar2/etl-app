@@ -212,6 +212,7 @@ export default function MainMenuScreen({ navigation }: any) {
     let alive = true;
     _offlineListener = (p) => { if (alive) setOfflineProg(p); };   // reflect prep progress while focused
     setOfflineProg(_offlineProg);                                  // show current progress on (re)entry
+    runOfflinePrep(currentAircraft()?.registration);               // start/continue immediately (independent of reload)
     reload(() => alive);
     return () => { alive = false; _offlineListener = null; };      // unsubscribe UI, but never stop the prep
   }, [reload]));
