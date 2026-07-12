@@ -28,7 +28,31 @@ const TILES: Tile[] = [
 ];
 const GROUPS = ['Operations', 'Maintenance', 'Documents & forms', 'Help & feedback'];
 
-let _offlinePreparedThisSession = false;   // run the offline-prep bar once per app session
+// Offline prep survives navigation: progress + state live at module scope (not gated by the
+// screen being focused), so leaving the menu never stops it and returning shows it resuming.
+let _offlineDone = false;                   // fully cached this app session (don't re-run)
+let _offlineRunning = false;                // a prep pass is in flight
+let _offlineProg: { frac: number; label: string } | null = null;   // last emitted progress
+let _offlineListener: ((p: { frac: number; label: string } | null) => void) | null = null;
+function _emitOffline(p: { frac: number; label: string } | null) { _offlineProg = p; if (_offlineListener) _offlineListener(p); }
+
+// Cache everything needed for offline use, with a visible progress bar. Runs to completion in the
+// background even if the user navigates away; only marks done when it actually finishes, so an
+// interruption (or offline moment) auto-resumes next focus — or via the box's Resume button.
+async function runOfflinePrep(reg?: string) {
+  if (_offlineDone || _offlineRunning || !reg) return;
+  if (require('react-native').Platform.OS === 'web') return;        // web is always online
+  _offlineRunning = true;
+  try {
+    if (!(await serverReachable())) { _offlineRunning = false; return; }   // offline now → retry next focus
+    await prepareOffline(reg, (frac, label) => _emitOffline({ frac, label }));
+    _offlineDone = true;
+    _emitOffline({ frac: 1, label: 'Ready for offline' });
+    setTimeout(() => { if (_offlineDone) _emitOffline(null); }, 2500);
+  } catch { /* leave _offlineDone false so it resumes */ }
+  finally { _offlineRunning = false; }
+}
+
 let _loginUpdateNoticeShown = false;       // login "please update" pop-up — once per app session
 
 function fmtLeft(c: CheckStatus): string {
@@ -56,24 +80,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [refreshedAt, setRefreshedAt] = useState('');
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
-  const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(null);
-
-  // Cache everything needed for offline use once per session, with a visible progress bar so crew
-  // know when it is safe to go offline (lists incl. the AMM task-card list, schedule, defects, maps).
-  // AMM *instructions* are intentionally left ONLINE-ONLY for now (a per-ATA bundle download is the
-  // planned offline solution) — so no bulk instruction download here.
-  function prepOffline(reg: string | undefined, isAlive: () => boolean) {
-    if (_offlinePreparedThisSession || !reg) return;
-    if (require('react-native').Platform.OS === 'web') return;        // web is always online — no offline prep
-    _offlinePreparedThisSession = true;
-    serverReachable().then(async (ok) => {
-      if (!ok) { _offlinePreparedThisSession = false; return; }        // retry next focus when online
-      try {
-        await prepareOffline(reg, (frac, label) => { if (isAlive()) setOfflineProg({ frac, label }); });
-      } catch { /* best-effort */ }
-      if (isAlive()) setTimeout(() => setOfflineProg(null), 2500);
-    }).catch(() => { _offlinePreparedThisSession = false; });
-  }
+  const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
 
   async function syncNow() {
     if (syncing) return;
@@ -182,7 +189,7 @@ export default function MainMenuScreen({ navigation }: any) {
     setFleet(list);
     if (!cur && list.length) { cur = list[0]; await setCurrentAircraft(cur); }
     setAc(cur);
-    prepOffline(cur?.registration, isAlive);   // one-time offline download with a progress bar
+    runOfflinePrep(cur?.registration);         // background offline download (survives navigation, auto-resumes)
     const jobs: Promise<any>[] = [
       publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
@@ -203,8 +210,10 @@ export default function MainMenuScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => {
     let alive = true;
+    _offlineListener = (p) => { if (alive) setOfflineProg(p); };   // reflect prep progress while focused
+    setOfflineProg(_offlineProg);                                  // show current progress on (re)entry
     reload(() => alive);
-    return () => { alive = false; };
+    return () => { alive = false; _offlineListener = null; };      // unsubscribe UI, but never stop the prep
   }, [reload]));
 
   async function manualRefresh() {
@@ -283,7 +292,14 @@ export default function MainMenuScreen({ navigation }: any) {
               <Text style={styles.offPct}>{pct}%</Text>
             </View>
             <View style={styles.offTrack}><View style={[styles.offFill, { width: `${pct}%` }, done && { backgroundColor: theme.green }]} /></View>
-            <Text style={styles.offLabel}>{done ? 'Pickers, schedule, defects and maps are on this iPad. (AMM instructions open online only.)' : offlineProg.label}</Text>
+            <View style={styles.offFoot}>
+              <Text style={[styles.offLabel, { flex: 1 }]}>{done ? 'Pickers, schedule, defects and maps are on this iPad. (AMM instructions open online only.)' : offlineProg.label}</Text>
+              {!done ? (
+                <TouchableOpacity style={styles.offResume} onPress={() => runOfflinePrep(currentAircraft()?.registration)}>
+                  <Text style={styles.offResumeTxt}>↻ Resume</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         );
       })() : null}
@@ -407,6 +423,9 @@ const styles = StyleSheet.create({
   offTrack: { height: 6, borderRadius: 3, backgroundColor: theme.tile, marginTop: 8, overflow: 'hidden' },
   offFill: { height: 6, borderRadius: 3, backgroundColor: theme.accent },
   offLabel: { color: theme.sub, fontSize: 11, marginTop: 6 },
+  offFoot: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  offResume: { borderWidth: 1, borderColor: theme.accent, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 12, marginTop: 6 },
+  offResumeTxt: { color: theme.accent, fontWeight: '800', fontSize: 12 },
   testBanner: { backgroundColor: 'rgba(240,165,0,0.14)', borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   testTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
 
