@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, userLicence } from '../api/client';
+import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, userLicence, userName } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
@@ -36,7 +36,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [sig, setSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
-  const [signer, setSigner] = useState('');
+  const [signer, setSigner] = useState(userName() ?? '');   // pre-filled from profile, editable
   const [licence, setLicence] = useState(userLicence() ?? '');   // pre-filled from profile, editable
   const [showReset, setShowReset] = useState(false);
   const [resetReason, setResetReason] = useState('');
