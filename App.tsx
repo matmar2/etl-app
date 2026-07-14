@@ -28,6 +28,7 @@ import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
 import AckOverlay from './src/components/AckOverlay';
 import BroadcastGate from './src/components/BroadcastGate';
+import InductionGate from './src/components/InductionGate';
 import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
 
@@ -184,6 +185,7 @@ export default function App() {
     </NavigationContainer>
     <AckOverlay navRef={navRef} />
     <BroadcastGate />
+    <InductionGate />
     </View>
     </ErrorBoundary>
   );

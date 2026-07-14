@@ -1229,6 +1229,42 @@ async function localAssist(question: string): Promise<AssistAnswer> {
   return { answer: 'You’re offline and I couldn’t match a guide section. Open the User Guide, or send Feedback.', sources: [], mode: 'offline-none' };
 }
 
+// Per-role login induction — cover email + role PPTX (slide images), shown once per user.
+export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[] };
+export async function pendingInduction(): Promise<Induction | null> {
+  const ackedVer = await _cacheGet<number>('induction_acked');
+  try {
+    const r = await api('/induction/pending');
+    if (r && r.role) { await _cacheSet('induction', r); return r; }   // server says: still owed
+    return null;                                                       // server says: acknowledged / none
+  } catch {
+    const cached = await _cacheGet<Induction>('induction');           // offline → last cached, unless locally acked
+    return cached && cached.version !== ackedVer ? cached : null;
+  }
+}
+export async function viewInduction(): Promise<Induction | null> {   // re-view on demand (ignores ack)
+  try {
+    const r = await api('/induction/view');
+    if (r && r.role) { await _cacheSet('induction_view', r); return r; }
+    return null;
+  } catch { return (await _cacheGet<Induction>('induction_view')) || (await _cacheGet<Induction>('induction')) || null; }
+}
+export async function ackInduction(version: number): Promise<void> {
+  await _cacheSet('induction_acked', version);                        // never re-show, even offline
+  try { await api('/induction/ack', { method: 'POST', body: JSON.stringify({ version }) }); }
+  catch {
+    const q = (await _cacheGet<number[]>('induction_ack_queue')) || [];
+    if (!q.includes(version)) { q.push(version); await _cacheSet('induction_ack_queue', q); }
+  }
+}
+export async function flushInductionAcks(): Promise<void> {
+  const q = (await _cacheGet<number[]>('induction_ack_queue')) || [];
+  if (!q.length) return;
+  const left: number[] = [];
+  for (const v of q) { try { await api('/induction/ack', { method: 'POST', body: JSON.stringify({ version: v }) }); } catch { left.push(v); } }
+  await _cacheSet('induction_ack_queue', left);
+}
+
 // Admin broadcasts — targeted pop-ups shown after login AND to already-active sessions (polled).
 // Offline-aware: the pending list is cached so it still pops up with no signal, and an ack made
 // offline is recorded locally (never re-shows) and queued to post when back online.

@@ -8,7 +8,8 @@ import HeaderLogo from '../components/HeaderLogo';
 import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { openInduction, pokeInduction } from '../components/InductionGate';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -22,6 +23,7 @@ const TILES: Tile[] = [
   { key: 'maint', title: 'Maintenance', sub: 'Ground · no crew (CRS)', nav: 'Maintenance', perm: 'maintenance', icon: '⚙️', group: 'Maintenance', tint: theme.green },
   { key: 'docs', title: 'Documents', sub: 'Controlled documents', nav: 'Documents', icon: '📄', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'forms', title: 'Forms', sub: 'Role forms to fill', nav: 'Forms', icon: '📝', group: 'Documents & forms', tint: '#5a8bd0' },
+  { key: 'induction', title: 'Welcome & Quick Ref', sub: 'Your role induction', nav: '', icon: '👋', group: 'Help & feedback', tint: '#9b8cf0' },
   { key: 'guide', title: 'User Guide', sub: 'How to use the app', nav: 'Guide', icon: '📖', group: 'Help & feedback', tint: '#9b8cf0' },
   { key: 'assistant', title: 'AI Assistant', sub: 'Ask · works offline', nav: 'Assistant', icon: '🤖', group: 'Help & feedback', tint: '#9b8cf0' },
   { key: 'feedback', title: 'Feedback', sub: 'Report a bug / idea', nav: 'Feedback', icon: '💬', group: 'Help & feedback', tint: '#9b8cf0' },
@@ -192,8 +194,10 @@ export default function MainMenuScreen({ navigation }: any) {
     setAc(cur);
     runOfflinePrep(cur?.registration);         // background offline download (survives navigation, auto-resumes)
     pokeBroadcasts();                                // check for admin pop-ups now (immediate on login)
+    pokeInduction();                                 // check for the role induction (email + PPTX) on login
     const jobs: Promise<any>[] = [
       flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
+      flushInductionAcks().catch(() => {}),          // send any induction acks made while offline
       publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
@@ -384,7 +388,7 @@ export default function MainMenuScreen({ navigation }: any) {
               <View style={styles.grid}>
                 {tiles.map((t) => (
                   <TouchableOpacity key={t.key} activeOpacity={0.85} style={styles.card}
-                    onPress={() => t.nav && navigation.navigate(t.nav, { aircraftId: ac?.registration ?? 'LZ-FSA' })}>
+                    onPress={() => t.key === 'induction' ? openInduction() : (t.nav && navigation.navigate(t.nav, { aircraftId: ac?.registration ?? 'LZ-FSA' }))}>
                     <View style={[styles.iconBox, { backgroundColor: t.tint + '22', borderColor: t.tint + '66' }]}>
                       <Text style={styles.icon}>{t.icon}</Text>
                     </View>
