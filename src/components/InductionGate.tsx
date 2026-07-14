@@ -22,6 +22,7 @@ export default function InductionGate() {
   const [phase, setPhase] = useState<Phase>('email');
   const [i, setI] = useState(0);
   const [agreed, setAgreed] = useState(false);
+  const [showAgain, setShowAgain] = useState(false);   // opt to see the welcome again next sign-in
   const showing = useRef(false);
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function InductionGate() {
       if (alive && p && (p.slides?.length || p.email_body)) start(p, 'view');
     }
     function start(p: Induction, m: 'auto' | 'view') {
-      showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setInd(p);
+      showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false); setInd(p);
     }
     _poke = tick; _open = open; tick();
     const t = setInterval(tick, 20000);
@@ -50,9 +51,16 @@ export default function InductionGate() {
   if (!ind) return null;
   const slides = ind.slides || [];
   const lastSlide = i + 1 >= slides.length;
+  // Personalised greeting (title + full name); drop the generic "Dear Colleagues," from the body.
+  const greeting = `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
+  const body = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
 
   function close() { showing.current = false; setInd(null); }
-  function confirm() { if (!agreed) return; ackInduction(ind!.version); close(); }
+  function confirm() {
+    if (!agreed) return;
+    if (!showAgain) ackInduction(ind!.version);            // if they want to see it again, don't record the ack
+    close();
+  }
   function next() {
     if (phase === 'email') { setPhase(slides.length ? 'slide' : (mode === 'view' ? 'email' : 'ack')); if (!slides.length && mode === 'view') close(); return; }
     if (phase === 'slide') {
@@ -83,7 +91,8 @@ export default function InductionGate() {
               <Text style={s.mailLine}><Text style={s.mailLbl}>To: </Text>{userName() || 'You'}</Text>
             </View>
             {ind.email_subject ? <Text style={s.subject}>{ind.email_subject}</Text> : null}
-            <Text style={s.email}>{ind.email_body}</Text>
+            <Text style={s.greeting}>{greeting}</Text>
+            <Text style={s.email}>{body}</Text>
           </ScrollView>
         ) : phase === 'slide' ? (
           <TouchableOpacity style={s.slideArea} activeOpacity={0.96} onPress={next}>
@@ -95,7 +104,11 @@ export default function InductionGate() {
             <Text style={s.ackSub}>You have read the welcome notice and the {roleLabel(ind.role)} Quick Reference. Please confirm below — this is recorded and won’t be shown again.</Text>
             <TouchableOpacity style={s.checkRow} activeOpacity={0.8} onPress={() => setAgreed((v) => !v)}>
               <View style={[s.box, agreed && s.boxOn]}>{agreed ? <Text style={s.tick}>✓</Text> : null}</View>
-              <Text style={s.checkLabel}>I have read and understood the welcome notice and the {roleLabel(ind.role)} Quick Reference.</Text>
+              <Text style={s.checkLabel}>I have read and understood the welcome notice and the {roleLabel(ind.role)} Quick Reference.<Text style={s.req}>  *required</Text></Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.checkRow, { marginTop: 12 }]} activeOpacity={0.8} onPress={() => setShowAgain((v) => !v)}>
+              <View style={[s.box, showAgain && s.boxOn]}>{showAgain ? <Text style={s.tick}>✓</Text> : null}</View>
+              <Text style={s.checkLabel}>Show me this welcome again at my next sign-in.<Text style={s.opt}>  (optional — you can always re-open it from “Welcome &amp; Quick Ref” on the menu)</Text></Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -129,7 +142,10 @@ const s = StyleSheet.create({
   mailLine: { color: theme.text, fontSize: 14, lineHeight: 22 },
   mailLbl: { color: theme.sub, fontWeight: '700' },
   subject: { color: theme.text, fontSize: 20, fontWeight: '800', marginBottom: 14, lineHeight: 27 },
+  greeting: { color: theme.text, fontSize: 15, lineHeight: 23, fontWeight: '700', marginBottom: 10 },
   email: { color: theme.text, fontSize: 15, lineHeight: 23 },
+  req: { color: theme.red, fontSize: 12, fontWeight: '700' },
+  opt: { color: theme.sub, fontSize: 12, fontWeight: '400' },
   slideArea: { flex: 1, backgroundColor: '#000', padding: 8 },
   ackContent: { padding: 24, width: '100%', maxWidth: 620, alignSelf: 'center', flexGrow: 1, justifyContent: 'center' },
   ackTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 8 },
