@@ -256,10 +256,10 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
                   {t.note ? <Text style={s.tnote}>NOTE: {t.note}</Text> : null}
                   <View style={s.row}>
                     <View style={s.signCol}><Text style={s.signLbl}>MECH</Text>
-                      <Switch value={!!state[t.id]?.mech} onValueChange={(v) => { set(t.id, { mech: v }); if (badId === t.id) setBadId(null); }} /></View>
+                      <Switch value={!!state[t.id]?.mech} disabled={!canEdit} onValueChange={(v) => { set(t.id, { mech: v }); if (badId === t.id) setBadId(null); }} /></View>
                     {t.insp ? (
                       <View style={s.signCol}><Text style={[s.signLbl, { color: theme.accent }]}>INSP</Text>
-                        <Switch value={!!state[t.id]?.insp} onValueChange={(v) => { set(t.id, { insp: v }); if (badId === t.id) setBadId(null); }} /></View>
+                        <Switch value={!!state[t.id]?.insp} disabled={!canEdit} onValueChange={(v) => { set(t.id, { insp: v }); if (badId === t.id) setBadId(null); }} /></View>
                     ) : null}
                   </View>
                   {t.fields?.length ? (
@@ -269,7 +269,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
                         return (
                         <View key={f.key} style={{ width: 110 }}>
                           <Text style={s.fLbl}>{f.label}</Text>
-                          <TextInput ref={(r) => { fieldRefs.current[fid] = r; }}
+                          <TextInput ref={(r) => { fieldRefs.current[fid] = r; }} editable={canEdit}
                             style={[s.fInput, badId === fid ? { borderColor: theme.red, borderWidth: 2 } : null]}
                             value={state[t.id]?.fields?.[f.key] ?? ''} keyboardType="numeric"
                             onChangeText={(v) => { setField(t.id, f.key, v); if (badId === fid) setBadId(null); }} />
