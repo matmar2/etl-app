@@ -68,6 +68,10 @@ export default function InductionGate() {
       mode === 'view' ? close() : setPhase('ack');
     }
   }
+  function back() {
+    if (phase === 'ack') { setI(Math.max(0, slides.length - 1)); setPhase('slide'); return; }
+    if (phase === 'slide') { i > 0 ? setI(i - 1) : setPhase('email'); }
+  }
 
   return (
     <Modal visible animationType="slide" onRequestClose={() => mode === 'view' && close()}>
@@ -113,18 +117,23 @@ export default function InductionGate() {
           </ScrollView>
         )}
 
-        {phase === 'ack' ? (
-          <TouchableOpacity style={[s.btn, !agreed && s.btnDisabled]} onPress={confirm} disabled={!agreed} activeOpacity={0.85}>
-            <Text style={s.btnTxt}>Confirm &amp; finish</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={s.btn} onPress={next} activeOpacity={0.85}>
-            <Text style={s.btnTxt}>
-              {phase === 'email' ? (slides.length ? 'Read the Quick Reference  ›' : (mode === 'view' ? 'Close' : 'Continue  ›'))
-                : (lastSlide ? (mode === 'view' ? 'Close' : 'Continue to acknowledgement  ›') : 'Next  ›   (or tap the slide)')}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View style={s.bar}>
+          {phase !== 'email' ? (
+            <TouchableOpacity style={s.backBtn} onPress={back} activeOpacity={0.85}><Text style={s.backTxt}>‹ Back</Text></TouchableOpacity>
+          ) : null}
+          {phase === 'ack' ? (
+            <TouchableOpacity style={[s.btn, s.grow, !agreed && s.btnDisabled]} onPress={confirm} disabled={!agreed} activeOpacity={0.85}>
+              <Text style={s.btnTxt}>Confirm &amp; finish</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={[s.btn, s.grow]} onPress={next} activeOpacity={0.85}>
+              <Text style={s.btnTxt}>
+                {phase === 'email' ? (slides.length ? 'Read the Quick Reference  ›' : (mode === 'view' ? 'Close' : 'Continue  ›'))
+                  : (lastSlide ? (mode === 'view' ? 'Close' : 'Continue to acknowledgement  ›') : 'Next  ›   (or tap the slide)')}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </Modal>
   );
@@ -155,7 +164,11 @@ const s = StyleSheet.create({
   boxOn: { backgroundColor: theme.green, borderColor: theme.green },
   tick: { color: '#fff', fontWeight: '900', fontSize: 16 },
   checkLabel: { color: theme.text, fontSize: 15, lineHeight: 22, flex: 1, fontWeight: '600' },
+  bar: { flexDirection: 'row', alignItems: 'stretch' },
+  backBtn: { backgroundColor: theme.panel, borderTopWidth: 1, borderRightWidth: 1, borderColor: theme.border, paddingVertical: 16, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  backTxt: { color: theme.text, fontWeight: '800', fontSize: 16 },
   btn: { backgroundColor: theme.accent, paddingVertical: 16, alignItems: 'center' },
+  grow: { flex: 1 },
   btnDisabled: { opacity: 0.4 },
   btnTxt: { color: '#fff', fontWeight: '800', fontSize: 16 },
 });
