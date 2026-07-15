@@ -167,7 +167,8 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
-      <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed'} />
+      {/* Once the CRS is signed (rectified/closed) the photos are part of the signed record — view only, no re-take/library. */}
+      <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed' || d.status === 'rectified'} />
 
       {d.can_delete ? (
         <TouchableOpacity onPress={del} style={{ marginTop: 14 }}>

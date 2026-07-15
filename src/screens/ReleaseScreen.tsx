@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, userLicence, userName } from '../api/client';
+import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, sectorTlHtmlCached, userLicence, userName } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
@@ -71,8 +71,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // Preview the Tech Log / CRS page for this sector before signing (writes nothing).
   async function previewCRS() {
     setPreviewing(true); setMsg('');
-    try { const { html } = await sectorTlHtml(sectorId); if (html) await printHtml(html); }
-    catch (e: any) { setMsg(e?.message?.includes('Network') ? 'Preview needs a connection.' : (e?.message || 'Could not open the preview.')); }
+    try { const { html } = await sectorTlHtmlCached(sectorId); if (html) await printHtml(html); }   // cached standard format works offline
+    catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline in the standard format.' : (e?.message || 'Could not open the preview.')); }
     finally { setPreviewing(false); }
   }
 
@@ -120,10 +120,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
       // all fields, logo); fall back to the local renderer when offline.
       if (doc === 'tl' && kind !== 'bt') {
         try {
-          const { html } = await sectorTlHtml(sectorId);
+          const { html } = await sectorTlHtmlCached(sectorId);   // server standard format, cached for offline
           if (kind === 'air') return await printHtml(html);
           return await shareHtml(html);
-        } catch { /* offline → local render below */ }
+        } catch { /* not cached (e.g. released offline, never synced) → local render below */ }
       }
       const data = await tlData(sectorId);
       if (kind === 'air') await airPrint(data, doc);

@@ -544,8 +544,8 @@ export const defectCrsPreview = (defectId: string): Promise<{ html: string }> =>
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
 export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: string; cached?: boolean }> {
-  try { const r = await sectorTlHtml(sectorId); if (r?.html) { await setRef(`tl_${sectorId}`, r.html); return r; } } catch { /* offline */ }
-  const { data } = await getRef<string>(`tl_${sectorId}`);
+  try { const r = await sectorTlHtml(sectorId); if (r?.html) { setRef(`tl_${sectorId}`, r.html).catch(() => {}); _cacheSet(`tl_${sectorId}`, r.html).catch(() => {}); return r; } } catch { /* offline */ }
+  const data = (await getRef<string>(`tl_${sectorId}`)).data ?? (await _cacheGet<string>(`tl_${sectorId}`));   // SQLite (native) or localStorage (web)
   if (data) return { html: data, cached: true };
   throw new Error('Offline — this Tech Log has not been cached on this iPad yet.');
 }
@@ -913,7 +913,8 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
   const scope = (list: SignOff[]) => reg ? list.filter((g) => (g.registration || '').toUpperCase() === reg.toUpperCase()) : list;
   try {
     const r: { days: number; signoffs: SignOff[]; categories?: string[] } = await api(`/signoffs/recent?days=${days}${reg ? `&reg=${encodeURIComponent(reg)}` : ''}`);
-    setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy key
+    setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy (SQLite/native)
+    _cacheSet(key, r).catch(() => {});                                        // localStorage so the web crew app also works offline
     const ids = Array.from(new Set(r.signoffs.map((g) => g.sector_id).filter(Boolean))) as string[];
     const dids = Array.from(new Set(r.signoffs.map((g) => (g as any).defect_id).filter(Boolean))) as string[];
     Promise.all([
@@ -923,6 +924,7 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
     return r;
   } catch {
     let { data } = await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);
+    if (!data) data = await _cacheGet<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);   // web localStorage
     if (!data) data = (await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>('signoffs')).data;   // fall back to the fleet-wide cache
     return data ? { days: data.days, signoffs: scope(data.signoffs), categories: data.categories, cached: true } : { days, signoffs: [], cached: true };
   }
