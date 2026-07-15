@@ -197,6 +197,8 @@ export async function prefetchLogbooks(): Promise<void> {
     const fleet = await fleetList();
     await Promise.all(fleet.map(async (a) => {
       const reg = a.registration;
+      await aircraftConfig(reg).catch(() => {});        // fuel tanks/limits for offline Departure
+      await aircraftUtilisation(reg).catch(() => {});   // last-known TSN/CSN
       await hilHtml(reg).catch(() => {});
       await cabinLogHtml(reg).catch(() => {});
       await listClearedCabin(reg).catch(() => {});      // closed cabin history — cabin crew review it offline
@@ -554,6 +556,17 @@ export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: stri
 // Cabin Defect Log, signed check records): cache the last online render (SQLite for capacity +
 // SecureStore for web) and return it when the fetch fails. Native SecureStore may reject large
 // blobs — that's fine, getRef (SQLite) still has it. Kept fresh on every online view + on login.
+// Cache any GET JSON per key (SecureStore + SQLite) and return it offline. For fairly static
+// or last-known-good data the crew must still see with no signal (aircraft config, utilisation).
+async function cachedJson<T>(key: string, path: string): Promise<T> {
+  try { const r = await api(path); _cacheSet(key, r).catch(() => {}); setRef(key, r).catch(() => {}); return r as T; }
+  catch (e) {
+    const c = (await _cacheGet<T>(key)) ?? (await getRef<T>(key)).data;
+    if (c != null) return c as T;
+    throw e;
+  }
+}
+
 async function cachedHtml(key: string, path: string): Promise<{ html: string }> {
   try {
     const r: { html: string } = await api(path);
@@ -608,7 +621,7 @@ export async function loadCurrentAircraft(): Promise<Fleet | null> {
 
 export type Tank = { field: string; label: string; max: number };
 export const aircraftConfig = (reg: string): Promise<{ registration: string; type: string; tanks: Tank[]; min_fuel_kg?: number | null; fuel_capacity_kg?: number | null; fuel_ref?: string | null; fuel_density_ref?: number | null; oil_min_qt?: number | null; oil_max_qt?: number | null; oil_consumption_qt_h?: number | null; hyd_min_green_l?: number | null; hyd_min_blue_l?: number | null; hyd_min_yellow_l?: number | null; oil_hyd_ref?: string | null }> =>
-  api(`/aircraft/${encodeURIComponent(reg)}/config`);
+  cachedJson(`accfg_${reg.toUpperCase()}`, `/aircraft/${encodeURIComponent(reg)}/config`);   // cached: fuel tanks/limits available offline for Departure
 
 export type Airport = { valid: boolean; icao: string; iata?: string | null; name?: string | null; city?: string | null; country?: string | null; lat?: number | null; lon?: number | null };
 export const airportLookup = (code: string): Promise<Airport> =>
@@ -837,7 +850,7 @@ export type Utilisation = { registration: string; etl: { tsn_fh: number; csn_fc:
   pending_sectors: number; match: boolean | null; diff_fh: number | null; diff_fc: number | null; error: string | null;
   oases_lag?: { legs: number; fh: number; review: boolean; oases_tsn?: number; oases_csn?: number; at?: string } | null };
 export const aircraftUtilisation = (reg: string): Promise<Utilisation> =>
-  api(`/aircraft/${encodeURIComponent(reg)}/utilisation`);
+  cachedJson(`util_${reg.toUpperCase()}`, `/aircraft/${encodeURIComponent(reg)}/utilisation`);   // cached: last-known TSN/CSN offline
 
 // Per-aircraft iPads + master designation (sync precedence master → FO → Backup → Cabin).
 export type Ipad = { id: string; label: string; role: string; role_label: string; is_master: boolean;
