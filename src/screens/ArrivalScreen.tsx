@@ -3,6 +3,7 @@ import { Alert, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity,
 import { acceptDispatch, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, publicConfig, role, signRecord, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
+import OfflineFlash from '../components/OfflineFlash';
 import TechLogPageModal from '../components/TechLogPageModal';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
@@ -288,6 +289,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <TouchableOpacity disabled={!canAct} style={[sx.save, { backgroundColor: theme.accent, opacity: canAct ? 1 : 0.4 }]} onPress={accept}>
         <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : (signMsg || 'Sign — close sector (arrival)')}</Text>
       </TouchableOpacity>
+      <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
       {(s.status === 'closed' || s.status === 'exported') ? (
         <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowTlp(true)}>
           <Text style={sx.saveText}>📄  View Tech Log page (goes to OASES)</Text>

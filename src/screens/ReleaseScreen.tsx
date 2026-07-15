@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, Touc
 import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, sectorTlHtmlCached, userLicence, userName } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
+import OfflineFlash from '../components/OfflineFlash';
 import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, shareHtml, sharePdf } from '../print';
@@ -239,7 +240,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
           </View>
         </View>
       ) : null}
-      {msg ? <Text style={s.msg}>{msg}</Text> : null}
+      {/offline|will sync|queued/i.test(msg) ? <OfflineFlash message={msg} /> : (msg ? <Text style={s.msg}>{msg}</Text> : null)}
 
       <SignaturePad visible={signing} title="Sign maintenance release (CRS)"
         onClose={() => setSigning(false)}

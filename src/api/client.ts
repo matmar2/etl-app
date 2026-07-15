@@ -118,11 +118,11 @@ export async function deviceId(): Promise<string> {
 }
 
 // Offline login/logout events queue locally and flush to /auth/event once back online.
-async function queueAuthEvent(kind: 'login' | 'logout') {
+async function queueAuthEvent(kind: 'login' | 'logout', mfa?: string) {
   try {
     const raw = await SecureStore.getItem('auth_events');
     const arr = raw ? JSON.parse(raw) : [];
-    arr.push({ kind, mode: 'offline', at: new Date().toISOString(), device_id: await deviceId() });
+    arr.push({ kind, mode: 'offline', at: new Date().toISOString(), device_id: await deviceId(), ...(mfa ? { mfa } : {}) });
     await SecureStore.setItem('auth_events', JSON.stringify(arr.slice(-50)));
   } catch { /* best-effort */ }
 }
@@ -228,12 +228,14 @@ export async function loginOffline(username: string, password: string, otp?: str
   if (sha1Hex(c.salt + password) !== c.pwHash) throw new Error('Invalid username or password (offline).');
   // Mirror the server: MFA is required when the user has it enabled OR testing_mode is on,
   // and the test code 123456 is accepted while testing (real TOTP always is).
+  let mfaMethod = 'none';
   if (c.mfa_enabled || c.testing || c.secret) {   // require MFA offline whenever the account has an authenticator
     if (!otp) throw new MfaRequired();
     const code = otp.trim();
     const testingBypass = c.testing && code === TEST_MFA_CODE;
     const realOk = !!c.secret && verifyTotp(c.secret, code);
     if (!testingBypass && !realOk) throw new Error('Invalid MFA code (offline).');
+    mfaMethod = testingBypass ? 'test_code' : 'authenticator';   // audited when the offline login syncs
   }
   await SecureStore.setItem('token', c.token || '');
   _role = c.role ?? null;
@@ -242,7 +244,7 @@ export async function loginOffline(username: string, password: string, otp?: str
   _licence = c.licence ?? null;
   _clearanceAuthorized = !!c.clearance;
   _perms = c.perms ?? _perms;
-  queueAuthEvent('login').catch(() => {});         // recorded to the server when next online
+  queueAuthEvent('login', mfaMethod).catch(() => {});   // recorded to the server (incl. 123456 use) when next online
   return { access_token: c.token, role: c.role, offline: true };
 }
 

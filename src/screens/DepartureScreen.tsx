@@ -4,6 +4,7 @@ import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'rea
 import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
+import OfflineFlash from '../components/OfflineFlash';
 import PhotoCapture from '../components/PhotoCapture';
 import RoBanner from '../components/RoBanner';
 import SignaturePad from '../components/SignaturePad';
@@ -613,6 +614,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           <TouchableOpacity disabled={!isCrew} style={[sx.save, { backgroundColor: theme.accent, opacity: isCrew ? 1 : 0.4 }]} onPress={accept}>
             <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || 'Sign — accept aircraft (departure)'}</Text>
           </TouchableOpacity>
+          <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
         </>
       )}
       <WalkaroundModal visible={walkOpen} inspector={pfiName.trim()}
