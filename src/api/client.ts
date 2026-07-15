@@ -189,27 +189,20 @@ export async function prefetchOfflineFlights(): Promise<number> {
   return n;
 }
 
-// Warm the offline cache of the standard HIL / Cabin Defect Log forms and the completed-checks
-// list for every tail, so they are available offline in their EXACT paper format even if the
-// crew never opened them online. Best-effort, fire-and-forget.
-export async function prefetchLogbooks(): Promise<void> {
-  try {
-    const fleet = await fleetList();
-    await Promise.all(fleet.map(async (a) => {
-      const reg = a.registration;
-      await aircraftConfig(reg).catch(() => {});        // fuel tanks/limits for offline Departure
-      await aircraftUtilisation(reg).catch(() => {});   // last-known TSN/CSN
-      await hilHtml(reg).catch(() => {});
-      await cabinLogHtml(reg).catch(() => {});
-      await listClearedCabin(reg).catch(() => {});      // closed cabin history — cabin crew review it offline
-      await listActiveDefects(reg).catch(() => {});
-      await listHIL(reg).catch(() => {});
-      const recs = await listChecks(reg).catch(() => [] as CheckRecord[]);
-      // warm each completed check's record HTML so "View / print" works offline (skip local, un-synced ids)
-      for (const c of recs) if (c.id && !String(c.id).startsWith('lc_')) await checkHtml(c.id).catch(() => {});
-      await signoffsRecent(31, reg).catch(() => {});     // Flight Sign Off list + signed CRS/Tech-Log docs for this tail
-    }));
-  } catch { /* offline or no fleet */ }
+// Warm the offline cache of the standard HIL / Cabin Defect Log forms, checks and sign-offs for
+// the CURRENT tail. Best-effort, sequential, fire-and-forget.
+export async function prefetchLogbooks(reg?: string): Promise<void> {
+  const r = reg || currentAircraft()?.registration;
+  if (!r) return;                                   // CURRENT tail only — warming all ~10 tails saturated the network
+  await aircraftConfig(r).catch(() => {});          // fuel tanks/limits for offline Departure
+  await aircraftUtilisation(r).catch(() => {});     // last-known TSN/CSN
+  await hilHtml(r).catch(() => {});
+  await cabinLogHtml(r).catch(() => {});
+  await listClearedCabin(r).catch(() => {});        // closed cabin history — cabin crew review it offline
+  await listActiveDefects(r).catch(() => {});
+  await listHIL(r).catch(() => {});
+  await listChecks(r).catch(() => {});              // check-record HTML caches lazily on view (avoids a request burst)
+  await signoffsRecent(31, r).catch(() => {});      // Flight Sign Off list + sector Tech-Log/CRS docs for this tail
 }
 
 // Offline login: verify the password (cached verifier) and MFA code (cached TOTP
@@ -325,11 +318,14 @@ async function authHeader() {
 let _devIdCache: string | null = null;
 async function _devId(): Promise<string> { if (!_devIdCache) _devIdCache = await deviceId(); return _devIdCache; }
 
+let _lastApiOk = 0;   // epoch ms of the last time a request actually reached the server (any status)
+
 async function api(path: string, init: RequestInit = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()), ...(init.headers ?? {}) };
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, { ...init, headers });
+    _lastApiOk = Date.now();                          // the server responded (even a 4xx means we're online)
   } catch {
     throw new NetworkError();                         // offline / server unreachable → callers fall back to local
   }
@@ -542,7 +538,7 @@ export const raiseCorrection = (sectorId: string, body: { field?: string; old_va
   mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
 export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
 // Preview the Tech Log / CRS page a defect rectification will be recorded on, before signing (writes nothing).
-export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => cachedHtml(`defcrs_${defectId}`, `/defects/${defectId}/crs-preview`);
+export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => api(`/defects/${defectId}/crs-preview`);
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
 export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: string; cached?: boolean }> {
@@ -929,11 +925,7 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
     setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy (SQLite/native)
     _cacheSet(key, r).catch(() => {});                                        // localStorage so the web crew app also works offline
     const ids = Array.from(new Set(r.signoffs.map((g) => g.sector_id).filter(Boolean))) as string[];
-    const dids = Array.from(new Set(r.signoffs.map((g) => (g as any).defect_id).filter(Boolean))) as string[];
-    Promise.all([
-      ...ids.map((id) => sectorTlHtmlCached(id).catch(() => {})),        // sector Tech Log / CRS
-      ...dids.map((id) => defectCrsPreview(id).catch(() => {})),         // defect-rectification signed CRS
-    ]).catch(() => {});   // warm offline docs for every sign-off
+    Promise.all(ids.map((id) => sectorTlHtmlCached(id).catch(() => {}))).catch(() => {});   // warm sector Tech Log / CRS docs for offline
     return r;
   } catch {
     let { data } = await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);
@@ -962,11 +954,16 @@ export async function clockOffsetSeconds(): Promise<number | null> {
 
 // Quick "can we reach the server?" probe for the login screen (online vs offline).
 export async function serverReachable(timeoutMs = 4000): Promise<boolean> {
+  // If a real request reached the server in the last 15 s we're definitely online — skip the
+  // probe. This stops the pill flipping to OFFLINE when the network is momentarily saturated
+  // (e.g. during "Preparing offline data" or an OTA download) and the light probe times out.
+  if (Date.now() - _lastApiOk < 15000) return true;
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), timeoutMs);
     const res = await fetch(`${BASE}/auth/config`, { signal: ctl.signal });
     clearTimeout(t);
+    if (res.ok) _lastApiOk = Date.now();
     return res.ok;
   } catch { return false; }
 }
@@ -1521,6 +1518,7 @@ export async function prepareOffline(reg: string | undefined,
         nextTl(reg).catch(() => {}),
       ]);
     } },
+    { label: 'HIL, Cabin, sign-offs & fuel config', ms: 25000, run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
     { label: 'Previous-leg fuel', ms: 15000, run: () => prefetchLastFuel() },
     { label: 'User guide & assistant', ms: 20000, run: () => prefetchHelp() },
     { label: 'Route maps', ms: 30000, run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },

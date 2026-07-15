@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { sectorTlHtml, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -33,10 +33,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
     refresh();
     return unsub;
   }, [navigation, refresh]);
-  useEffect(() => { sectorTlHtmlCached(sectorId).catch(() => {}); }, [sectorId]);   // warm the standard Tech Log/CRS for offline preview
 
   async function previewTl() {
-    try { const { html } = await sectorTlHtmlCached(sectorId); await printHtml(html); }   // cached server standard format offline
+    try { const { html } = await sectorTlHtml(sectorId); await printHtml(html); }
     catch (e: any) { Alert.alert('Tech Log', `Could not load the Tech Log${e?.message ? ` — ${e.message}` : ''}.\nOpen "Release & Print" for offline print options.`); }
   }
 

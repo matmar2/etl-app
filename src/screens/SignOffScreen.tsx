@@ -38,7 +38,7 @@ export default function SignOffScreen({ navigation }: any) {
     if (g.defect_id) {                                   // defect-rectification CRS → render the signed CRS in standard Tech Log format
       setOpeningId(g.id);
       try { const { html } = await defectCrsPreview(g.defect_id); await printHtml(html); }
-      catch (e: any) { setMsg(/network|connection|failed|offline/i.test(e?.message || '') ? 'Offline — open this CRS once online to make it available offline.' : (e?.message || 'Could not open the CRS.')); }
+      catch (e: any) { setMsg(e?.message || 'Could not open the CRS.'); }
       finally { setOpeningId(null); }
       return;
     }
