@@ -117,7 +117,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <Text style={sx.title}>Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={sx.title}>After Departure closed / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}
@@ -169,6 +169,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OFF / ON / IN)</Text>
+      <Text style={[sx.sub, { marginTop: 0 }]}>Take-off (OFF): stamp at brake release — the start of the take-off roll, not at rotation.</Text>
       <OOOISection s={s} fields={['takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
       <Text style={sx.sub}>Block {hm(s.block_time_min)} · Flight {hm(s.flight_time_min)} (h:mm)</Text>
 

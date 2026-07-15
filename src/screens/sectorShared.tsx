@@ -35,7 +35,7 @@ const round1 = (x: number) => Math.round(x * 10) / 10;
 export { round1 };
 
 const OOOI_LABEL: Record<string, string> = {
-  off_block: 'Off Blocks', takeoff: 'Airborne', landing: 'Landed', on_block: 'On Blocks',
+  off_block: 'Off Blocks', takeoff: 'Take-off', landing: 'Landed', on_block: 'On Blocks',
 };
 
 export function useSector(sectorId: string) {

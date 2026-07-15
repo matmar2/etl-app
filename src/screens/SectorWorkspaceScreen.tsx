@@ -98,8 +98,8 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       </TouchableOpacity>
 
       <TouchableOpacity style={[styles.card, { borderColor: arrDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Arrival', { sectorId })}>
-        <Text style={styles.cardTitle}>Arrival  ›</Text>
-        <Text style={styles.cardSub}>Airborne/landed/on-block, fuel, landings, MAREP defects, post-flight acceptance</Text>
+        <Text style={styles.cardTitle}>After Departure closed / Arrival  ›</Text>
+        <Text style={styles.cardSub}>Take-off (at brake release) / landed / on-block times, fuel, landings, MAREP defects, post-flight acceptance</Text>
         <Text style={styles.cardState}>{arrDone ? `On-block ${hhmm(s.on_block)} · ${s.status}` : 'Not started'}</Text>
       </TouchableOpacity>
 

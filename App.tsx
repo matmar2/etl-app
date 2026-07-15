@@ -167,7 +167,7 @@ export default function App() {
         <Stack.Screen name="Sector" component={SectorWorkspaceScreen} options={{ title: 'Sector' }} />
         <Stack.Screen name="Departure" component={DepartureScreen} options={{ title: 'Departure' }} />
         <Stack.Screen name="Deicing" component={DeicingScreen} options={{ title: 'De-icing' }} />
-        <Stack.Screen name="Arrival" component={ArrivalScreen} options={{ title: 'Arrival' }} />
+        <Stack.Screen name="Arrival" component={ArrivalScreen} options={{ title: 'After Departure closed / Arrival' }} />
         <Stack.Screen name="Defects" component={DefectsScreen} options={{ title: 'Defects' }} />
         <Stack.Screen name="DefectDetail" component={DefectDetailScreen} options={{ title: 'Defect' }} />
         <Stack.Screen name="ReportDefect" component={ReportDefectScreen} options={{ title: 'Report defect' }} />
