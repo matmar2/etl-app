@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
 import { theme } from '../theme';
 
@@ -18,6 +18,9 @@ export default function LoginScreen({ navigation }: any) {
   const [rNew, setRNew] = useState('');
   const [rNew2, setRNew2] = useState('');
   const [rBusy, setRBusy] = useState(false);
+  const [offlineDone, setOfflineDone] = useState<string | null>(null);   // offline reset saved locally (flashing box)
+  const flash = useRef(new Animated.Value(0)).current;                    // 0..1 border pulse
+  const flashLoop = useRef<Animated.CompositeAnimation | null>(null);
   const [offlineReady, setOfflineReady] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);   // null = checking
   useEffect(() => { publicConfig().then((c) => setTesting(!!c.testing_mode)); }, []);
@@ -70,17 +73,34 @@ export default function LoginScreen({ navigation }: any) {
     catch { setNote('Could not request a reset — contact your administrator.'); }
   }
 
+  // Flash the offline-reset box border red for 30 s, then leave it solid red (a persistent
+  // "not yet on the server" reminder).
+  function startFlash() {
+    flashLoop.current?.stop();
+    flash.setValue(1);
+    flashLoop.current = Animated.loop(Animated.sequence([
+      Animated.timing(flash, { toValue: 0.15, duration: 500, useNativeDriver: false }),
+      Animated.timing(flash, { toValue: 1, duration: 500, useNativeDriver: false }),
+    ]));
+    flashLoop.current.start();
+    setTimeout(() => { flashLoop.current?.stop(); flash.setValue(1); }, 30000);
+  }
+  useEffect(() => () => flashLoop.current?.stop(), []);   // stop the loop if the screen unmounts
+
   async function doAuthReset() {
     if (!/^\d{6}$/.test(rOtp.trim())) { setErr('Enter the 6-digit code from your authenticator.'); return; }
     if (rNew.length < 6) { setErr('New password must be at least 6 characters.'); return; }
     if (rNew !== rNew2) { setErr('The two passwords do not match.'); return; }
-    setRBusy(true); setErr(''); setNote('Resetting…');
+    setRBusy(true); setErr(''); setNote(''); setOfflineDone(null);
     try {
       const r = await offlineResetPassword(u.trim(), rOtp.trim(), rNew);
       setReset(false); setP(rNew);
-      setNote(r.synced
-        ? 'Password reset ✓ synced to the server. Sign in with your new password.'
-        : 'Password reset ✓ — sign in now with your new password. It will sync to the server when back online.');
+      if (r.synced) {
+        setNote('Password reset ✓ synced to the server. Sign in with your new password.');
+      } else {
+        setOfflineDone('Password reset saved on this iPad ✓ — sign in now with your new password.  ⚠ It is NOT yet on the server; it will sync automatically when back online.');
+        startFlash();
+      }
     } catch (e: any) { setErr(e?.message || 'Could not reset the password.'); setNote(''); }
     finally { setRBusy(false); }
   }
@@ -121,6 +141,11 @@ export default function LoginScreen({ navigation }: any) {
         </>
       ) : null}
       {note ? <Text style={styles.note}>{note}</Text> : null}
+      {offlineDone ? (
+        <Animated.View style={[styles.offlineBox, { borderColor: flash.interpolate({ inputRange: [0, 1], outputRange: ['rgba(217,83,79,0.12)', theme.red] }) }]}>
+          <Text style={styles.offlineBoxText}>{offlineDone}</Text>
+        </Animated.View>
+      ) : null}
       {err ? <Text style={styles.err}>{err}</Text> : null}
       {!reset ? (
         <>
@@ -186,4 +211,6 @@ const styles = StyleSheet.create({
     borderRadius: 8, padding: 12, marginBottom: 10, fontSize: 15 },
   resetLinks: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   resetHint: { color: theme.sub, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  offlineBox: { width: 360, maxWidth: '90%', backgroundColor: theme.panel, borderWidth: 2, borderRadius: 10, padding: 14, marginBottom: 10 },
+  offlineBoxText: { color: theme.text, fontSize: 13, lineHeight: 19, fontWeight: '600' },
 });

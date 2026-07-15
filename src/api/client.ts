@@ -196,9 +196,15 @@ export async function prefetchLogbooks(): Promise<void> {
   try {
     const fleet = await fleetList();
     await Promise.all(fleet.map(async (a) => {
-      await hilHtml(a.registration).catch(() => {});
-      await cabinLogHtml(a.registration).catch(() => {});
-      await listChecks(a.registration).catch(() => {});
+      const reg = a.registration;
+      await hilHtml(reg).catch(() => {});
+      await cabinLogHtml(reg).catch(() => {});
+      await listClearedCabin(reg).catch(() => {});      // closed cabin history — cabin crew review it offline
+      await listActiveDefects(reg).catch(() => {});
+      await listHIL(reg).catch(() => {});
+      const recs = await listChecks(reg).catch(() => [] as CheckRecord[]);
+      // warm each completed check's record HTML so "View / print" works offline (skip local, un-synced ids)
+      for (const c of recs) if (c.id && !String(c.id).startsWith('lc_')) await checkHtml(c.id).catch(() => {});
     }));
   } catch { /* offline or no fleet */ }
 }
@@ -348,36 +354,35 @@ async function mutateOrQueue(path: string, init: RequestInit): Promise<any> {
 
 export const listOpenDefects = (aircraftId: string) =>
   api(`/defects/open?aircraft_id=${encodeURIComponent(aircraftId)}`);
-export const listActiveDefects = async (aircraftId: string): Promise<any[]> => {
-  try { return await api(`/defects/active?aircraft_id=${encodeURIComponent(aircraftId)}`); }
-  catch (e) {
-    if (!(e instanceof NetworkError)) throw e;
-    const { getLocalAircraftDefects } = require('../db/defects');                    // offline → cached aircraft defects
-    const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
-    return all.filter((d: any) => ['open', 'troubleshooting', 'rectified'].includes(d.status));
-  }
-};
-export const listHIL = async (aircraftId: string): Promise<any[]> => {
-  try { return await api(`/defects/hil?aircraft_id=${encodeURIComponent(aircraftId)}`); }
-  catch (e) {
-    if (!(e instanceof NetworkError)) throw e;
-    const { getLocalAircraftDefects } = require('../db/defects');
-    const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
-    return all.filter((d: any) => d.status === 'deferred');
-  }
-};
-// Cleared (closed) cabin defects — cabin crew can review their rectified/closed items.
-export const listClearedCabin = async (aircraftId: string): Promise<any[]> => {
+// Defect lists cache their server result per aircraft (SecureStore + SQLite) so the Defects,
+// HIL and — importantly — CLOSED cabin lists survive offline. The local defect outbox only holds
+// active items, so closed/cleared history needs its own cache. Offline: cached list, then the
+// local outbox as a last resort.
+async function cachedList(key: string, fetcher: () => Promise<any[]>, localFilter: (d: any) => boolean, aircraftId: string): Promise<any[]> {
   try {
-    const all = await api(`/defects?aircraft_id=${encodeURIComponent(aircraftId)}&status_=closed`);
-    return (all || []).filter((d: any) => d.area === 'cabin');
+    const r = await fetcher();
+    _cacheSet(key, r).catch(() => {}); setRef(key, r).catch(() => {});
+    return r;
   } catch (e) {
     if (!(e instanceof NetworkError)) throw e;
+    const cached = (await _cacheGet<any[]>(key)) ?? (await getRef<any[]>(key)).data;
+    if (cached) return cached;
     const { getLocalAircraftDefects } = require('../db/defects');
     const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
-    return all.filter((d: any) => d.area === 'cabin' && d.status === 'closed');
+    return all.filter(localFilter);
   }
-};
+}
+export const listActiveDefects = (aircraftId: string): Promise<any[]> =>
+  cachedList(`defactive_${aircraftId.toUpperCase()}`, () => api(`/defects/active?aircraft_id=${encodeURIComponent(aircraftId)}`),
+    (d) => ['open', 'troubleshooting', 'rectified'].includes(d.status), aircraftId);
+export const listHIL = (aircraftId: string): Promise<any[]> =>
+  cachedList(`defhil_${aircraftId.toUpperCase()}`, () => api(`/defects/hil?aircraft_id=${encodeURIComponent(aircraftId)}`),
+    (d) => d.status === 'deferred', aircraftId);
+// Cleared (closed) cabin defects — cabin crew can review their rectified/closed items.
+export const listClearedCabin = (aircraftId: string): Promise<any[]> =>
+  cachedList(`defcabinclosed_${aircraftId.toUpperCase()}`,
+    async () => ((await api(`/defects?aircraft_id=${encodeURIComponent(aircraftId)}&status_=closed`)) || []).filter((d: any) => d.area === 'cabin'),
+    (d) => d.area === 'cabin' && d.status === 'closed', aircraftId);
 // Warm the offline defect cache for a tail — the aircraft's active + HIL defects, so the
 // mechanic can see and rectify them (and the release check is accurate) with no signal.
 export async function prefetchAircraftDefects(reg: string): Promise<void> {

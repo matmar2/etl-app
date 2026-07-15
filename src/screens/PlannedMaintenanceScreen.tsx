@@ -56,8 +56,12 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   useEffect(() => { loadRecent(); }, [reg, doneId]);
 
   async function viewRecord(id: string) {
+    if (String(id).startsWith('lc_')) {   // signed on this iPad, not yet synced → no server certificate yet
+      Alert.alert('View', 'This check was signed on this iPad and has not synced yet. The printable certificate becomes available once it syncs to the server (you can already see it in the list).');
+      return;
+    }
     try { const { html } = await checkHtml(id); await printHtml(html); }
-    catch (e: any) { Alert.alert('View', e.message); }
+    catch (e: any) { Alert.alert('View', /network|connection|failed/i.test(e?.message || '') ? 'Not available offline — open this check once online to cache it for offline viewing.' : (e?.message || 'Could not open the record')); }
   }
 
   const [draftLoaded, setDraftLoaded] = useState(false);
