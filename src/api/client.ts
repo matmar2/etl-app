@@ -6,7 +6,7 @@ import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, 
 import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
-import { sha1Hex, verifyTotp } from '../util/totp';
+import { generateTotp, sha1Hex, verifyTotp } from '../util/totp';
 
 const BASE = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? 'http://localhost:8000';
 
@@ -161,6 +161,7 @@ export async function login(username: string, password: string, otp?: string) {
   await loadPermissions();
   cacheOfflineCred(username, password, json.access_token).catch(() => {});
   flushAuthEvents().catch(() => {});               // report any offline logins now we're online
+  syncPasswordResets().catch(() => {});            // propagate any queued offline password reset
   flushFeedback().catch(() => {});                 // send any feedback queued while offline
   prefetchOfflineFlights().catch(() => {});        // warm the offline Leon cache (all tails) for the next 72 h
   prefetchLastFuel().catch(() => {});              // warm previous-leg landing fuel (all tails, last 3 days)
@@ -217,6 +218,55 @@ export const requestOtp = (username: string) =>
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   }).then((r) => r.json());
+
+// ── Offline password reset (self-service, via authenticator) ────────────────────
+// A crew member who forgot their password but has their authenticator can reset it
+// with NO connectivity: we verify a live TOTP against the secret cached in the Keychain
+// at their last online sign-in, rewrite the local password verifier so they can sign in
+// and e-sign immediately, and queue the change. Once online it propagates to the server
+// (authenticated by a fresh authenticator code). Only works on a device where the user
+// has signed in online at least once; requires a REAL code (never the 123456 test code).
+const PW_RESET_KEY = 'pw_reset_pending';
+
+export async function offlineResetPassword(username: string, otp: string, newPassword: string): Promise<{ synced: boolean }> {
+  const uname = username.trim();
+  if ((newPassword || '').length < 6) throw new Error('New password must be at least 6 characters.');
+  const raw = await SecureStore.getItem(offKey(uname));
+  if (!raw) throw new Error('Reset with your authenticator needs a prior online sign-in on this iPad. Connect to the internet and use “Forgot password” for an email link.');
+  const c = JSON.parse(raw);
+  if (!c.mfa_enabled || !c.secret) throw new Error('This account has no authenticator set up on this iPad — use an email reset link instead (needs internet).');
+  if (!verifyTotp(c.secret, (otp || '').trim())) throw new Error('Invalid authenticator code.');   // REAL TOTP only — no 123456 bypass
+  c.pwHash = sha1Hex(c.salt + newPassword);                    // so offline sign-in + e-sign work right away
+  c.at = Date.now();
+  await SecureStore.setItem(offKey(uname), JSON.stringify(c));
+  await SecureStore.setItem(PW_RESET_KEY, JSON.stringify({ username: uname, newPassword, at: Date.now() }));
+  let synced = false;
+  try { synced = await syncPasswordResets(); } catch { /* stays queued */ }
+  return { synced };
+}
+
+// Propagate a queued offline password reset to the server. Authenticated by a fresh
+// TOTP generated from the cached secret (the user already proved possession offline).
+export async function syncPasswordResets(): Promise<boolean> {
+  const raw = await SecureStore.getItem(PW_RESET_KEY);
+  if (!raw) return false;
+  const pend = JSON.parse(raw);
+  const credRaw = await SecureStore.getItem(offKey(pend.username));
+  if (!credRaw) return false;
+  const secret = JSON.parse(credRaw).secret;
+  if (!secret) return false;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/auth/reset-with-authenticator`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Id': await deviceId() },
+      body: JSON.stringify({ username: pend.username, otp: generateTotp(secret), new_password: pend.newPassword }),
+    });
+  } catch { return false; }                          // still offline — keep the pending change
+  if (res.ok) { await SecureStore.deleteItem(PW_RESET_KEY); return true; }
+  return false;                                      // transient server rejection (e.g. clock drift) — retry next sync
+}
+
+export const hasPendingPasswordReset = () => SecureStore.getItem(PW_RESET_KEY).then((v) => !!v).catch(() => false);
 
 export const mfaSetup = (): Promise<{ secret: string; otpauth_uri: string; issuer: string; account: string }> =>
   api('/auth/mfa/setup', { method: 'POST' });
@@ -1158,6 +1208,7 @@ async function flushChecks() {
 export async function syncPush() {
   flushAttachments().catch(() => {});         // best-effort photo upload
   flushChecks().catch(() => {});              // best-effort check replay
+  syncPasswordResets().catch(() => {});       // propagate any offline password reset now we're online
   await flushOutbox(api).catch(() => {});     // replay queued offline mutations (defect actions, signatures, …)
   const d = await db();
   const sectors = await d.getAllAsync<any>('SELECT payload FROM sectors WHERE dirty = 1');

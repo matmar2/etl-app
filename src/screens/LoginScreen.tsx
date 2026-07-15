@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, NetworkError, publicConfig, requestOtp, serverReachable } from '../api/client';
+import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
@@ -13,6 +13,11 @@ export default function LoginScreen({ navigation }: any) {
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [testing, setTesting] = useState(false);
+  const [reset, setReset] = useState(false);        // authenticator reset panel
+  const [rOtp, setROtp] = useState('');
+  const [rNew, setRNew] = useState('');
+  const [rNew2, setRNew2] = useState('');
+  const [rBusy, setRBusy] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);   // null = checking
   useEffect(() => { publicConfig().then((c) => setTesting(!!c.testing_mode)); }, []);
@@ -54,11 +59,30 @@ export default function LoginScreen({ navigation }: any) {
     catch { setNote('Could not request a code.'); }
   }
 
-  async function forgotPwd() {
+  function openReset() {
     if (!u.trim()) { setErr('Enter your User ID first, then tap Forgot password.'); return; }
+    setErr(''); setNote(''); setROtp(''); setRNew(''); setRNew2(''); setReset(true);
+  }
+
+  async function forgotPwd() {
     setErr(''); setNote('Requesting a reset…');
     try { const r = await forgotPassword(u.trim()); setNote(r.message || 'If the account has an email on file, a reset link was sent. Otherwise contact your admin.'); }
     catch { setNote('Could not request a reset — contact your administrator.'); }
+  }
+
+  async function doAuthReset() {
+    if (!/^\d{6}$/.test(rOtp.trim())) { setErr('Enter the 6-digit code from your authenticator.'); return; }
+    if (rNew.length < 6) { setErr('New password must be at least 6 characters.'); return; }
+    if (rNew !== rNew2) { setErr('The two passwords do not match.'); return; }
+    setRBusy(true); setErr(''); setNote('Resetting…');
+    try {
+      const r = await offlineResetPassword(u.trim(), rOtp.trim(), rNew);
+      setReset(false); setP(rNew);
+      setNote(r.synced
+        ? 'Password reset ✓ synced to the server. Sign in with your new password.'
+        : 'Password reset ✓ — sign in now with your new password. It will sync to the server when back online.');
+    } catch (e: any) { setErr(e?.message || 'Could not reset the password.'); setNote(''); }
+    finally { setRBusy(false); }
   }
 
   return (
@@ -98,10 +122,34 @@ export default function LoginScreen({ navigation }: any) {
       ) : null}
       {note ? <Text style={styles.note}>{note}</Text> : null}
       {err ? <Text style={styles.err}>{err}</Text> : null}
-      <TouchableOpacity style={styles.btn} onPress={submit} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{mfa ? 'Verify & sign in' : 'Sign in'}</Text>}
-      </TouchableOpacity>
-      <TouchableOpacity onPress={forgotPwd}><Text style={[styles.link, { marginTop: 12 }]}>Forgot password?</Text></TouchableOpacity>
+      {!reset ? (
+        <>
+          <TouchableOpacity style={styles.btn} onPress={submit} disabled={busy}>
+            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{mfa ? 'Verify & sign in' : 'Sign in'}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openReset}><Text style={[styles.link, { marginTop: 12 }]}>Forgot password?</Text></TouchableOpacity>
+        </>
+      ) : (
+        <View style={styles.resetCard}>
+          <Text style={styles.resetTitle}>Reset with your authenticator</Text>
+          <Text style={styles.resetSub}>Works offline. Enter a code from your authenticator app and choose a new password — you can sign in straight away and it syncs to the server when back online.</Text>
+          <TextInput style={styles.rInput} value={rOtp} onChangeText={setROtp} keyboardType="number-pad"
+            placeholder="6-digit authenticator code" placeholderTextColor={theme.sub} maxLength={6} />
+          <TextInput style={styles.rInput} value={rNew} onChangeText={setRNew} secureTextEntry
+            placeholder="New password" placeholderTextColor={theme.sub} autoCapitalize="none" autoCorrect={false} />
+          <TextInput style={styles.rInput} value={rNew2} onChangeText={setRNew2} secureTextEntry
+            placeholder="Confirm new password" placeholderTextColor={theme.sub} autoCapitalize="none" autoCorrect={false}
+            returnKeyType="go" onSubmitEditing={() => { if (!rBusy) doAuthReset(); }} />
+          <TouchableOpacity style={styles.btn} onPress={doAuthReset} disabled={rBusy}>
+            {rBusy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Reset password</Text>}
+          </TouchableOpacity>
+          <View style={styles.resetLinks}>
+            <TouchableOpacity onPress={forgotPwd}><Text style={styles.link}>Email me a link instead</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => { setReset(false); setErr(''); setNote(''); }}><Text style={styles.link}>Cancel</Text></TouchableOpacity>
+          </View>
+          <Text style={styles.resetHint}>Needs a prior online sign-in on this iPad and your MFA set up. No authenticator? Use the email link (needs internet).</Text>
+        </View>
+      )}
       <Text style={styles.hint}>Pilots, Cabin Crew & mechanics sign in with their crew login and MFA.</Text>
     </View>
   );
@@ -130,4 +178,12 @@ const styles = StyleSheet.create({
   connOff: { color: '#ffb84d', fontSize: 12, fontWeight: '600', marginTop: 8, marginBottom: 4 },
   link: { color: theme.accent, fontSize: 13, marginBottom: 10 },
   hint: { color: theme.sub, fontSize: 12, marginTop: 18 },
+  resetCard: { width: 360, maxWidth: '90%', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 10, padding: 16, marginTop: 6 },
+  resetTitle: { color: theme.text, fontSize: 16, fontWeight: '800', marginBottom: 4 },
+  resetSub: { color: theme.sub, fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  rInput: { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border,
+    borderRadius: 8, padding: 12, marginBottom: 10, fontSize: 15 },
+  resetLinks: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
+  resetHint: { color: theme.sub, fontSize: 11, lineHeight: 15, marginTop: 2 },
 });

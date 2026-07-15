@@ -62,6 +62,13 @@ function hotp(secret: string, counter: number): string {
   return (bin % 1000000).toString().padStart(6, '0');
 }
 
+// Current 6-digit TOTP for the secret — used only to authenticate a queued offline
+// password reset to the server once back online (the user already proved possession of
+// the authenticator by typing a live code at reset time).
+export function generateTotp(secret: string): string {
+  return hotp(secret, Math.floor(Date.now() / 1000 / 30));
+}
+
 // Verify a 6-digit code against the secret, allowing ±`window` 30s steps for clock drift.
 export function verifyTotp(secret: string, code: string, window = 1): boolean {
   const c = (code || '').trim();
