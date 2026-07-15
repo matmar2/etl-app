@@ -538,7 +538,9 @@ export const raiseCorrection = (sectorId: string, body: { field?: string; old_va
   mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
 export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
 // Preview the Tech Log / CRS page a defect rectification will be recorded on, before signing (writes nothing).
-export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => api(`/defects/${defectId}/crs-preview`);
+// Cached so the VAW-ETL-01 CRS page opens offline. Online always fetches fresh (cachedHtml only
+// returns the cache on a NetworkError), so the online render is never stale.
+export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => cachedHtml(`defcrs_${defectId}`, `/defects/${defectId}/crs-preview`);
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
 export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: string; cached?: boolean }> {
@@ -925,7 +927,11 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
     setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy (SQLite/native)
     _cacheSet(key, r).catch(() => {});                                        // localStorage so the web crew app also works offline
     const ids = Array.from(new Set(r.signoffs.map((g) => g.sector_id).filter(Boolean))) as string[];
-    Promise.all(ids.map((id) => sectorTlHtmlCached(id).catch(() => {}))).catch(() => {});   // warm sector Tech Log / CRS docs for offline
+    const dids = Array.from(new Set(r.signoffs.map((g) => (g as any).defect_id).filter(Boolean))) as string[];
+    Promise.all([
+      ...ids.map((id) => sectorTlHtmlCached(id).catch(() => {})),      // sector Tech Log / CRS (VAW-ETL-01)
+      ...dids.map((id) => defectCrsPreview(id).catch(() => {})),       // defect CRS (VAW-ETL-01) — incl. OASES-imported
+    ]).catch(() => {});   // warm offline CRS docs for every sign-off
     return r;
   } catch {
     let { data } = await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);
