@@ -167,6 +167,7 @@ export async function login(username: string, password: string, otp?: string) {
   syncPasswordResets().catch(() => {});            // propagate any queued offline password reset
   flushFeedback().catch(() => {});                 // send any feedback queued while offline
   prefetchOfflineFlights().catch(() => {});        // warm the offline Leon cache (all tails) for the next 72 h
+  prefetchLogbooks().catch(() => {});              // warm the standard HIL/Cabin forms + completed-checks list (all tails)
   prefetchLastFuel().catch(() => {});              // warm previous-leg landing fuel (all tails, last 3 days)
   prefetchHelp().catch(() => {});                  // warm the offline User Guide + FAQ cache
   myFeedback().catch(() => {});                    // warm this user's feedback + replies for offline
@@ -186,6 +187,20 @@ export async function prefetchOfflineFlights(): Promise<number> {
     }));
   } catch { /* offline or no fleet — keep whatever cache we have */ }
   return n;
+}
+
+// Warm the offline cache of the standard HIL / Cabin Defect Log forms and the completed-checks
+// list for every tail, so they are available offline in their EXACT paper format even if the
+// crew never opened them online. Best-effort, fire-and-forget.
+export async function prefetchLogbooks(): Promise<void> {
+  try {
+    const fleet = await fleetList();
+    await Promise.all(fleet.map(async (a) => {
+      await hilHtml(a.registration).catch(() => {});
+      await cabinLogHtml(a.registration).catch(() => {});
+      await listChecks(a.registration).catch(() => {});
+    }));
+  } catch { /* offline or no fleet */ }
 }
 
 // Offline login: verify the password (cached verifier) and MFA code (cached TOTP
@@ -529,12 +544,28 @@ export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: stri
   throw new Error('Offline — this Tech Log has not been cached on this iPad yet.');
 }
 
-// Paper Hold Item List / Cabin Defect Log forms (server-rendered) for view + print.
-export const hilHtml = (reg: string): Promise<{ html: string }> => api(`/logbooks/${encodeURIComponent(reg)}/hil`);
-export const cabinLogHtml = (reg: string): Promise<{ html: string }> => api(`/logbooks/${encodeURIComponent(reg)}/cabin-log`);
-// Single-item form (one HIL item / one cabin defect) for inline view/print.
-export const hilHtmlOne = (defectId: string): Promise<{ html: string }> => api(`/logbooks/defect/${defectId}/hil`);
-export const cabinLogHtmlOne = (defectId: string): Promise<{ html: string }> => api(`/logbooks/defect/${defectId}/cabin-log`);
+// Server-rendered HTML that must survive offline in its EXACT standard format (paper HIL /
+// Cabin Defect Log, signed check records): cache the last online render (SQLite for capacity +
+// SecureStore for web) and return it when the fetch fails. Native SecureStore may reject large
+// blobs — that's fine, getRef (SQLite) still has it. Kept fresh on every online view + on login.
+async function cachedHtml(key: string, path: string): Promise<{ html: string }> {
+  try {
+    const r: { html: string } = await api(path);
+    _cacheSet(key, r.html).catch(() => {}); setRef(key, r.html).catch(() => {});
+    return r;
+  } catch (e) {
+    const c = (await _cacheGet<string>(key)) ?? (await getRef<string>(key)).data;
+    if (c) return { html: c };
+    throw e;
+  }
+}
+
+// Paper Hold Item List / Cabin Defect Log forms (server-rendered) for view + print — cached for offline.
+export const hilHtml = (reg: string): Promise<{ html: string }> => cachedHtml(`hilhtml_${reg.toUpperCase()}`, `/logbooks/${encodeURIComponent(reg)}/hil`);
+export const cabinLogHtml = (reg: string): Promise<{ html: string }> => cachedHtml(`cabinhtml_${reg.toUpperCase()}`, `/logbooks/${encodeURIComponent(reg)}/cabin-log`);
+// Single-item form (one HIL item / one cabin defect) for inline view/print — cached for offline.
+export const hilHtmlOne = (defectId: string): Promise<{ html: string }> => cachedHtml(`hilhtml1_${defectId}`, `/logbooks/defect/${defectId}/hil`);
+export const cabinLogHtmlOne = (defectId: string): Promise<{ html: string }> => cachedHtml(`cabinhtml1_${defectId}`, `/logbooks/defect/${defectId}/cabin-log`);
 export const setTlNumber = (sectorId: string, page_no: number, reason?: string) =>
   api(`/sectors/${sectorId}/tl-number`, { method: 'POST', body: JSON.stringify({ page_no, reason }) });
 
@@ -769,12 +800,28 @@ export async function completeCheck(reg: string, kind: string, body: any): Promi
   return { id, completed_at, queued: true };
 }
 export const checkHtml = (checkId: string): Promise<{ html: string }> =>
-  api(`/aircraft/checks/record/${checkId}/html`);
+  cachedHtml(`checkhtml_${checkId}`, `/aircraft/checks/record/${checkId}/html`);
 export const previewCheck = (reg: string, kind: string, body: any): Promise<{ html: string }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/checks/${kind}/preview`, { method: 'POST', body: JSON.stringify(body) });
 export type CheckRecord = { id: string; kind: string; completed_at: string; signer_name?: string; licence_no?: string; insp_signer_name?: string; insp_licence_no?: string; tlb_no?: string; data?: any; amendable?: boolean };
-export const listChecks = (reg: string, days?: number): Promise<CheckRecord[]> =>
-  api(`/aircraft/${encodeURIComponent(reg)}/checks${days ? `?days=${days}` : ''}`);
+// Completed 2/10-day checks — offline-capable. Cache the server list per tail, and merge in any
+// checks signed on THIS iPad (the local outbox), so the completed-checks list is available with no
+// connectivity. Server list de-duplicates a local check once it has synced (same kind + time).
+export async function listChecks(reg: string, days?: number): Promise<CheckRecord[]> {
+  const key = `checks_${reg.toUpperCase()}`;
+  let server: CheckRecord[] = [];
+  try {
+    server = await api(`/aircraft/${encodeURIComponent(reg)}/checks${days ? `?days=${days}` : ''}`);
+    _cacheSet(key, server).catch(() => {}); setRef(key, server).catch(() => {});
+  } catch {
+    server = (await _cacheGet<CheckRecord[]>(key)) ?? (await getRef<CheckRecord[]>(key)).data ?? [];
+  }
+  let local: CheckRecord[] = [];
+  try { const { localCheckRecords } = require('../db/checks'); local = await localCheckRecords(reg); } catch { /* web / no SQLite */ }
+  const near = (a?: string, b?: string) => !!a && !!b && Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 120_000;
+  const localOnly = local.filter((l) => !server.some((s) => s.kind === l.kind && near(s.completed_at, l.completed_at)));
+  return [...localOnly, ...server].sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || ''));
+}
 export const amendCheck = (reg: string, id: string, body: any) =>
   mutateOrQueue(`/aircraft/${encodeURIComponent(reg)}/checks/${id}/amend`, { method: 'POST', body: JSON.stringify(body) });
 

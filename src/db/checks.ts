@@ -49,6 +49,25 @@ export async function localCompletedChecks(reg: string): Promise<Record<string, 
   return out;
 }
 
+// Completed checks recorded on THIS iPad (pending sync or recently synced), mapped to the
+// CheckRecord shape so the completed-checks list is available offline (merged with the cached
+// server list in listChecks). Not amendable until synced (amend needs the server record).
+export async function localCheckRecords(reg: string): Promise<any[]> {
+  const d = await db();
+  const rows = await d.getAllAsync<any>(
+    "SELECT id, kind, completed_at, state, payload FROM checks WHERE reg = ? AND state IN ('pending','synced') ORDER BY completed_at DESC",
+    norm(reg));
+  return rows.map((r) => {
+    const p = JSON.parse(r.payload);
+    return {
+      id: r.id, kind: r.kind, completed_at: r.completed_at,
+      signer_name: p.signer_name, licence_no: p.licence_no,
+      insp_signer_name: p.insp_signer_name, insp_licence_no: p.insp_licence_no,
+      tlb_no: p.tlb_no, data: p, amendable: false, local: true, sync_state: r.state,
+    };
+  });
+}
+
 // Checks the server rejected on sync (e.g. incomplete) — surfaced so the mechanic re-does them.
 export async function rejectedChecks(reg?: string): Promise<LocalCheck[]> {
   const d = await db();
