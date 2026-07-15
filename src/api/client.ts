@@ -40,17 +40,30 @@ export const clearanceAuthorized = () => _clearanceAuthorized;
 export type AccessMap = { role: string; pages: Record<string, string>; fields: Record<string, string> };
 let _perms: AccessMap | null = null;
 export async function loadPermissions(): Promise<AccessMap | null> {
-  try { _perms = await api('/auth/permissions'); } catch { _perms = null; }
+  try {
+    _perms = await api('/auth/permissions');
+    await _cacheSet('perms', _perms);                       // cache for offline
+  } catch {
+    // Offline: fall back to the last cached map, but ONLY if it's for this user's role
+    // (never let one role inherit another's cached permissions).
+    if (!_perms) {
+      const c = await _cacheGet<AccessMap>('perms');
+      if (c && (!_role || c.role === _role)) _perms = c;
+    }
+  }
   return _perms;
 }
+// Until permissions are loaded we FAIL CLOSED: no write, read-only access. The brief window
+// (until loadPermissions resolves on sign-in) shows content read-only rather than flashing write
+// controls the user isn't entitled to. The backend enforces regardless.
 /** 'rw' if the role may write this page (or page.field); else read-only/none. */
 export function can(page: string, field?: string): boolean {
-  if (!_perms) return true;                       // fail-open until loaded; backend still enforces
+  if (!_perms) return false;                       // fail-closed until loaded
   const v = field ? _perms.fields[`${page}.${field}`] ?? _perms.pages[page] : _perms.pages[page];
   return v === 'rw';
 }
 export function access(page: string, field?: string): string {
-  if (!_perms) return 'rw';
+  if (!_perms) return 'ro';                         // fail-closed to read-only until loaded
   return (field ? _perms.fields[`${page}.${field}`] ?? _perms.pages[page] : _perms.pages[page]) ?? 'ro';
 }
 
@@ -224,6 +237,7 @@ export async function logout() {
   _name = null;
   _licence = null;
   _clearanceAuthorized = false;
+  _perms = null;                                   // fail closed until the next user's perms load
 }
 
 async function authHeader() {
