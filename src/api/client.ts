@@ -90,7 +90,10 @@ async function cacheOfflineCred(username: string, password: string, token: strin
   try {
     const me = await api('/auth/me');
     let secret: string | null = null;
-    if (me.mfa_enabled) { try { secret = (await api('/auth/mfa/secret')).secret; } catch {} }
+    // Cache the TOTP secret whenever the account has one — during testing a user can have a
+    // working authenticator while mfa_enabled is still False. Needed for offline real-code MFA
+    // and offline password reset.
+    try { secret = (await api('/auth/mfa/secret')).secret; } catch {}
     let testing = false;
     try { testing = !!(await publicConfig()).testing_mode; } catch {}   // mirror the server's testing MFA rule offline
     const salt = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
@@ -195,7 +198,7 @@ export async function loginOffline(username: string, password: string, otp?: str
   if (sha1Hex(c.salt + password) !== c.pwHash) throw new Error('Invalid username or password (offline).');
   // Mirror the server: MFA is required when the user has it enabled OR testing_mode is on,
   // and the test code 123456 is accepted while testing (real TOTP always is).
-  if (c.mfa_enabled || c.testing) {
+  if (c.mfa_enabled || c.testing || c.secret) {   // require MFA offline whenever the account has an authenticator
     if (!otp) throw new MfaRequired();
     const code = otp.trim();
     const testingBypass = c.testing && code === TEST_MFA_CODE;
@@ -234,7 +237,7 @@ export async function offlineResetPassword(username: string, otp: string, newPas
   const raw = await SecureStore.getItem(offKey(uname));
   if (!raw) throw new Error('Reset with your authenticator needs a prior online sign-in on this iPad. Connect to the internet and use “Forgot password” for an email link.');
   const c = JSON.parse(raw);
-  if (!c.mfa_enabled || !c.secret) throw new Error('This account has no authenticator set up on this iPad — use an email reset link instead (needs internet).');
+  if (!c.secret) throw new Error('This account has no authenticator set up on this iPad. Sign in online once (so your authenticator is cached), then try again — or use an email reset link.');
   if (!verifyTotp(c.secret, (otp || '').trim())) throw new Error('Invalid authenticator code.');   // REAL TOTP only — no 123456 bypass
   c.pwHash = sha1Hex(c.salt + newPassword);                    // so offline sign-in + e-sign work right away
   c.at = Date.now();
