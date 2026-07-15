@@ -140,6 +140,18 @@ export async function flushAuthEvents() {
   } catch { /* best-effort */ }
 }
 
+// One-time reclaim of the old, over-eager certificate-format CRS caches (defcrs_*) that could
+// fill web localStorage. Web only (native SecureStore/SQLite isn't key-enumerable); runs once.
+function cleanupStaleCaches() {
+  try {
+    const { Platform } = require('react-native');
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (window.localStorage.getItem('_cache_v2') === '1') return;
+    for (const k of Object.keys(window.localStorage)) if (k.startsWith('defcrs_')) window.localStorage.removeItem(k);
+    window.localStorage.setItem('_cache_v2', '1');
+  } catch { /* best-effort */ }
+}
+
 export async function login(username: string, password: string, otp?: string) {
   let res: Response;
   try {
@@ -163,6 +175,7 @@ export async function login(username: string, password: string, otp?: string) {
   try { const me = await api('/auth/me'); _name = me.name ?? null; _licence = me.licence ?? null; } catch {}   // name + licence for header / sign forms
   await loadPermissions();
   cacheOfflineCred(username, password, json.access_token).catch(() => {});
+  cleanupStaleCaches();                            // reclaim storage from old certificate-format CRS caches (once)
   flushAuthEvents().catch(() => {});               // report any offline logins now we're online
   syncPasswordResets().catch(() => {});            // propagate any queued offline password reset
   flushFeedback().catch(() => {});                 // send any feedback queued while offline
@@ -538,9 +551,10 @@ export const raiseCorrection = (sectorId: string, body: { field?: string; old_va
   mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
 export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
 // Preview the Tech Log / CRS page a defect rectification will be recorded on, before signing (writes nothing).
-// Cached so the VAW-ETL-01 CRS page opens offline. Online always fetches fresh (cachedHtml only
-// returns the cache on a NetworkError), so the online render is never stale.
-export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => cachedHtml(`defcrs_${defectId}`, `/defects/${defectId}/crs-preview`);
+// Cached ON VIEW so the VAW-ETL-01 CRS page you opened online re-opens offline. Online always
+// fetches fresh (cachedHtml only returns the cache on NetworkError). Key bumped to defcrs2_ so the
+// old certificate-format caches (pre-VAW-ETL-01) are ignored.
+export const defectCrsPreview = (defectId: string): Promise<{ html: string }> => cachedHtml(`defcrs2_${defectId}`, `/defects/${defectId}/crs-preview`);
 // Tech Log / CRS HTML with offline fallback: cache the rendered doc when online so the
 // signed record can be opened with no signal. A signed/released sector is immutable.
 export async function sectorTlHtmlCached(sectorId: string): Promise<{ html: string; cached?: boolean }> {
@@ -926,12 +940,8 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
     const r: { days: number; signoffs: SignOff[]; categories?: string[] } = await api(`/signoffs/recent?days=${days}${reg ? `&reg=${encodeURIComponent(reg)}` : ''}`);
     setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy (SQLite/native)
     _cacheSet(key, r).catch(() => {});                                        // localStorage so the web crew app also works offline
-    const ids = Array.from(new Set(r.signoffs.map((g) => g.sector_id).filter(Boolean))) as string[];
-    const dids = Array.from(new Set(r.signoffs.map((g) => (g as any).defect_id).filter(Boolean))) as string[];
-    Promise.all([
-      ...ids.map((id) => sectorTlHtmlCached(id).catch(() => {})),      // sector Tech Log / CRS (VAW-ETL-01)
-      ...dids.map((id) => defectCrsPreview(id).catch(() => {})),       // defect CRS (VAW-ETL-01) — incl. OASES-imported
-    ]).catch(() => {});   // warm offline CRS docs for every sign-off
+    // Do NOT bulk-warm every sign-off's CRS document — the full VAW-ETL-01 pages are ~65 KB each
+    // and there can be hundreds (that overflowed storage). CRS docs cache lazily when opened.
     return r;
   } catch {
     let { data } = await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);
