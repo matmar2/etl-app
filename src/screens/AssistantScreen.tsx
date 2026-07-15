@@ -11,6 +11,8 @@ export default function AssistantScreen() {
   const [busy, setBusy] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [faq, setFaq] = useState<Faq[]>([]);
+  const [search, setSearch] = useState('');            // filter the common questions
+  const [open, setOpen] = useState<number | null>(null);   // expanded accordion item
   const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -31,6 +33,8 @@ export default function AssistantScreen() {
   }
 
   const offline = (m: string) => m.startsWith('offline');
+  const nq = search.trim().toLowerCase();
+  const shown = nq ? faq.filter((f) => (f.q + ' ' + f.a).toLowerCase().includes(nq)) : faq;
 
   return (
     <KeyboardAvoidingView style={s.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
@@ -48,12 +52,28 @@ export default function AssistantScreen() {
         {turns.length === 0 ? (
           <View style={{ marginTop: 16 }}>
             <Text style={s.faqHead}>Common questions</Text>
-            {faq.map((f, i) => (
-              <TouchableOpacity key={i} style={s.chip} onPress={() => ask(f.q)}>
-                <Text style={s.chipText}>{f.q}</Text>
-              </TouchableOpacity>
-            ))}
-            <Text style={s.hint}>Or type your own question in the box below — it answers from the User Guide, offline too.</Text>
+            <TextInput style={s.searchBox} value={search} onChangeText={(v) => { setSearch(v); setOpen(null); }}
+              placeholder="🔍  Search questions…" placeholderTextColor={theme.sub} autoCorrect={false} clearButtonMode="while-editing" />
+            {shown.length === 0 ? (
+              <Text style={s.noMatch}>No matching question. Type it in the box below to ask the assistant.</Text>
+            ) : shown.map((f, i) => {
+              const isOpen = open === i;
+              return (
+                <View key={i} style={[s.accItem, isOpen && s.accItemOpen]}>
+                  <TouchableOpacity style={s.accHead} activeOpacity={0.7} onPress={() => setOpen(isOpen ? null : i)}>
+                    <Text style={s.accQ}>{f.q}</Text>
+                    <Text style={s.chev}>{isOpen ? '▲' : '▾'}</Text>
+                  </TouchableOpacity>
+                  {isOpen ? (
+                    <View style={s.accBody}>
+                      <Markdown body={f.a} />
+                      <TouchableOpacity onPress={() => ask(f.q)}><Text style={s.askMore}>Ask the assistant for a fuller answer  →</Text></TouchableOpacity>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+            <Text style={s.hint}>Tap a question to see the answer, or type your own below — it answers from the User Guide, offline too.</Text>
           </View>
         ) : turns.map((t, i) => (
           <View key={i} style={{ marginTop: 14 }}>
@@ -94,8 +114,16 @@ const s = StyleSheet.create({
   closeBtn: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 },
   closeTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
   hint: { color: theme.sub, fontSize: 12, marginTop: 12, fontStyle: 'italic' },
-  chip: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 20, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 8 },
-  chipText: { color: theme.text, fontSize: 14 },
+  searchBox: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 14, color: theme.text, fontSize: 15, marginBottom: 10 },
+  noMatch: { color: theme.sub, fontSize: 13, paddingVertical: 10, fontStyle: 'italic' },
+  accItem: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, marginBottom: 8, overflow: 'hidden' },
+  accItemOpen: { borderColor: theme.accent },
+  accHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14 },
+  accQ: { color: theme.text, fontSize: 14, fontWeight: '600', flex: 1, paddingRight: 10 },
+  chev: { color: theme.accent, fontSize: 13, fontWeight: '800' },
+  accBody: { paddingHorizontal: 14, paddingBottom: 12, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 8 },
+  askMore: { color: theme.accent, fontSize: 13, fontWeight: '700', marginTop: 8 },
   qBubble: { alignSelf: 'flex-end', backgroundColor: theme.accent, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, maxWidth: '85%' },
   qText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   aBubble: { alignSelf: 'flex-start', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 14, padding: 12, marginTop: 6, maxWidth: '95%' },
