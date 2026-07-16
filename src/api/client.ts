@@ -481,6 +481,12 @@ export type LeonFlight = {
 };
 export const leonFlights = (reg: string): Promise<LeonFlight[]> =>
   api(`/leon/flights?reg=${encodeURIComponent(reg)}`);
+// Past Leon flights for a tail in a date window (YYYY-MM-DD) — for "List previous flights".
+// Live Leon query (online only); returns [] on error so the ETL history still renders.
+export async function leonHistory(reg: string, start: string, end: string): Promise<LeonFlight[]> {
+  try { return await api(`/leon/history?reg=${encodeURIComponent(reg)}&start=${start}&end=${end}`); }
+  catch { return []; }
+}
 
 export const signRecord = (payload: {
   kind: string; sector_id?: string; defect_id?: string; signature_image?: string; device_id?: string;

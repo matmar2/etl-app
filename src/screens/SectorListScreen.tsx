@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, syncPush } from '../api/client';
+import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, syncPush } from '../api/client';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import IcaoHint from '../components/IcaoHint';
 import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
@@ -25,6 +25,15 @@ export default function SectorListScreen({ route, navigation }: any) {
   const [histOpen, setHistOpen] = useState(false);
   const [histFrom, setHistFrom] = useState(today);
   const [histTo, setHistTo] = useState(today);
+  const [leonHist, setLeonHist] = useState<LeonFlight[]>([]);   // past Leon flights for the open history range
+  const [leonLoading, setLeonLoading] = useState(false);
+  useEffect(() => {
+    if (!histOpen) { setLeonHist([]); setLeonLoading(false); return; }
+    let ok = true;
+    setLeonLoading(true); setLeonHist([]);
+    leonHistory(reg, histFrom, histTo).then((r) => { if (ok) setLeonHist(r); }).catch(() => {}).finally(() => { if (ok) setLeonLoading(false); });
+    return () => { ok = false; };
+  }, [histOpen, histFrom, histTo, reg]);
 
   async function refresh() {                       // instant local view
     await dedupeSectors().catch(() => {});
@@ -88,6 +97,14 @@ export default function SectorListScreen({ route, navigation }: any) {
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
     : sectors.filter((s) => s.flight_date === today || inProgress(s)))
     .filter((s) => !hidden.has(s.id));               // drop per-device "removed from list" records
+  // History view: also list PAST Leon flights for the tail. If a Leon flight was opened in ETL
+  // (same flight_no + date) show only the ETL one — no duplicate.
+  const etlKeys = new Set(sectors.map((s) => `${(s.flight_no || '').toUpperCase()}|${s.flight_date ?? ''}`));
+  const leonOnly = histOpen
+    ? leonHist.filter((f) => f.flight_no && !f.cancelled
+        && !etlKeys.has(`${(f.flight_no || '').toUpperCase()}|${(f.std ?? '').slice(0, 10)}`))
+        .sort((a, b) => (b.std ?? '').localeCompare(a.std ?? ''))
+    : [];
   // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time),
   // and flights are opened in departure-time order (earliest first). A ground MAINTENANCE log is
   // independent of flight dispatch, so it never blocks opening a Leon leg.
@@ -168,6 +185,21 @@ export default function SectorListScreen({ route, navigation }: any) {
     setStatus(`Sector ${f.flight_no} created from Leon`);
     refresh();
     pull();                                          // push + converge with server
+    navigation.navigate('Sector', { sectorId: row.id });
+  }
+  // Open a Tech Log for a PAST Leon flight (backfill from the history list). Past flights aren't
+  // bound by the "open in departure order" rule — they're already flown.
+  async function openPast(f: LeonFlight) {
+    const flightDate = (f.std ?? new Date().toISOString()).slice(0, 10);
+    if (await sectorExists(reg, f.flight_no, flightDate)) { setStatus(`Sector ${f.flight_no} already started`); return; }
+    if (openSector) { setStatus(`Close flight ${openSector.flight_no} before opening a new one.`); return; }
+    if (!(await confirmAction(`Open a Tech Log for the past flight ${f.flight_no} (${(f.std ?? '').slice(0, 10)}, ${f.dep} → ${f.arr})?`, 'Open past flight'))) return;
+    const row = await createSector({
+      aircraft_id: reg, flight_no: f.flight_no, flight_date: flightDate,
+      dep: f.dep, arr: f.arr, alternate_airport: f.alternate, std: f.std, sta: f.sta,
+      flight_type: f.flight_type, cancelled: f.cancelled, source: 'leon',
+    } as any);
+    setStatus(`Sector ${f.flight_no} created from Leon`); refresh(); pull();
     navigation.navigate('Sector', { sectorId: row.id });
   }
   async function sync() {
@@ -290,17 +322,24 @@ export default function SectorListScreen({ route, navigation }: any) {
               ))}
             </View>
           </View>
-          <Text style={[styles.feed, { marginTop: 8 }]}>{visibleSectors.length} flight(s) in range · released &amp; closed Tech Logs are kept on the server and always reappear here.</Text>
+          <Text style={[styles.feed, { marginTop: 8 }]}>{visibleSectors.length + leonOnly.length} flight(s) in range · <Text style={{ color: theme.green, fontWeight: '700' }}>ETL</Text> = Tech Log opened · <Text style={{ color: '#e0a800', fontWeight: '700' }}>LEON</Text> = flown, not opened (tap to open).</Text>
+          {leonLoading ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}><ActivityIndicator size="small" color={theme.accent} /><Text style={styles.feed}>Loading Leon flights for this range…</Text></View> : null}
         </View>
       ) : null}
-      {visibleSectors.length === 0 ? <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text> : visibleSectors.map((item) => {
+      {(visibleSectors.length === 0 && leonOnly.length === 0) ? (
+        <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text>
+      ) : null}
+      {visibleSectors.map((item) => {
         const delta = leonDelta(item);
         const carried = !histOpen && inProgress(item) && (item.flight_date ?? '') < today;   // still-open sector from an earlier day
         const nm = openerName(item);
         return (
         <View key={item.id} style={styles.row}>
           <TouchableOpacity style={styles.rowOpen} onPress={() => navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
-            <Text style={styles.rowFlight}>{item.flight_no}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.rowFlight}>{item.flight_no}</Text>
+              {histOpen ? <Text style={styles.srcEtl}>ETL</Text> : null}
+            </View>
             <Text style={styles.rowRoute}>{item.dep} → {item.arr}</Text>
             <Text style={[styles.rowMeta, carried && { color: '#e0a800', fontWeight: '700' }]}>{item.flight_date}{carried ? '  ·  ⏱ carried over (not today)' : ''}</Text>
             {nm ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>opened by {nm}</Text> : null}
@@ -311,6 +350,20 @@ export default function SectorListScreen({ route, navigation }: any) {
         </View>
         );
       })}
+      {histOpen ? leonOnly.map((f) => (
+        <TouchableOpacity key={`leon-${f.leon_nid}`} style={[styles.row, styles.leonRow]} onPress={() => openPast(f)}>
+          <View style={styles.rowOpen}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.rowFlight}>{f.flight_no}</Text>
+              <Text style={styles.srcLeon}>LEON</Text>
+            </View>
+            <Text style={styles.rowRoute}>{f.dep} → {f.arr}</Text>
+            <Text style={styles.rowMeta}>{(f.std ?? '').slice(0, 10)}{f.std ? `  ·  STD ${f.std.slice(11, 16)}z` : ''}</Text>
+            {f.commander ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>PIC {f.commander}</Text> : null}
+            <Text style={[styles.badge, { color: '#e0a800' }]}>not opened · tap to open a Tech Log</Text>
+          </View>
+        </TouchableOpacity>
+      )) : null}
     </ScrollView>
   );
 }
@@ -323,6 +376,9 @@ const styles = StyleSheet.create({
   feedHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
   feed: { color: theme.sub, fontSize: 11 },
   empty: { color: theme.sub },
+  srcEtl: { color: theme.green, fontWeight: '800', fontSize: 10, borderWidth: 1, borderColor: theme.green, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  srcLeon: { color: '#e0a800', fontWeight: '800', fontSize: 10, borderWidth: 1, borderColor: '#e0a800', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  leonRow: { borderStyle: 'dashed', opacity: 0.92 },
   flightCard: { backgroundColor: theme.tile, borderColor: theme.border, borderWidth: 1, borderRadius: 10, padding: 12, marginRight: 10, width: 160 },
   flightCardLocked: { opacity: 0.45 },
   blocked: { color: theme.red, marginBottom: 8, fontSize: 13 },
