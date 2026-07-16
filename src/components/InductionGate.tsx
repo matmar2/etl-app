@@ -1,9 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ackInduction, Induction, pendingInduction, roleLabel, userName, viewInduction } from '../api/client';
+import { ackInduction, Induction, pendingInduction, role, roleLabel, userName, viewInduction } from '../api/client';
 import { theme } from '../theme';
 
 type Phase = 'email' | 'slide' | 'ack';
+
+// admin / CAMO oversee all roles, so their "Welcome & Quick Ref" is a picker over every role's deck.
+const PREVIEW_ROLES: { role: string; label: string }[] = [
+  { role: 'captain', label: 'Captain' },
+  { role: 'pilot', label: 'First Officer' },
+  { role: 'cabin', label: 'Cabin Crew' },
+  { role: 'mechanic', label: 'Mechanic' },
+  { role: 'admin', label: 'Application Overview' },
+];
 
 // Module hooks so the Main Menu can (a) trigger the auto-check on login and (b) re-open the
 // induction on demand ("view again") from a tile.
@@ -16,6 +25,7 @@ export function openInduction() { _open?.(); }
 // Quick-Reference slides one at a time, then a final acknowledgement check box.
 //  • auto mode  — shown on login until the user ticks the box + Confirm (then never again);
 //  • view mode  — re-opened on demand from the menu, closeable anytime, no acknowledgement.
+//  • admin/CAMO — a role PICKER (preview every role's deck); no acknowledgement.
 export default function InductionGate() {
   const [ind, setInd] = useState<Induction | null>(null);
   const [mode, setMode] = useState<'auto' | 'view'>('auto');
@@ -23,7 +33,25 @@ export default function InductionGate() {
   const [i, setI] = useState(0);
   const [agreed, setAgreed] = useState(false);
   const [showAgain, setShowAgain] = useState(false);   // opt to see the welcome again next sign-in
+  const [chooser, setChooser] = useState(false);       // admin/CAMO role picker is open
+  const [previewRole, setPreviewRole] = useState<string | null>(null);   // role being previewed by admin/CAMO
   const showing = useRef(false);
+
+  function start(p: Induction, m: 'auto' | 'view', pr?: string | null) {
+    showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false);
+    setPreviewRole(pr ?? null); setInd(p);
+  }
+  async function pickRole(rl: string) {
+    let p: Induction | null = null;
+    try { p = await viewInduction(rl); } catch { /* offline */ }
+    if (p && (p.slides?.length || p.email_body)) start(p, 'view', rl);
+    else {
+      const msg = 'That Quick Reference isn’t available offline — open it once online to cache it.';
+      if (Platform.OS === 'web') { if (typeof window !== 'undefined') window.alert(msg); } else Alert.alert('Quick Reference', msg);
+    }
+  }
+  function toRoles() { setInd(null); setPreviewRole(null); }   // back to the picker (admin/CAMO)
+  function close() { showing.current = false; setInd(null); setChooser(false); setPreviewRole(null); }
 
   useEffect(() => {
     let alive = true;
@@ -37,40 +65,64 @@ export default function InductionGate() {
     }
     async function open() {
       if (showing.current) return;
+      const r = role();
+      if (r === 'admin' || r === 'camo') { showing.current = true; setInd(null); setPreviewRole(null); setChooser(true); return; }
       let p: Induction | null = null;
       try { p = await viewInduction(); } catch { /* offline/error handled below */ }
       if (alive && p && (p.slides?.length || p.email_body)) { start(p, 'view'); return; }
-      // Never leave the tap doing nothing — tell the user why (no induction for this role, or offline & uncached).
       const msg = 'There is no Welcome & Quick Reference for your role.';
-      if (Platform.OS === 'web') { if (typeof window !== 'undefined') window.alert(msg); }
-      else Alert.alert('Welcome & Quick Ref', msg);
-    }
-    function start(p: Induction, m: 'auto' | 'view') {
-      showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false); setInd(p);
+      if (Platform.OS === 'web') { if (typeof window !== 'undefined') window.alert(msg); } else Alert.alert('Welcome & Quick Ref', msg);
     }
     _poke = tick; _open = open; tick();
     const t = setInterval(tick, 20000);
     return () => { alive = false; _poke = null; _open = null; clearInterval(t); };
   }, []);
 
-  if (!ind) return null;
-  const slides = ind.slides || [];
-  const lastSlide = i + 1 >= slides.length;
-  // Personalised greeting (title + full name); drop the generic "Dear Colleagues," from the body.
-  const greeting = `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
-  const body = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
+  if (!ind && !chooser) return null;
 
-  function close() { showing.current = false; setInd(null); }
+  // ---- Role picker (admin / CAMO) ----
+  if (chooser && !ind) {
+    return (
+      <Modal visible animationType="slide" onRequestClose={close}>
+        <View style={s.wrap}>
+          <View style={s.header}>
+            <Text style={s.badge}>👋  WELCOME &amp; QUICK REF</Text>
+            <TouchableOpacity onPress={close} hitSlop={12}><Text style={s.close}>✕ Close</Text></TouchableOpacity>
+          </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={s.emailContent}>
+            <Text style={s.ackTitle}>Choose a role to view</Text>
+            <Text style={s.ackSub}>As administration / CAMO you can preview the Welcome &amp; Quick Reference each role receives.</Text>
+            {PREVIEW_ROLES.map((r) => (
+              <TouchableOpacity key={r.role} style={s.roleBtn} onPress={() => pickRole(r.role)} activeOpacity={0.85}>
+                <Text style={s.roleBtnTxt}>{r.label}</Text>
+                <Text style={s.roleBtnArrow}>›</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+    );
+  }
+
+  const slides = ind!.slides || [];
+  const lastSlide = i + 1 >= slides.length;
+  // Greeting: for a normal user it's "Dear <Role> <name>,"; for an admin/CAMO preview it's the
+  // previewed role, with no personal name (they're viewing someone else's induction).
+  const greeting = previewRole
+    ? `Dear ${roleLabel(previewRole)},`
+    : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
+  const body = (ind!.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
+
   function confirm() {
     if (!agreed) return;
     if (!showAgain) ackInduction(ind!.version);            // if they want to see it again, don't record the ack
     close();
   }
   function next() {
-    if (phase === 'email') { setPhase(slides.length ? 'slide' : (mode === 'view' ? 'email' : 'ack')); if (!slides.length && mode === 'view') close(); return; }
+    if (phase === 'email') { setPhase(slides.length ? 'slide' : (mode === 'view' ? 'email' : 'ack')); if (!slides.length && mode === 'view') (previewRole ? toRoles() : close()); return; }
     if (phase === 'slide') {
       if (!lastSlide) { setI(i + 1); return; }
-      mode === 'view' ? close() : setPhase('ack');
+      mode === 'view' ? (previewRole ? toRoles() : close()) : setPhase('ack');
     }
   }
   function back() {
@@ -79,15 +131,16 @@ export default function InductionGate() {
   }
 
   return (
-    <Modal visible animationType="slide" onRequestClose={() => mode === 'view' && close()}>
+    <Modal visible animationType="slide" onRequestClose={() => mode === 'view' && (previewRole ? toRoles() : close())}>
       <View style={s.wrap}>
         <View style={s.header}>
           <Text style={s.badge}>
-            {phase === 'email' ? '✉  WELCOME — PLEASE READ'
+            {phase === 'email' ? (previewRole ? `✉  ${roleLabel(previewRole).toUpperCase()} — WELCOME` : '✉  WELCOME — PLEASE READ')
               : phase === 'slide' ? `📊  QUICK REFERENCE · ${i + 1} / ${slides.length}`
               : '✓  ACKNOWLEDGEMENT'}
           </Text>
-          {mode === 'view' ? <TouchableOpacity onPress={close} hitSlop={12}><Text style={s.close}>✕ Close</Text></TouchableOpacity> : null}
+          {previewRole ? <TouchableOpacity onPress={toRoles} hitSlop={12}><Text style={s.close}>‹ Roles</Text></TouchableOpacity>
+            : mode === 'view' ? <TouchableOpacity onPress={close} hitSlop={12}><Text style={s.close}>✕ Close</Text></TouchableOpacity> : null}
         </View>
 
         {phase === 'email' ? (
@@ -97,9 +150,9 @@ export default function InductionGate() {
             </View>
             <View style={s.mailHead}>
               <Text style={s.mailLine}><Text style={s.mailLbl}>From: </Text>ETL Administrator</Text>
-              <Text style={s.mailLine}><Text style={s.mailLbl}>To: </Text>{userName() || 'You'}</Text>
+              <Text style={s.mailLine}><Text style={s.mailLbl}>To: </Text>{previewRole ? `${roleLabel(previewRole)} (preview)` : (userName() || 'You')}</Text>
             </View>
-            {ind.email_subject ? <Text style={s.subject}>{ind.email_subject}</Text> : null}
+            {ind!.email_subject ? <Text style={s.subject}>{ind!.email_subject}</Text> : null}
             <Text style={s.greeting}>{greeting}</Text>
             <Text style={s.email}>{body}</Text>
           </ScrollView>
@@ -110,10 +163,10 @@ export default function InductionGate() {
         ) : (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={s.ackContent}>
             <Text style={s.ackTitle}>Before you continue</Text>
-            <Text style={s.ackSub}>You have read the welcome notice and the {roleLabel(ind.role)} Quick Reference. Please confirm below — this is recorded and won’t be shown again.</Text>
+            <Text style={s.ackSub}>You have read the welcome notice and the {roleLabel(ind!.role)} Quick Reference. Please confirm below — this is recorded and won’t be shown again.</Text>
             <TouchableOpacity style={s.checkRow} activeOpacity={0.8} onPress={() => setAgreed((v) => !v)}>
               <View style={[s.box, agreed && s.boxOn]}>{agreed ? <Text style={s.tick}>✓</Text> : null}</View>
-              <Text style={s.checkLabel}>I have read and understood the welcome notice and the {roleLabel(ind.role)} Quick Reference.<Text style={s.req}>  *required</Text></Text>
+              <Text style={s.checkLabel}>I have read and understood the welcome notice and the {roleLabel(ind!.role)} Quick Reference.<Text style={s.req}>  *required</Text></Text>
             </TouchableOpacity>
             <TouchableOpacity style={[s.checkRow, { marginTop: 12 }]} activeOpacity={0.8} onPress={() => setShowAgain((v) => !v)}>
               <View style={[s.box, showAgain && s.boxOn]}>{showAgain ? <Text style={s.tick}>✓</Text> : null}</View>
@@ -133,8 +186,8 @@ export default function InductionGate() {
           ) : (
             <TouchableOpacity style={[s.btn, s.grow]} onPress={next} activeOpacity={0.85}>
               <Text style={s.btnTxt}>
-                {phase === 'email' ? (slides.length ? 'Read the Quick Reference  ›' : (mode === 'view' ? 'Close' : 'Continue  ›'))
-                  : (lastSlide ? (mode === 'view' ? 'Close' : 'Continue to acknowledgement  ›') : 'Next  ›   (or tap the slide)')}
+                {phase === 'email' ? (slides.length ? 'Read the Quick Reference  ›' : (mode === 'view' ? (previewRole ? 'Back to roles' : 'Close') : 'Continue  ›'))
+                  : (lastSlide ? (mode === 'view' ? (previewRole ? 'Back to roles' : 'Close') : 'Continue to acknowledgement  ›') : 'Next  ›   (or tap the slide)')}
               </Text>
             </TouchableOpacity>
           )}
@@ -164,6 +217,9 @@ const s = StyleSheet.create({
   ackContent: { padding: 24, width: '100%', maxWidth: 620, alignSelf: 'center', flexGrow: 1, justifyContent: 'center' },
   ackTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 8 },
   ackSub: { color: theme.sub, fontSize: 14, lineHeight: 21, marginBottom: 22 },
+  roleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 18, paddingHorizontal: 18, marginBottom: 12 },
+  roleBtnTxt: { color: theme.text, fontSize: 16, fontWeight: '700' },
+  roleBtnArrow: { color: theme.accent, fontSize: 20, fontWeight: '800' },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16 },
   box: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: theme.sub, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   boxOn: { backgroundColor: theme.green, borderColor: theme.green },

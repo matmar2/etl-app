@@ -1415,12 +1415,13 @@ export async function inductionExists(): Promise<boolean> {
   try { const r = await api('/induction/exists'); return !!r?.exists; }
   catch { return !!((await _cacheGet<Induction>('induction_view')) || (await _cacheGet<Induction>('induction'))); }
 }
-export async function viewInduction(): Promise<Induction | null> {   // re-view on demand (ignores ack)
+export async function viewInduction(role?: string): Promise<Induction | null> {   // re-view on demand (ignores ack); admin/CAMO may preview any role
+  const key = role ? `induction_view_${role}` : 'induction_view';
   try {
-    const r = await api('/induction/view');
-    if (r && r.role) { await _cacheSet('induction_view', r); return r; }
+    const r = await api(`/induction/view${role ? `?role=${encodeURIComponent(role)}` : ''}`);
+    if (r && r.role) { await _cacheSet(key, r); return r; }
     return null;
-  } catch { return (await _cacheGet<Induction>('induction_view')) || (await _cacheGet<Induction>('induction')) || null; }
+  } catch { return (await _cacheGet<Induction>(key)) || (role ? null : (await _cacheGet<Induction>('induction'))) || null; }
 }
 export async function ackInduction(version: number): Promise<void> {
   await _cacheSet('induction_acked', version);                        // never re-show, even offline
