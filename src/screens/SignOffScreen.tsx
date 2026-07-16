@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { appSettings, currentAircraft, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, checkHtml, currentAircraft, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
 const KIND: Record<string, string> = {
   preflight: 'Pre-flight (commander)', postflight: 'Post-flight (commander)',
   crs: 'Maintenance Release (CRS)', release: 'Maintenance Release (CRS)', defect: 'Defect action',
+  check_2day: '2-Day Check completed', check_10day: '10-Day Check completed',
 };
 
 export default function SignOffScreen({ navigation }: any) {
@@ -42,9 +43,17 @@ export default function SignOffScreen({ navigation }: any) {
       finally { setOpeningId(null); }
       return;
     }
+    if (g.check_id) {                                    // 2/10-day check → the signed check record
+      setOpeningId(g.id);
+      try { const { html } = await checkHtml(g.check_id); await printHtml(html); }
+      catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this check once online to view it offline.' : (e?.message || 'Could not open the check.')); }
+      finally { setOpeningId(null); }
+      return;
+    }
     setMsg('This sign-off has no printable Tech Log.');
   }
-  const openable = (g: SignOff) => !!(g.sector_id || g.defect_id);
+  const openable = (g: SignOff) => !!(g.sector_id || g.defect_id || g.check_id);
+  const isCheck = (g: SignOff) => !!g.check_id;
 
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
@@ -80,7 +89,7 @@ export default function SignOffScreen({ navigation }: any) {
               {g.defects_summary ? <Text style={s.defs}>Defects: {g.defects_summary}</Text> : null}
               {openable(g) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginTop: 6 }}>
-                  <Text style={s.open}>{openingId === g.id ? 'Opening…' : 'Tap to open the signed CRS ›'}</Text>
+                  <Text style={s.open}>{openingId === g.id ? 'Opening…' : (isCheck(g) ? 'Tap to open the signed check ›' : 'Tap to open the signed CRS ›')}</Text>
                   {g.defect_id ? (
                     <TouchableOpacity onPress={() => navigation.navigate('DefectDetail', { defectId: g.defect_id })}>
                       <Text style={s.details}>details ›</Text>
