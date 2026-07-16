@@ -401,8 +401,10 @@ export default function MainMenuScreen({ navigation }: any) {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cardTitle}>{t.title}</Text>
-                      <Text style={[styles.cardSub, counts[t.key] ? { color: theme.text, fontWeight: '700' } : null]} numberOfLines={1}>
-                        {counts[t.key] ?? t.sub ?? ''}
+                      <Text style={[styles.cardSub, (t.key !== 'induction' && counts[t.key]) ? { color: theme.text, fontWeight: '700' } : null]} numberOfLines={1}>
+                        {t.key === 'induction'
+                          ? (['Administrator', 'CAMO'].includes(roleLabel()) ? `${roleLabel()} · Application Overview` : `${roleLabel()} · Quick Reference`)
+                          : (counts[t.key] ?? t.sub ?? '')}
                       </Text>
                     </View>
                   </TouchableOpacity>
