@@ -64,6 +64,12 @@ export default function SectorListScreen({ route, navigation }: any) {
   // Your-sectors list: default shows today's legs plus anything still in progress (never hide an
   // open sector, even from an earlier day). "List previous flights" switches to the chosen date range.
   const inProgress = (s: Sector) => !['closed', 'exported'].includes(s.status);
+  // Who opened/started the sector (created_by_name lives in the synced payload; local offline-created
+  // maintenance logs carry it too). Falls back to null when unknown (e.g. not yet re-pulled).
+  const openerName = (s: any): string | null => {
+    try { const p = typeof s.payload === 'string' ? JSON.parse(s.payload) : (s.payload || {}); return p.created_by_name || s.created_by_name || null; }
+    catch { return s.created_by_name || null; }
+  };
   // If Leon has changed the schedule for a still-open logged flight, surface it (auto, on focus/timer —
   // no Refresh needed). We do NOT overwrite the tech-log record automatically; the crew decides.
   const leonDelta = (s: Sector): string | null => {
@@ -289,12 +295,15 @@ export default function SectorListScreen({ route, navigation }: any) {
       ) : null}
       {visibleSectors.length === 0 ? <Text style={styles.empty}>{histOpen ? 'No flights in this date range.' : 'No flights today — pick a flight above.'}</Text> : visibleSectors.map((item) => {
         const delta = leonDelta(item);
+        const carried = !histOpen && inProgress(item) && (item.flight_date ?? '') < today;   // still-open sector from an earlier day
+        const nm = openerName(item);
         return (
         <View key={item.id} style={styles.row}>
           <TouchableOpacity style={styles.rowOpen} onPress={() => navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
             <Text style={styles.rowFlight}>{item.flight_no}</Text>
             <Text style={styles.rowRoute}>{item.dep} → {item.arr}</Text>
-            <Text style={styles.rowMeta}>{item.flight_date}</Text>
+            <Text style={[styles.rowMeta, carried && { color: '#e0a800', fontWeight: '700' }]}>{item.flight_date}{carried ? '  ·  ⏱ carried over (not today)' : ''}</Text>
+            {nm ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>opened by {nm}</Text> : null}
             {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
           </TouchableOpacity>

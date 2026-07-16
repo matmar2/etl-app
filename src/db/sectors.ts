@@ -159,12 +159,13 @@ export async function markLocalReleased(sectorId: string, rel: { by?: string; ki
 
 // Create a ground maintenance log locally (offline). page_kind=maintenance_only; /sync/push
 // assigns the real TL number and sets status=maintenance on the server when it syncs.
-export async function createLocalMaintenance(reg: string, station: string, wo?: string, note?: string): Promise<{ id: string }> {
+export async function createLocalMaintenance(reg: string, station: string, wo?: string, note?: string, createdByName?: string): Promise<{ id: string }> {
   const d = await db();
   const id = uuid();
   const today = new Date().toISOString().slice(0, 10);
   const payload = { id, aircraft_id: reg, flight_no: 'MAINT', flight_date: today, dep: station, arr: station,
-    page_kind: 'maintenance_only', status: 'maintenance', wo_ref: wo, note, source: 'manual', version: 1 };
+    page_kind: 'maintenance_only', status: 'maintenance', wo_ref: wo, note, source: 'manual', version: 1,
+    created_by_name: createdByName || null };
   await d.runAsync(
     `INSERT INTO sectors (id, aircraft_id, flight_no, flight_date, dep, arr, status, version, dirty, payload)
      VALUES (?,?,?,?,?,?,?,1,1,?)`,

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ammIawLine, ammRevision, ampRevision, can, createMaintenance, currentAircraft, extendDefect, iawText, listActiveDefects, listHIL, mpdIawLine, NetworkError, serverSectors, syncPush, taskLineWithHeader } from '../api/client';
+import { ammIawLine, ammRevision, ampRevision, can, createMaintenance, currentAircraft, extendDefect, iawText, listActiveDefects, listHIL, mpdIawLine, NetworkError, serverSectors, syncPush, taskLineWithHeader, userName } from '../api/client';
 import { createLocalMaintenance } from '../db/sectors';
 import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
@@ -70,7 +70,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
         id = r.id;
       } catch (e: any) {
         if (!(e instanceof NetworkError)) throw e;
-        const r = await createLocalMaintenance(reg, st, wo.trim() || undefined, note.trim() || undefined);   // offline → local log, TL# assigned on sync
+        const r = await createLocalMaintenance(reg, st, wo.trim() || undefined, note.trim() || undefined, userName() ?? undefined);   // offline → local log, TL# assigned on sync
         id = r.id;
       }
       navigation.navigate('Release', { sectorId: id });     // work defects + issue CRS
