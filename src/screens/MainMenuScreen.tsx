@@ -9,7 +9,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -74,6 +74,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [st, setSt] = useState<AircraftStatus | null>(null);
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [testing, setTesting] = useState(false);
+  const [hasInduction, setHasInduction] = useState<boolean | null>(null);   // null = unknown (show); false = hide the tile (admin/CAMO)
   const [ac, setAc] = useState<Fleet | null>(currentAircraft());
   const [fleet, setFleet] = useState<Fleet[]>([]);
   const [pick, setPick] = useState(false);
@@ -195,6 +196,7 @@ export default function MainMenuScreen({ navigation }: any) {
     runOfflinePrep(cur?.registration);         // background offline download (survives navigation, auto-resumes)
     pokeBroadcasts();                                // check for admin pop-ups now (immediate on login)
     pokeInduction();                                 // check for the role induction (email + PPTX) on login
+    inductionExists().then((v) => { if (isAlive()) setHasInduction(v); }).catch(() => {});   // hide the tile for roles with no induction (admin/CAMO)
     const jobs: Promise<any>[] = [
       flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
       flushInductionAcks().catch(() => {}),          // send any induction acks made while offline
@@ -380,7 +382,8 @@ export default function MainMenuScreen({ navigation }: any) {
       {/* grouped tiles */}
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {GROUPS.map((g) => {
-          const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none'));
+          const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none')
+            && (t.key !== 'induction' || hasInduction !== false));   // hide Welcome & Quick Ref when the role has no induction
           if (!tiles.length) return null;
           return (
             <View key={g} style={{ marginTop: 18 }}>

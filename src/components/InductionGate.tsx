@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ackInduction, Induction, pendingInduction, roleLabel, userName, viewInduction } from '../api/client';
 import { theme } from '../theme';
 
@@ -37,8 +37,13 @@ export default function InductionGate() {
     }
     async function open() {
       if (showing.current) return;
-      const p = await viewInduction();
-      if (alive && p && (p.slides?.length || p.email_body)) start(p, 'view');
+      let p: Induction | null = null;
+      try { p = await viewInduction(); } catch { /* offline/error handled below */ }
+      if (alive && p && (p.slides?.length || p.email_body)) { start(p, 'view'); return; }
+      // Never leave the tap doing nothing — tell the user why (no induction for this role, or offline & uncached).
+      const msg = 'There is no Welcome & Quick Reference for your role.';
+      if (Platform.OS === 'web') { if (typeof window !== 'undefined') window.alert(msg); }
+      else Alert.alert('Welcome & Quick Ref', msg);
     }
     function start(p: Induction, m: 'auto' | 'view') {
       showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false); setInd(p);

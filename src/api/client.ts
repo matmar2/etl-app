@@ -1400,6 +1400,12 @@ export async function pendingInduction(): Promise<Induction | null> {
     return cached && cached.version !== ackedVer ? cached : null;
   }
 }
+// Whether this role has a Welcome & Quick Reference at all (admin/CAMO don't) — the menu hides the
+// tile when false. Offline: treat a previously-cached induction as "exists".
+export async function inductionExists(): Promise<boolean> {
+  try { const r = await api('/induction/exists'); return !!r?.exists; }
+  catch { return !!((await _cacheGet<Induction>('induction_view')) || (await _cacheGet<Induction>('induction'))); }
+}
 export async function viewInduction(): Promise<Induction | null> {   // re-view on demand (ignores ack)
   try {
     const r = await api('/induction/view');
