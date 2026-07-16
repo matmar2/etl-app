@@ -230,11 +230,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         </View>
       ))}
 
-      {d.oases_sourced && (isMech || canDefer) && (
-        <Text style={[styles.sub, { marginTop: 14 }]}>ℹ︎ This defect is mirrored from OASES for visibility. Rectify or defer it in OASES — it updates here automatically. It cannot be actioned (or its Tech Log/CRS previewed) from the ETL.</Text>
+      {d.oases_sourced && (isMech || canDefer) && d.status !== 'closed' && (
+        <Text style={[styles.sub, { marginTop: 14 }]}>ℹ︎ Mirrored from OASES. You can rectify or defer it here — the CRS is recorded on a VAW-ETL-01 Tech Log page (preview below).</Text>
       )}
 
-      {(isMech || canDefer) && d.status !== 'closed' && !d.oases_sourced && (
+      {(isMech || canDefer) && d.status !== 'closed' && (
         <>
           <Text style={styles.section}>Maintenance action</Text>
           <TextInput style={[styles.input, { minHeight: Math.max(88, narr.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
