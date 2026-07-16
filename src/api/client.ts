@@ -989,7 +989,8 @@ export async function serverReachable(timeoutMs = 4000): Promise<boolean> {
 export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string }> =>
   api('/admin/settings');
 
-export const deleteDefect = (id: string) => mutateOrQueue(`/defects/${id}`, { method: 'DELETE' });
+export const deleteDefect = (id: string, approvedBy: string) =>
+  mutateOrQueue(`/defects/${id}?approved_by=${encodeURIComponent(approvedBy)}`, { method: 'DELETE' });
 
 export type MelItem = {
   id: string; ata: string; item: string; category?: string;

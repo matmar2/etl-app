@@ -37,6 +37,8 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [askDel, setAskDel] = useState(false);
+  const [approver, setApprover] = useState('');
   const isMech = can('defects', 'rectify');     // rectification / CRS action — maintenance
   const canDefer = can('defects', 'defer');     // defer against MEL / CDL — maintenance
   const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
@@ -148,12 +150,19 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       ]);
   }
   async function del() {
-    // Double confirmation for a permanent removal. Allowed only before the flight departs
-    // (the server also enforces this and returns 409 once the flight has departed).
-    if (!(await confirmAction('Delete this defect that was entered by mistake?\n\nIt is permanently removed — this is only for entries made in error, before the flight departs.', 'Delete defect'))) return;
-    if (!(await confirmAction('Are you sure? This cannot be undone — the defect and any photos are deleted.', 'Confirm delete'))) return;
-    try { await deleteDefect(defectId); navigation?.goBack(); }
-    catch (e: any) { setMsg(e?.message?.includes('409') || /departed/i.test(e?.message || '') ? 'The flight has departed — this defect is now part of the record; raise a correction instead.' : `Failed: ${e.message}`); }
+    // Admin only, before dispatch/release, with the CAMO Manager's approval recorded.
+    // Double confirmation for a permanent removal (the server enforces the same rules).
+    if (!approver.trim()) { setMsg('Record the CAMO Manager who approved this removal first.'); return; }
+    if (!(await confirmAction(`Remove this defect entered by mistake?\n\nApproved by CAMO Manager: ${approver.trim()}\n\nThis is only for entries made in error, before the flight is dispatched/released.`, 'Remove defect'))) return;
+    if (!(await confirmAction('Are you sure? This cannot be undone — the defect and any photos are permanently removed.', 'Confirm removal'))) return;
+    try { await deleteDefect(defectId, approver.trim()); navigation?.goBack(); }
+    catch (e: any) {
+      const m = e?.message || '';
+      setMsg(/409|dispatched|released|departed/i.test(m) ? 'The flight has been dispatched/released — this defect is now part of the record; raise a correction instead.'
+        : /400/.test(m) ? 'CAMO Manager approval is required.'
+        : /403/.test(m) ? 'Only an admin with CAMO Manager approval can remove a defect.'
+        : `Failed: ${m}`);
+    }
   }
 
   if (!d) return <View style={styles.wrap}><Text style={styles.sub}>{msg || 'Loading…'}</Text></View>;
@@ -171,9 +180,26 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed' || d.status === 'rectified'} />
 
       {d.can_delete ? (
-        <TouchableOpacity onPress={del} style={{ marginTop: 14 }}>
-          <Text style={{ color: theme.red, fontWeight: '700' }}>Delete defect (entered by mistake)</Text>
-        </TouchableOpacity>
+        !askDel ? (
+          <TouchableOpacity onPress={() => { setMsg(''); setAskDel(true); }} style={{ marginTop: 14 }}>
+            <Text style={{ color: theme.red, fontWeight: '700' }}>Delete defect (entered by mistake)</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ marginTop: 14, borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>Remove defect (entered by mistake)</Text>
+            <Text style={styles.sub}>Admin only, before the flight is dispatched/released, and only with the CAMO Manager’s approval.</Text>
+            <TextInput style={[styles.input, { marginTop: 10, minHeight: 0 }]} value={approver} onChangeText={setApprover}
+              placeholder="CAMO Manager who approved (name / authorisation) *" placeholderTextColor={theme.sub} />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.red }]} onPress={del}>
+                <Text style={styles.act2t}>Remove defect</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => { setAskDel(false); setApprover(''); }}>
+                <Text style={styles.act2t}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )
       ) : null}
 
       {d.area === 'cabin' && isCaptain && d.status !== 'closed' && (

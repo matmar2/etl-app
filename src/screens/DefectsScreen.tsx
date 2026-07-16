@@ -39,7 +39,9 @@ export default function DefectsScreen({ route, navigation }: any) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const tech = active.filter((d) => (d.area ?? 'technical') !== 'cabin');
-  const cabin = [...active.filter((d) => d.area === 'cabin'), ...clearedCabin];   // active + cleared
+  // Cabin tab lists only OPEN cabin defects (like Defects/HIL). Closed/cleared items are not
+  // shown here — they remain in the printed full Cabin Defect Log and the Sign Off page.
+  const cabin = active.filter((d) => d.area === 'cabin');
   const data = tab === 'defects' ? tech : tab === 'cabin' ? cabin : hil;
   const empty = tab === 'defects' ? 'No active defects' : tab === 'cabin' ? 'No cabin defects' : 'No hold items';
 
@@ -105,7 +107,7 @@ export default function DefectsScreen({ route, navigation }: any) {
         keyExtractor={(d) => d.id}
         ListFooterComponent={tab === 'hil' || tab === 'cabin' ? (
           <TouchableOpacity style={[styles.printBtn, { marginTop: data.length ? 14 : 4 }]} onPress={() => printForm(tab === 'hil' ? 'hil' : 'cabin')}>
-            <Text style={styles.printTxt}>🖨  View / Print full {tab === 'hil' ? 'Hold Item List' : 'Cabin Defect Log'} ({data.length})</Text>
+            <Text style={styles.printTxt}>🖨  View / Print full {tab === 'hil' ? 'Hold Item List' : 'Cabin Defect Log'} ({tab === 'cabin' ? cabin.length + clearedCabin.length : data.length})</Text>
           </TouchableOpacity>
         ) : null}
         renderItem={({ item }) => (
