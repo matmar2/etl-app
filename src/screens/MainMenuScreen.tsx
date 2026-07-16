@@ -152,7 +152,11 @@ export default function MainMenuScreen({ navigation }: any) {
         await confirmAction(`You are already on the latest published version.${otaDiag()}`, 'Up to date');
       }
     } catch (e: any) {
-      await confirmAction(`Could not check for updates: ${e?.message || 'no connection'}. Make sure wifi is on and try again.${otaDiag()}`, 'Update check failed');
+      const offline = !(await serverReachable(4000).catch(() => false));
+      await confirmAction(offline
+        ? `You appear to be OFFLINE. Checking for a new app version needs an internet connection — connect to Wi-Fi and try again. (Your work keeps syncing separately.)${otaDiag()}`
+        : `Could not check for updates: ${e?.message || 'unknown error'}. Try again in a moment.${otaDiag()}`,
+        offline ? 'Offline — can’t check now' : 'Update check failed');
     } finally { setChecking(false); }
   }
 
