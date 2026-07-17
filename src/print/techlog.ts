@@ -93,7 +93,7 @@ export function techLogHtml(data: TLData): string {
       <div class="sub" style="text-align:right">
         <div><b>${reg}</b> · ${esc(ac?.type)}</div>
         <div>MSN ${esc(ac?.msn)}</div>
-        <div>TL # ${esc(fmtTl(s.page_no))}</div>
+        <div>TL # <b>${reg}/${esc(ac?.msn)}</b> · ${esc(fmtTl(s.page_no))}</div>
       </div>
     </div>
 

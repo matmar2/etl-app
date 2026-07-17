@@ -449,6 +449,20 @@ export async function nextTl(reg: string): Promise<{ next_tl: number }> {
   }
 }
 
+// Allocate the next TL page number for THIS tail from the cached counter and advance it locally,
+// so a sector completed OFFLINE carries its full TL number for the printed Tech Log / CRS. The
+// server honours a client-allocated number on sync (bumping only on a genuine collision). Returns
+// null when we've never been online for this tail (no cache) — the server then assigns on sync.
+export async function allocateTl(reg: string): Promise<number | null> {
+  const key = `nexttl_${(reg ?? '').toUpperCase()}`;
+  try { await nextTl(reg); } catch { /* offline → use the cached value below */ }
+  const { data } = await getRef<{ next_tl: number }>(key);
+  if (!data || typeof data.next_tl !== 'number') return null;
+  const n = data.next_tl;
+  await setRef(key, { next_tl: n + 1 }).catch(() => {});        // advance so the next offline sector increments
+  return n;
+}
+
 // Release gate: the revision this iPad's channel is approved to run (null = stay on current).
 // The actual OTA apply (expo-updates) is wired once EAS + the signed build are in place.
 export const appRelease = (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string }> =>

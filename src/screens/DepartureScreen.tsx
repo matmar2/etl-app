@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -154,7 +154,12 @@ export default function DepartureScreen({ route, navigation }: any) {
     }
     setBadSet(new Set());
     if (!(await confirmAction('Confirm commander acceptance — fuel and oil as required, aircraft acceptable for service?', 'Commander acceptance'))) return;
-    try { const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted')); refresh(); }
+    try {
+      // Committing the departure makes this an active TL page — allocate its number now (works offline)
+      // so the completed sector prints its full TL # even before it syncs.
+      if (!s.page_no) { const n = await allocateTl(currentAircraft()?.registration || s.aircraft_id); if (n) await save({ page_no: n }); }
+      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted')); refresh();
+    }
     catch { setSignMsg('Could not accept — try again'); }
   }
 
