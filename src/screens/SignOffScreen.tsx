@@ -96,7 +96,14 @@ export default function SignOffScreen({ navigation }: any) {
         filtered.map((g) => (
           <TouchableOpacity key={g.id} style={s.row} activeOpacity={openable(g) ? 0.6 : 1} onPress={() => open(g)} disabled={!openable(g) || openingId === g.id}>
             <View style={{ flex: 1 }}>
-              <Text style={s.k}>{KIND[g.kind] || g.kind}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {g.kind === 'check_2day' || g.kind === 'check_10day' ? (
+                  <View style={[s.chkTag, { backgroundColor: g.kind === 'check_2day' ? '#2f8f6b' : '#b5762a' }]}>
+                    <Text style={s.chkTagTxt}>{g.kind === 'check_2day' ? '2-DAY' : '10-DAY'}</Text>
+                  </View>
+                ) : null}
+                <Text style={s.k}>{KIND[g.kind] || g.kind}</Text>
+              </View>
               <Text style={s.meta}>
                 {g.registration || ''}{g.flight_no ? ` · ${g.flight_no}` : ''}{g.dep && g.arr ? ` · ${g.dep}→${g.arr}` : ''}{g.flight_date ? ` · ${g.flight_date}` : ''}
               </Text>
@@ -126,6 +133,8 @@ const s = StyleSheet.create({
   sub: { color: theme.sub, marginTop: 6, fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 14, marginTop: 10 },
   k: { color: theme.text, fontWeight: '800', fontSize: 15 },
+  chkTag: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 },
+  chkTagTxt: { color: '#fff', fontWeight: '900', fontSize: 11, letterSpacing: 0.5 },
   meta: { color: theme.sub, fontSize: 12, marginTop: 2 },
   defs: { color: theme.text, fontSize: 12, marginTop: 4 },
   open: { color: theme.accent, fontSize: 12, fontWeight: '700' },
