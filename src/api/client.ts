@@ -614,8 +614,10 @@ async function cachedHtml(key: string, path: string): Promise<{ html: string }> 
 }
 
 // Paper Hold Item List / Cabin Defect Log forms (server-rendered) for view + print — cached for offline.
-export const hilHtml = (reg: string): Promise<{ html: string }> => cachedHtml(`hilhtml_${reg.toUpperCase()}`, `/logbooks/${encodeURIComponent(reg)}/hil`);
-export const cabinLogHtml = (reg: string): Promise<{ html: string }> => cachedHtml(`cabinhtml_${reg.toUpperCase()}`, `/logbooks/${encodeURIComponent(reg)}/cabin-log`);
+export const hilHtml = (reg: string, clearedDays?: number): Promise<{ html: string }> =>
+  cachedHtml(`hilhtml_${reg.toUpperCase()}${clearedDays ? `_c${clearedDays}` : ''}`, `/logbooks/${encodeURIComponent(reg)}/hil${clearedDays ? `?cleared_days=${clearedDays}` : ''}`);
+export const cabinLogHtml = (reg: string, clearedDays?: number): Promise<{ html: string }> =>
+  cachedHtml(`cabinhtml_${reg.toUpperCase()}${clearedDays ? `_c${clearedDays}` : ''}`, `/logbooks/${encodeURIComponent(reg)}/cabin-log${clearedDays ? `?cleared_days=${clearedDays}` : ''}`);
 // Single-item form (one HIL item / one cabin defect) for inline view/print — cached for offline.
 export const hilHtmlOne = (defectId: string): Promise<{ html: string }> => cachedHtml(`hilhtml1_${defectId}`, `/logbooks/defect/${defectId}/hil`);
 export const cabinLogHtmlOne = (defectId: string): Promise<{ html: string }> => cachedHtml(`cabinhtml1_${defectId}`, `/logbooks/defect/${defectId}/cabin-log`);

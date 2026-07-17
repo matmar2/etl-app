@@ -54,8 +54,8 @@ export default function SignOffScreen({ navigation }: any) {
     setOpeningId(defectId || 'all');
     try {
       const { html } = view === 'hil'
-        ? (defectId ? await hilHtmlOne(defectId) : await hilHtml(reg!))
-        : (defectId ? await cabinLogHtmlOne(defectId) : await cabinLogHtml(reg!));
+        ? (defectId ? await hilHtmlOne(defectId) : await hilHtml(reg!, days))       // "all" = only items cleared in the window (matches the list)
+        : (defectId ? await cabinLogHtmlOne(defectId) : await cabinLogHtml(reg!, days));
       await printHtml(html);
     } catch (e: any) {
       setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the form.'));
