@@ -25,7 +25,7 @@ export default function SignOffScreen({ navigation }: any) {
   const matchQ = (g: SignOff) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
-    const hay = `${KIND[g.kind] || g.kind} ${g.registration || ''} ${g.flight_no || ''} ${g.dep || ''} ${g.arr || ''} ${g.signer_name || ''} ${g.licence_no || ''} ${g.defects_summary || ''} ${g.category || ''} ${g.flight_date || ''} ${(g.signed_at || '').slice(0, 10)}`.toLowerCase();
+    const hay = `${KIND[g.kind] || g.kind} ${g.registration || ''} ${g.flight_no || ''} ${g.dep || ''} ${g.arr || ''} ${g.signer_name || ''} ${g.licence_no || ''} ${g.defects_summary || ''} ${g.search_text || ''} ${g.category || ''} ${g.flight_date || ''} ${(g.signed_at || '').slice(0, 10)}`.toLowerCase();
     return s.split(/\s+/).every((w) => hay.includes(w));      // all words must match (AND)
   };
   const count = (c: string) => (list || []).filter((g) => (c === 'All' || (g.category || 'Others') === c) && matchQ(g)).length;
