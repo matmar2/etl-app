@@ -384,7 +384,7 @@ export default function MainMenuScreen({ navigation }: any) {
                       </View>
                       {st?.next_tl ? (
                         <View style={styles.checkPill}>
-                          <Text style={styles.checkLbl}>Next TL #</Text>
+                          <Text style={styles.checkLbl}>Next TL # · {reg}/{ac?.msn ?? '—'}</Text>
                           <Text style={[styles.checkVal, { color: theme.text }]}>{st.next_tl}</Text>
                         </View>
                       ) : null}
