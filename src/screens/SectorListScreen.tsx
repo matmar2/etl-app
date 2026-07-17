@@ -94,10 +94,16 @@ export default function SectorListScreen({ route, navigation }: any) {
     if (f.arr && s.arr && f.arr.toUpperCase() !== s.arr.toUpperCase()) d.push(`ARR ${f.arr} (was ${s.arr})`);
     return d.length ? `⚠ Leon updated — ${d.join(' · ')}` : null;
   };
+  // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time).
+  // A ground MAINTENANCE log is independent of flight dispatch, so it never blocks opening a Leon leg.
+  const isMaint = (s: Sector) => (s as any).page_kind === 'maintenance_only' || s.flight_no === 'MAINT';
+  const openSector = sectors.find((s) => !isMaint(s) && !['closed', 'exported'].includes(s.status));
   const visibleSectors = (histOpen
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
     : sectors.filter((s) => s.flight_date === today || inProgress(s)))
-    .filter((s) => !hidden.has(s.id));               // drop per-device "removed from list" records
+    // drop per-device "removed from list" records — but NEVER hide the open flight that is blocking
+    // new legs, or the crew can't see the thing they're told to "close first".
+    .filter((s) => !hidden.has(s.id) || s.id === openSector?.id);
   // History view: also list PAST Leon flights for the tail. If a Leon flight was opened in ETL
   // (same flight_no + date) show only the ETL one — no duplicate.
   const etlKeys = new Set(sectors.map((s) => `${(s.flight_no || '').toUpperCase()}|${s.flight_date ?? ''}`));
@@ -106,11 +112,6 @@ export default function SectorListScreen({ route, navigation }: any) {
         && !etlKeys.has(`${(f.flight_no || '').toUpperCase()}|${(f.std ?? '').slice(0, 10)}`))
         .sort((a, b) => (b.std ?? '').localeCompare(a.std ?? ''))
     : [];
-  // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time),
-  // and flights are opened in departure-time order (earliest first). A ground MAINTENANCE log is
-  // independent of flight dispatch, so it never blocks opening a Leon leg.
-  const isMaint = (s: Sector) => (s as any).page_kind === 'maintenance_only' || s.flight_no === 'MAINT';
-  const openSector = sectors.find((s) => !isMaint(s) && !['closed', 'exported'].includes(s.status));
   const nextFlight = available[0];                       // earliest by STD
 
   // Try Leon when online; on success cache the full 72 h window; on failure fall back to cache.
