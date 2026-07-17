@@ -840,6 +840,9 @@ export async function completeCheck(reg: string, kind: string, body: any): Promi
 }
 export const checkHtml = (checkId: string): Promise<{ html: string }> =>
   cachedHtml(`checkhtml_${checkId}`, `/aircraft/checks/record/${checkId}/html`);
+// An OASES-accomplished 2/10-day check → the Fly2Sky task list marked carried-out (Accomplished in OASES).
+export const oasesCheckHtml = (defectId: string): Promise<{ html: string }> =>
+  cachedHtml(`oaseschk_${defectId}`, `/aircraft/checks/oases-record/${defectId}/html`);
 export const previewCheck = (reg: string, kind: string, body: any): Promise<{ html: string }> =>
   api(`/aircraft/${encodeURIComponent(reg)}/checks/${kind}/preview`, { method: 'POST', body: JSON.stringify(body) });
 export type CheckRecord = { id: string; kind: string; completed_at: string; signer_name?: string; licence_no?: string; insp_signer_name?: string; insp_licence_no?: string; tlb_no?: string; data?: any; amendable?: boolean };
@@ -938,7 +941,7 @@ export const createMaintenance = (body: { aircraft_id: string; station: string; 
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
-  registration?: string; sector_id?: string; defect_id?: string; check_id?: string; category?: string; defects_summary?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
+  registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
 // Recent sign-offs with offline fallback: cache the list, and warm the Tech Log/CRS
 // cache for each signed sector so they can be opened offline too.
 export async function signoffsRecent(days: number, reg?: string): Promise<{ days: number; signoffs: SignOff[]; categories?: string[]; cached?: boolean }> {

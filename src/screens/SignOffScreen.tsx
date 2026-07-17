@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, checkHtml, currentAircraft, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, checkHtml, currentAircraft, defectCrsPreview, oasesCheckHtml, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
@@ -41,6 +41,13 @@ export default function SignOffScreen({ navigation }: any) {
       setOpeningId(g.id);
       try { const { html } = await sectorTlHtmlCached(g.sector_id); await printHtml(html); }
       catch (e: any) { setMsg(e?.message?.includes('cached') || e?.message?.includes('Offline') ? 'Offline — open this Tech Log once online to make it available offline.' : (e?.message || 'Could not open the document.')); }
+      finally { setOpeningId(null); }
+      return;
+    }
+    if (g.oases_check && g.defect_id) {                  // OASES-accomplished 2/10-day check → the check task list
+      setOpeningId(g.id);
+      try { const { html } = await oasesCheckHtml(g.defect_id); await printHtml(html); }
+      catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the check.')); }
       finally { setOpeningId(null); }
       return;
     }
