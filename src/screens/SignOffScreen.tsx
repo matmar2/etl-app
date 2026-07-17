@@ -53,7 +53,7 @@ export default function SignOffScreen({ navigation }: any) {
     setMsg('This sign-off has no printable Tech Log.');
   }
   const openable = (g: SignOff) => !!(g.sector_id || g.defect_id || g.check_id);
-  const isCheck = (g: SignOff) => !!g.check_id;
+  const isCheck = (g: SignOff) => !!g.check_id || String(g.kind || '').startsWith('check_');
 
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
@@ -86,7 +86,7 @@ export default function SignOffScreen({ navigation }: any) {
                 {g.registration || ''}{g.flight_no ? ` · ${g.flight_no}` : ''}{g.dep && g.arr ? ` · ${g.dep}→${g.arr}` : ''}{g.flight_date ? ` · ${g.flight_date}` : ''}
               </Text>
               <Text style={s.meta}>{g.signer_name || ''}{g.licence_no ? ` · ${g.licence_no}` : ''}</Text>
-              {g.defects_summary ? <Text style={s.defs}>Defects: {g.defects_summary}</Text> : null}
+              {g.defects_summary ? <Text style={s.defs}>{isCheck(g) ? g.defects_summary : `Defects: ${g.defects_summary}`}</Text> : null}
               {openable(g) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginTop: 6 }}>
                   <Text style={s.open}>{openingId === g.id ? 'Opening…' : (isCheck(g) ? 'Tap to open the signed check ›' : 'Tap to open the signed CRS ›')}</Text>
