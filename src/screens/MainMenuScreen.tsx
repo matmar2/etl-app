@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
@@ -75,6 +75,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [hasInduction, setHasInduction] = useState<boolean | null>(null);   // null = unknown (show); false = hide the tile (admin/CAMO)
   const [ac, setAc] = useState<Fleet | null>(currentAircraft());
   const [fleet, setFleet] = useState<Fleet[]>([]);
+  const ddRef = useRef<ScrollView>(null);            // Switch-aircraft dropdown scroll ref (up/down arrows)
   const [pick, setPick] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [ver, setVer] = useState<{ revision: string | null; approved_at?: string } | null>(null);
@@ -334,9 +335,21 @@ export default function MainMenuScreen({ navigation }: any) {
               <TouchableOpacity style={[styles.acChip, testing && styles.acChipTest]} disabled={!testing} onPress={() => setPick((p) => !p)}>
                 <Text style={styles.acChipTxt}>{testing ? `Switch aircraft  ${pick ? '▴' : '▾'}` : (ac?.type ?? '')}</Text>
               </TouchableOpacity>
-              {pick ? (
+              {pick ? (() => {
+                // Cover ALL aircraft — grow to fit the whole fleet, but never taller than the iPad
+                // page (cap to 62% of the screen). If it still doesn't fit, show up/down scroll arrows.
+                const rowH = 52;
+                const cap = Math.round(Dimensions.get('window').height * 0.62);
+                const ddMax = Math.min(fleet.length * rowH + 4, cap);
+                const scrollable = fleet.length * rowH > ddMax;
+                return (
                 <View style={styles.dropdown}>
-                  <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator nestedScrollEnabled>
+                  {scrollable ? (
+                    <TouchableOpacity style={styles.ddArrow} onPress={() => ddRef.current?.scrollTo({ y: 0, animated: true })}>
+                      <Text style={styles.ddArrowTxt}>▲</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <ScrollView ref={ddRef} style={{ maxHeight: ddMax }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator nestedScrollEnabled>
                     {fleet.map((a) => (
                       <TouchableOpacity key={a.registration} style={[styles.ddRow, a.registration === reg && styles.ddRowOn]} onPress={() => choose(a)}>
                         <Text style={styles.ddReg}>{a.registration}</Text>
@@ -344,8 +357,14 @@ export default function MainMenuScreen({ navigation }: any) {
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                  {scrollable ? (
+                    <TouchableOpacity style={styles.ddArrow} onPress={() => ddRef.current?.scrollToEnd({ animated: true })}>
+                      <Text style={styles.ddArrowTxt}>▼</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-              ) : null}
+                );
+              })() : null}
             </View>
           </View>
         </View>
@@ -484,6 +503,8 @@ const styles = StyleSheet.create({
   cardSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
 
   dropdown: { position: 'absolute', top: 38, right: 0, width: 230, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, zIndex: 1000, elevation: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
+  ddArrow: { alignItems: 'center', paddingVertical: 4, backgroundColor: theme.tile, borderBottomWidth: 1, borderBottomColor: theme.border },
+  ddArrowTxt: { color: theme.accent, fontSize: 13, fontWeight: '800' },
   ddRow: { paddingVertical: 10, paddingHorizontal: 13, borderBottomWidth: 1, borderBottomColor: theme.border },
   ddRowOn: { backgroundColor: theme.tile },
   ddReg: { color: theme.text, fontWeight: '800', fontSize: 15 },
