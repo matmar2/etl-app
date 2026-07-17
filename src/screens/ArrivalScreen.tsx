@@ -94,15 +94,17 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const hasV = (v: any) => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
   function computeMissing() {
     const m = mand || {}; const out: { key: string; label: string; sec: string }[] = [];
-    const add = (key: string, label: string, sec: string, ok: boolean) => { if (m[key] && !ok) out.push({ key, label, sec }); };
+    // force = always required to close a sector (independent of the admin mandatory-field config):
+    // you cannot close on arrival without recording that you landed and are on blocks.
+    const add = (key: string, label: string, sec: string, ok: boolean, force = false) => { if ((force || m[key]) && !ok) out.push({ key, label, sec }); };
     add('arr', 'Arrival airport', 'top', !!s.arr);
     add('takeoff', 'OFF (take-off)', 'oooi', !!s.takeoff);
-    add('landing', 'ON (landing)', 'oooi', !!s.landing);
-    add('on_block', 'IN (on-block)', 'oooi', !!s.on_block);
+    add('landing', 'ON (landing)', 'oooi', !!s.landing, true);
+    add('on_block', 'IN (on-block)', 'oooi', !!s.on_block, true);
     add('landing_fuel_kg', 'Fuel at touch-down', 'fuel', hasV(lf));
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
     add('landings', 'Landings', 'ldg', true);   // one full-stop landing is implicit per flight
-    add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport);   // required only when diverted
+    add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport, div.on);   // required when diverted
     return out;
   }
   async function accept() {
@@ -327,9 +329,20 @@ export default function ArrivalScreen({ route, navigation }: any) {
       ) : null}
 
       <Text style={sx.section}>Acceptance (post-flight)</Text>
-      <TouchableOpacity disabled={!canAct} style={[sx.save, { backgroundColor: theme.accent, opacity: canAct ? 1 : 0.4 }]} onPress={accept}>
-        <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : (signMsg || 'Sign — close sector (arrival)')}</Text>
-      </TouchableOpacity>
+      {(() => {
+        const missing = canAct ? computeMissing() : [];         // required arrival fields still empty
+        const canSign = canAct && missing.length === 0;
+        return (
+          <>
+            <TouchableOpacity disabled={!canSign} style={[sx.save, { backgroundColor: theme.accent, opacity: canSign ? 1 : 0.4 }]} onPress={accept}>
+              <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : (signMsg || 'Sign — close sector (arrival)')}</Text>
+            </TouchableOpacity>
+            {canAct && missing.length ? (
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Complete before signing: {missing.map((x) => x.label).join(', ')}</Text>
+            ) : null}
+          </>
+        );
+      })()}
       <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
       {(s.status === 'closed' || s.status === 'exported') ? (
         <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowTlp(true)}>

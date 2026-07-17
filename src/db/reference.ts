@@ -36,21 +36,6 @@ export async function localCdl(q?: string, ata?: string): Promise<any[]> {
   return rows.slice(0, 200);
 }
 
-// Mirror the server's task-card filter: ata exact; sub over chapter/section; q over number/desc/card.
-export async function localTaskCards(q?: string, ata?: string, sub?: string): Promise<any[]> {
-  const { data } = await getRef<any[]>('taskcards');
-  let rows = data || [];
-  if (ata) rows = rows.filter((t) => t.ata_chapter === ata);
-  if (sub) rows = rows.filter((t) => t.chapter === sub || t.section === sub);
-  if (q) { const s = q.toLowerCase(); rows = rows.filter((t) => has(t.task_number, s) || has(t.description, s) || has(t.card_no, s)); }
-  return rows.slice(0, 200);
-}
-
-export async function localTaskFilters(): Promise<{ ata: string[]; sub: Record<string, string[]> }> {
-  const { data } = await getRef<{ ata: string[]; sub: Record<string, string[]> }>('taskfilters');
-  return data || { ata: [], sub: {} };
-}
-
 // AMM task cards are per-aircraft — cached by registration (key `amm:<REG>`). Mirror the
 // server filter: ata = first 2 digits; q over task_card_ref / title / description.
 export async function localAmm(reg?: string, q?: string, ata?: string): Promise<any[]> {

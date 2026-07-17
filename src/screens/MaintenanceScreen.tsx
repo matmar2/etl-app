@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ammIawLine, ammRevision, ampRevision, can, createMaintenance, currentAircraft, extendDefect, iawText, listActiveDefects, listHIL, mpdIawLine, NetworkError, serverSectors, syncPush, taskLineWithHeader, userName } from '../api/client';
+import { ammIawLine, ammRevision, can, createMaintenance, currentAircraft, extendDefect, listActiveDefects, listHIL, NetworkError, serverSectors, syncPush, userName } from '../api/client';
 import { createLocalMaintenance } from '../db/sectors';
 import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
@@ -17,18 +17,14 @@ export default function MaintenanceScreen({ route, navigation }: any) {
   const [station, setStation] = useState('');
   const [wo, setWo] = useState('');
   const [note, setNote] = useState('');
-  const [taskPick, setTaskPick] = useState(false);
-  const [mpdOpen, setMpdOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [stationBad, setStationBad] = useState(false);
   const [extBad, setExtBad] = useState(false);
   const [ammRev, setAmmRev] = useState('');   // AMM revision (live from CAMO)
-  const [ampRev, setAmpRev] = useState('');   // AMP issue/rev (live from CAMO) — shown once in the scope
   useEffect(() => {
     ammRevision().then(setAmmRev).catch(() => {});
-    ampRevision().then(setAmpRev).catch(() => {});
   }, []);
   const [active, setActive] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, ampRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, iawText, MelItem, MfaRequired, mpdIawLine, reverseRectification, role, userLicence, taskLineWithHeader } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence } from '../api/client';
 import { printHtml } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -25,8 +25,6 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [due, setDue] = useState('');
   const [melOpen, setMelOpen] = useState(false);
   const [cdlOpen, setCdlOpen] = useState(false);
-  const [taskPick, setTaskPick] = useState(false);
-  const [mpdOpen, setMpdOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
   // Rectify + CRS: validate entries -> confirm -> signature -> MFA
   const [lic, setLic] = useState(userLicence() ?? '');   // pre-filled from profile, editable
@@ -59,7 +57,6 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     setCdlOpen(false);
   }
 
-  const [ampRev, setAmpRev] = useState('');
   const [ammRev, setAmmRev] = useState('');
   async function load() {
     try { const dd = await getDefect(defectId); setD(dd); cacheDefect(dd).catch(() => {}); }   // online → cache for offline
@@ -72,7 +69,6 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   useEffect(() => { load(); }, [defectId]);
   useEffect(() => {
     ammRevision().then(setAmmRev).catch(() => {});
-    ampRevision().then(setAmpRev).catch(() => {});
   }, []);
 
   async function act(kind: string, body: any = {}) {

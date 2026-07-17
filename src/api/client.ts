@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as SecureStore from './secureStore';
 import { flushAttachments } from '../db/attachments';
 import { setCachedFlights } from '../db/flights';
-import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, localMel, localTaskCards, localTaskFilters, setApt, setRef, setTile } from '../db/reference';
+import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, localMel, setApt, setRef, setTile } from '../db/reference';
 import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
@@ -1049,34 +1049,6 @@ export const cdlSearch = async (q: string, ata?: string): Promise<CdlItem[]> => 
   catch { return localCdl(q, ata); }
 };
 
-export type TaskCard = { task_number: string; card_no?: string; ata_chapter?: string; section?: string;
-  chapter?: string; source?: string; src_ref?: string; job_type?: string; threshold?: string; interval?: string;
-  interval_unit?: string; effectivity?: string; description?: string; title?: string; revision?: string };
-export const taskCardFilters = async (): Promise<{ ata: string[]; sub: Record<string, string[]> }> => {
-  try { return await api('/mel/task-cards/filters'); } catch { return localTaskFilters(); }
-};
-export const taskCards = async (q?: string, ata?: string, sub?: string): Promise<TaskCard[]> => {
-  try { return await api(`/mel/task-cards?limit=80${q ? `&q=${encodeURIComponent(q)}` : ''}${ata ? `&ata=${encodeURIComponent(ata)}` : ''}${sub ? `&sub=${encodeURIComponent(sub)}` : ''}`); }
-  catch { return localTaskCards(q, ata, sub); }
-};
-
-// Append an i.a.w task-card line to a scope/narrative, inserting the AMP·AMM revision header ONCE.
-export function taskLineWithHeader(existing: string, line: string, ampRev: string, ammRev: string): string {
-  let base = (existing || '').replace(/\s+$/, '');
-  const header = [ampRev ? `AMP ${ampRev}` : '', ammRev ? `AMM ${ammRev}` : ''].filter(Boolean).join(' · ');
-  if (header && !base.includes(header)) base = base ? `${header}\n\n${base}` : header;
-  return base ? `${base}\n\n${line}` : line;
-}
-
-// Current active AMP issue/revision as 'Iss X Rev Y TR Z' (from CAMO, via /mel/ref-version).
-export async function ampRevision(): Promise<string> {
-  try {
-    const v: any = await api('/mel/ref-version');
-    const a = v?.amp || {};
-    return [a.issue ? `Iss ${a.issue}` : '', a.rev ? `Rev ${a.rev}` : '', a.tr ? `TR ${a.tr}` : ''].filter(Boolean).join(' ');
-  } catch { return ''; }
-}
-
 // Current AMM revision string (from CAMO, via /mel/ref-version). Falls back to the
 // cached ref-version so it still resolves offline. No manual entry — CAMO is the source.
 export async function ammRevision(): Promise<string> {
@@ -1101,20 +1073,19 @@ export async function refreshReference() {
     // Cache AMM on every iPad so any device works offline for a mechanic (only ~1.9 MB/tail).
     // (A per-device "maintenance iPad" scope is under review with the team — see AMM-offline notes.)
     const ammKey = reg ? `amm:${reg.toUpperCase()}` : null;
-    const [{ data: cachedVer }, { data: melCache }, { data: cdlCache }, { data: tcCache }, ammCache] = await Promise.all([
-      getRef('refversion'), getRef('mel'), getRef('cdl'), getRef('taskcards'),
+    const [{ data: cachedVer }, { data: melCache }, { data: cdlCache }, ammCache] = await Promise.all([
+      getRef('refversion'), getRef('mel'), getRef('cdl'),
       ammKey ? getRef(ammKey) : Promise.resolve({ data: null }),
     ]);
     const unchanged = cachedVer && JSON.stringify(cachedVer) === JSON.stringify(ver);
-    const refMissing = !melCache || !cdlCache || !tcCache;  // any core reference piece absent (e.g. CDL never cached)
+    const refMissing = !melCache || !cdlCache;             // any core reference piece absent (e.g. CDL never cached)
     const ammMissing = !!ammKey && !ammCache.data;         // this tail not cached yet (e.g. switched aircraft)
     if (unchanged && !refMissing && !ammMissing) return;   // nothing to do
-    if (!unchanged || refMissing) {                        // version changed OR a core piece missing → re-pull MEL/CDL/AMP
-      const [mel, cards, filters, cdl] = await Promise.all([
-        api('/mel?limit=3000'), api('/mel/task-cards?limit=3000'), api('/mel/task-cards/filters'), api('/cdl?limit=3000'),
+    if (!unchanged || refMissing) {                        // version changed OR a core piece missing → re-pull MEL/CDL
+      const [mel, cdl] = await Promise.all([
+        api('/mel?limit=3000'), api('/cdl?limit=3000'),
       ]);
-      await setRef('mel', mel); await setRef('taskcards', cards);
-      await setRef('taskfilters', filters); await setRef('cdl', cdl); await setRef('refversion', ver);
+      await setRef('mel', mel); await setRef('cdl', cdl); await setRef('refversion', ver);
     }
     if (reg) await prefetchAmm(reg);                       // AMM task-card picker offline (per aircraft)
   } catch { /* offline — keep whatever cache we have */ }
@@ -1154,30 +1125,6 @@ export async function prefetchAmm(reg?: string): Promise<number> {
   } catch { /* offline — keep existing cache */ }
   return 0;
 }
-// "i.a.w <task no> <summary>" — the rectification narrative the mechanic edits.
-// Some AMP cards have a blank description in CAMO (text leaked into chapter/section);
-// fall back to those so the line is never bare. The mechanic can edit it.
-export const taskSummary = (t: TaskCard): string =>
-  (t.description || t.title || t.chapter || t.section || '').replace(/\s+/g, ' ').trim();
-export const iawText = (t: TaskCard): string =>
-  `i.a.w ${t.task_number} ${taskSummary(t) || '(no description in AMP — refer to task card)'}`.trim();
-
-// CAMO MPD task — `reference` is the AMM reference.
-export type MpdCard = { reference: string; description?: string; task_number?: string;
-  section?: string; source_task_reference?: string; zone?: string; task_code?: string };
-export const mpdFilters = async (): Promise<{ ata: string[] }> => {
-  try { return await api('/mel/mpd/filters'); } catch { return { ata: [] }; }
-};
-export const mpdSearch = async (q?: string, ata?: string): Promise<MpdCard[]> => {
-  try { return await api(`/mel/mpd?limit=200${q ? '&q=' + encodeURIComponent(q) : ''}${ata ? '&ata=' + encodeURIComponent(ata) : ''}`); }
-  catch { return []; }
-};
-export const mpdSummary = (m: MpdCard): string =>
-  (m.description || m.section || '').replace(/\s+/g, ' ').trim();
-// "i.a.w AMM <reference> — <summary>" — starts the defect description; the mechanic edits it.
-export const mpdIawLine = (m: MpdCard): string =>
-  `i.a.w AMM ${m.reference}${mpdSummary(m) ? ' — ' + mpdSummary(m) : ''}`.trim();
-
 // CAMO AMM task card (separate AMM DB) — applicable per aircraft (registration).
 export type AmmCard = { task_card_ref: string; title?: string; description?: string; ata?: string; revision?: string };
 export const ammFilters = async (reg?: string): Promise<{ ata: string[] }> => {
