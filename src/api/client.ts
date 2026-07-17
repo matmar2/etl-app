@@ -958,6 +958,22 @@ export const createMaintenance = (body: { aircraft_id: string; station: string; 
 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
   registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; search_text?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
+
+export type ClearedItem = { id: string; ref?: string; ata_chapter?: string; mel_ref?: string; title?: string;
+  description?: string; source?: string; action_taken?: string; closed_by?: string; raised_date?: string; closed_date?: string; registration?: string };
+// Cleared (closed) Cabin defects OR cleared HIL items over the sign-off window — with offline cache.
+export async function clearedItems(kind: 'cabin' | 'hil', days: number, reg?: string): Promise<{ items: ClearedItem[]; cached?: boolean }> {
+  const key = `cleared_${kind}_${(reg || 'ALL').toUpperCase()}`;
+  try {
+    const r: { items: ClearedItem[] } = await api(`/signoffs/cleared?kind=${kind}&days=${days}${reg ? `&reg=${encodeURIComponent(reg)}` : ''}`);
+    setRef(key, r).catch(() => {}); _cacheSet(key, r).catch(() => {});
+    return r;
+  } catch {
+    let { data } = await getRef<{ items: ClearedItem[] }>(key);
+    if (!data) data = await _cacheGet<{ items: ClearedItem[] }>(key);
+    return data ? { items: data.items, cached: true } : { items: [], cached: true };
+  }
+}
 // Recent sign-offs with offline fallback: cache the list, and warm the Tech Log/CRS
 // cache for each signed sector so they can be opened offline too.
 export async function signoffsRecent(days: number, reg?: string): Promise<{ days: number; signoffs: SignOff[]; categories?: string[]; cached?: boolean }> {

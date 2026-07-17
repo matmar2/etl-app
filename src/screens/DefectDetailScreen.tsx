@@ -23,6 +23,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [mel, setMel] = useState('');
   const [rectIv, setRectIv] = useState('');
   const [due, setDue] = useState('');
+  const [maxCyc, setMaxCyc] = useState('');              // cycle-based MEL: max landings/cycles
   const [melOpen, setMelOpen] = useState(false);
   const [cdlOpen, setCdlOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
@@ -46,6 +47,13 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     (['captain', 'pilot'].includes(role() ?? '') && clearanceAuthorized());
 
   function appendNarr(line: string) { setNarr((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + line); }
+  // Time remaining to a calendar due date (limit = end of that day). "Nd Hh Mm left" / "OVERDUE …".
+  function remainingDue(dd?: string | null): string | null {
+    if (!dd || !/^\d{4}-\d{2}-\d{2}$/.test(dd)) return null;
+    const ms = new Date(`${dd}T23:59:59Z`).getTime() - Date.now();
+    const a = Math.abs(ms), d = Math.floor(a / 86400000), h = Math.floor((a % 86400000) / 3600000), m = Math.floor((a % 3600000) / 60000);
+    return ms < 0 ? `OVERDUE by ${d}d ${h}h ${m}m` : `${d}d ${h}h ${m}m left`;
+  }
   function pickMel(m: MelItem) {
     setMel(m.ata || '');                              // deferral ref + category
     if (m.category) setRectIv(m.category);
@@ -182,7 +190,15 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>{d.title || 'Defect'} <Text style={[styles.badge, { color }]}>· {d.status}</Text></Text>
       <Text style={styles.desc}>{d.description}</Text>
-      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
+      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
+      {/* Deferred item: remaining calendar time and/or remaining cycles (cycle-based MEL). */}
+      {d.status === 'deferred' && (d.due_date || d.max_cycles != null) ? (
+        <Text style={[styles.sub, { fontWeight: '700', color: (/OVERDUE/.test(remainingDue(d.due_date) || '') || (d.remaining_cycles != null && d.remaining_cycles <= 0)) ? theme.red : theme.accent }]}>
+          {d.due_date && remainingDue(d.due_date) ? remainingDue(d.due_date) : ''}
+          {d.due_date && d.max_cycles != null ? '  ·  ' : ''}
+          {d.max_cycles != null ? `${d.remaining_cycles != null ? d.remaining_cycles : d.max_cycles} of ${d.max_cycles} cycles left` : ''}
+        </Text>
+      ) : null}
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
@@ -320,8 +336,15 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             </View>
             <TextInput style={[styles.input, { width: 120, minHeight: 0 }]} value={due} onChangeText={setDue} placeholder="due YYYY-MM-DD" placeholderTextColor={theme.sub} />
           </View>
+          {/* Calendar-day limit: show the time remaining live as the due date is entered. */}
+          {remainingDue(due) ? <Text style={[styles.sub, { marginTop: 4, color: /OVERDUE/.test(remainingDue(due) || '') ? theme.red : theme.accent }]}>Remaining: {remainingDue(due)}</Text> : null}
+          {/* Cycle-based MEL: enter the max cycles/landings allowed; remaining is computed after deferral. */}
+          <View style={[styles.row, { marginTop: 8 }]}>
+            <TextInput style={[styles.input, { width: 150, minHeight: 0 }]} value={maxCyc} onChangeText={(v) => setMaxCyc(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder="Max cycles (if cyclic)" placeholderTextColor={theme.sub} />
+            <Text style={[styles.sub, { flex: 1, minWidth: 140 }]}>For a cycle-limited item — remaining cycles are tracked from the landings after deferral.</Text>
+          </View>
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 10 }]}
-            onPress={() => act('deferral', { mel_ref: mel || undefined, rect_interval: rectIv, due_date: due || undefined })}>
+            onPress={() => act('deferral', { mel_ref: mel || undefined, rect_interval: rectIv, due_date: due || undefined, max_cycles: maxCyc ? Number(maxCyc) : undefined })}>
             <Text style={[styles.act2t, { color: '#1a1300' }]}>Defer per MEL{rectIv ? ' ' + rectIv : ''}</Text>
           </TouchableOpacity>
           </>)}

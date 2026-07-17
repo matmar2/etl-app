@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, checkHtml, currentAircraft, defectCrsPreview, oasesCheckHtml, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, oasesCheckHtml, role, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
@@ -11,6 +11,13 @@ const KIND: Record<string, string> = {
 };
 
 export default function SignOffScreen({ navigation }: any) {
+  const isCabin = role() === 'cabin';                         // cabin crew see Cleared Cabin defects only
+  const VIEWS: { key: 'signoffs' | 'hil' | 'cabin'; label: string }[] = isCabin
+    ? [{ key: 'cabin', label: 'Cleared Cabin' }]
+    : [{ key: 'signoffs', label: 'Sign-offs' }, { key: 'hil', label: 'Cleared HIL' }, { key: 'cabin', label: 'Cleared Cabin' }];
+  const [view, setView] = useState<'signoffs' | 'hil' | 'cabin'>(isCabin ? 'cabin' : 'signoffs');
+  const [cleared, setCleared] = useState<ClearedItem[] | null>(null);
+  const [clearedCached, setClearedCached] = useState(false);
   const [days, setDays] = useState(15);
   const [list, setList] = useState<SignOff[] | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
@@ -33,7 +40,12 @@ export default function SignOffScreen({ navigation }: any) {
 
   const reg = currentAircraft()?.registration;
   useEffect(() => { appSettings().then((sx) => setDays(sx.signoff_view_days || 15)).catch(() => {}); }, []);
-  useEffect(() => { signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); setCatOpts(r.categories || []); }).catch(() => setList([])); }, [days, reg]);
+  useEffect(() => { if (isCabin) return; signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); setCatOpts(r.categories || []); }).catch(() => setList([])); }, [days, reg]);
+  useEffect(() => {
+    if (view === 'signoffs') return;
+    setCleared(null);
+    clearedItems(view, days, reg).then((r) => { setCleared(r.items); setClearedCached(!!r.cached); }).catch(() => setCleared([]));
+  }, [view, days, reg]);
 
   async function open(g: SignOff) {
     setMsg('');
@@ -73,7 +85,34 @@ export default function SignOffScreen({ navigation }: any) {
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Flight Sign Off</Text>
-      <Text style={s.sub}>{reg ? `${reg} · ` : ''}sign-offs in the last {days} days (configurable in admin). Tap a row to open the signed Tech Log / CRS.{cached ? ' · Offline — showing the last cached list.' : ''}</Text>
+      <Text style={s.sub}>{reg ? `${reg} · ` : ''}last {days} days (configurable in admin).{view === 'signoffs' ? ' Tap a row to open the signed Tech Log / CRS.' : ' Cleared items — with date raised, closed date and closed-by.'}{(view === 'signoffs' ? cached : clearedCached) ? ' · Offline — cached.' : ''}</Text>
+
+      {VIEWS.length > 1 ? (
+        <View style={s.tabs}>
+          {VIEWS.map((v) => (
+            <TouchableOpacity key={v.key} style={[s.tab, view === v.key && s.tabOn]} onPress={() => setView(v.key)} activeOpacity={0.7}>
+              <Text style={[s.tabTxt, view === v.key && s.tabTxtOn]}>{v.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      {view !== 'signoffs' ? (
+        cleared === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :
+        cleared.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>No cleared {view === 'hil' ? 'HIL items' : 'cabin defects'} in the last {days} days.</Text> :
+        cleared.map((c) => (
+          <TouchableOpacity key={c.id} style={s.row} activeOpacity={0.6} onPress={() => navigation.navigate('DefectDetail', { defectId: c.id })}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.k}>{c.ref || c.title || c.description || (view === 'hil' ? 'HIL item' : 'Cabin defect')}</Text>
+              <Text style={s.meta}>ATA {c.ata_chapter || '—'}{c.mel_ref ? ` · ${view === 'hil' ? 'MEL ' : ''}${c.mel_ref}` : ''}{c.source ? ` · ${c.source.toUpperCase()}` : ''}</Text>
+              {c.description && c.ref ? <Text style={s.defs}>{c.description}</Text> : null}
+              {c.action_taken ? <Text style={s.defs}>Action: {c.action_taken}</Text> : null}
+              <Text style={s.meta}>Raised {c.raised_date || '—'} · Cleared {c.closed_date || '—'}{c.closed_by ? ` · by ${c.closed_by}` : ''}</Text>
+              <Text style={s.open}>details ›</Text>
+            </View>
+          </TouchableOpacity>
+        ))
+      ) : (<>
 
       <View style={s.searchWrap}>
         <Text style={s.searchIcon}>🔍</Text>
@@ -130,12 +169,18 @@ export default function SignOffScreen({ navigation }: any) {
             <Text style={s.when}>{g.signed_at?.slice(0, 16).replace('T', ' ')}z</Text>
           </TouchableOpacity>
         ))}
+      </>)}
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
+  tabs: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+  tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.panel },
+  tabOn: { backgroundColor: theme.accent, borderColor: theme.accent },
+  tabTxt: { color: theme.text, fontWeight: '700', fontSize: 13 },
+  tabTxtOn: { color: '#1a1300' },
   title: { color: theme.text, fontSize: 22, fontWeight: '800' },
   sub: { color: theme.sub, marginTop: 6, fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 14, marginTop: 10 },
