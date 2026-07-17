@@ -496,22 +496,22 @@ export default function DepartureScreen({ route, navigation }: any) {
         return (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
             <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 1 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU} qt` : ''}`}</Text></View>
+              <View style={topWrap}><Text style={oilLbl}>{`Eng 1 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
               <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng1)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng1: v === '' ? '' : oilToL(v) }); }} />
               <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 1 oil (qt) *</Text>
               <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
             </View>
             <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 2 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU} qt` : ''}`}</Text></View>
+              <View style={topWrap}><Text style={oilLbl}>{`Eng 2 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
               <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng2)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng2: v === '' ? '' : oilToL(v) }); }} />
               <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 2 oil (qt) *</Text>
               <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
             </View>
             {/* Hydraulic uplift — three separate systems (Green / Blue / Yellow) in QUARTS like the oil;
                 the per-system FCOM minimum is held in litres and shown as qt. Stored canonically in litres. */}
-            {([['hyd_green', 'Green', servMin?.hyd_min_green_l], ['hyd_blue', 'Blue', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Yellow', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
+            {([['hyd_green', 'G', servMin?.hyd_min_green_l], ['hyd_blue', 'B', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Y', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
               <View key={key} style={{ width: 150 }}>
-                <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)} qt` : ''}`}</Text></View>
+                <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text></View>
                 <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
               </View>
             ))}
@@ -599,6 +599,45 @@ export default function DepartureScreen({ route, navigation }: any) {
         </>
       ) : null}
 
+      {/* MAINTENANCE RELEASE (CRS) — its own section; it gates and PRECEDES commander acceptance.
+          Maintenance can sign it even with NO defect and NO servicing (the Tech Log shows NIL). */}
+      {s.status !== 'preflight_signed' ? (
+        <>
+          <Text style={sx.section}>Maintenance release (CRS)</Text>
+          {(acSt && !acSt.serviceable) ? (
+            <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
+              <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.blocking_defects} open defect(s)</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL before the release. The Tech Log keeps the entered information.</Text>
+              <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
+                <Text style={sx.saveText}>View / clear defects</Text>
+              </TouchableOpacity>
+              {/* CRS button stays visible while unserviceable but is NOT clickable — clear defects first. */}
+              {can('release', 'crs') ? (
+                <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
+                  <Text style={sx.saveText}>🔧 Maintenance — sign CRS (clear defects first)</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : !s.released_at ? (
+            <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12 }}>
+              <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance release (CRS) required</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
+                Commander acceptance unlocks once maintenance has signed the CRS — signed even with no defect and no servicing (the Tech Log shows NIL).
+              </Text>
+              {can('release', 'crs') ? (
+                <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => navigation.navigate('Release', { sectorId })}>
+                  <Text style={sx.saveText}>🔧 Maintenance — sign CRS</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>
+              ✓ Maintenance release (CRS) signed{s.release_kind === 'nil' ? ' · NIL' : ''}
+            </Text>
+          )}
+        </>
+      ) : null}
+
       <Text style={sx.section}>Commander acceptance</Text>
       {s.status === 'preflight_signed' ? (
         <>
@@ -613,42 +652,9 @@ export default function DepartureScreen({ route, navigation }: any) {
           {s.takeoff ? <Text style={[sx.sub, { color: theme.sub, marginTop: 8 }]}>Aircraft airborne — acceptance can no longer be undone.</Text> : null}
         </>
       ) : (acSt && !acSt.serviceable) ? (
-        <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
-          <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.blocking_defects} open defect(s)</Text>
-          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Commander acceptance is unavailable until every open defect is rectified (CRS) or deferred under the MEL. The Tech Log keeps the entered information.</Text>
-          <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
-            <Text style={sx.saveText}>View / clear defects</Text>
-          </TouchableOpacity>
-          {/* Maintenance's CRS button stays visible while unserviceable but is NOT clickable —
-              open defects must be rectified/deferred (via "View / clear defects") first. */}
-          {can('release', 'crs') ? (
-            <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
-              <Text style={sx.saveText}>🔧 Maintenance — sign CRS (clear defects first)</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <Text style={sx.sub}>Available once the aircraft is serviceable and maintenance has signed the CRS above.</Text>
       ) : (
         <>
-          {/* Maintenance release (CRS) gate: the commander accepts only after maintenance has signed
-              the CRS. Maintenance can sign it even with NO defect and NO servicing — the Tech Log
-              then simply shows NIL. */}
-          {!s.released_at ? (
-            <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12, marginBottom: 10 }}>
-              <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance release (CRS) required</Text>
-              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
-                Commander acceptance unlocks once maintenance has signed the CRS — this is signed even with no defect and no servicing (the Tech Log shows NIL).
-              </Text>
-              {can('release', 'crs') ? (
-                <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => navigation.navigate('Release', { sectorId })}>
-                  <Text style={sx.saveText}>🔧 Maintenance — sign CRS</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
-              ✓ Maintenance release (CRS) signed{s.release_kind === 'nil' ? ' · NIL' : ''}
-            </Text>
-          )}
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
           <TouchableOpacity disabled={!isCrew || !s.released_at} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && s.released_at) ? 1 : 0.4 }]} onPress={accept}>
             <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
