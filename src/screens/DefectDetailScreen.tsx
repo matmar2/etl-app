@@ -32,6 +32,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [lic, setLic] = useState(userLicence() ?? '');   // pre-filled from profile, editable
   const [signing, setSigning] = useState(false);
   const [crsSig, setCrsSig] = useState<string | null>(null);
+  const [diOpen, setDiOpen] = useState(false);           // double-inspection (DI) — second person's signature
+  const [diName, setDiName] = useState('');
+  const [diLic, setDiLic] = useState('');
+  const [diSigning, setDiSigning] = useState(false);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -118,6 +122,18 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       if (e instanceof MfaRequired) { setCrsSig(signature); setNeedOtp(true); setMsg('Enter your authenticator code to issue the CRS.'); }
       else setMsg(`Failed: ${e.message}`);
     }
+  }
+  // Double inspection (DI): a second qualified person's independent inspection — captures their
+  // name, licence, signature and the date/time.
+  async function submitDI(signature: string) {
+    setMsg('Recording double inspection…');
+    try {
+      const a = { kind: 'double_inspection', signer_name: diName.trim(), licence_no: diLic.trim() || undefined, signature_image: signature };
+      const r = await addDefectAction(defectId, a);
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'double_inspection', narrative: `Double inspection · ${diName.trim()}` }); setMsg('Double inspection saved offline — will sync ✓'); }
+      else setMsg('Double inspection recorded ✓');
+      setDiOpen(false); setDiName(''); setDiLic(''); load();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
   async function reverse() {
     if (!(await confirmAction('Reverse this Rectify + CRS? The rectification and its CRS signature will be voided and the defect re-opened.', 'Reverse CRS'))) return;
@@ -246,6 +262,25 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             onPick={(m) => { setNarr((n) => { const line = ammIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; }); setAmmOpen(false); }} />
           {isMech && (<>
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => act('troubleshooting')}><Text style={styles.act2t}>Troubleshooting</Text></TouchableOpacity>
+
+          {/* Double Inspection (DI) — a second qualified person signs an independent inspection (name + licence + signature + date/time). */}
+          <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setDiOpen((v) => !v)}>
+            <Text style={styles.act2t}>👥 Double Inspection (DI){diOpen ? ' ▴' : ' ▾'}</Text>
+          </TouchableOpacity>
+          {diOpen ? (
+            <View style={{ marginTop: 8, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
+              <Text style={styles.sub}>The independent second inspection required for a critical task. The DI signature and its date/time are recorded.</Text>
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                <TextInput style={[styles.input, { width: 200, minHeight: 0 }]} value={diName} onChangeText={setDiName} placeholder="DI — inspector name *" placeholderTextColor={theme.sub} />
+                <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={diLic} onChangeText={setDiLic} placeholder="DI — licence / auth no" placeholderTextColor={theme.sub} />
+              </View>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => { if (!diName.trim()) { setMsg('Enter the double-inspection inspector name.'); return; } setDiSigning(true); }}>
+                <Text style={[styles.act2t, { color: '#1a1300' }]}>Sign double inspection</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          <SignaturePad visible={diSigning} title="Double inspection signature"
+            onClose={() => setDiSigning(false)} onDone={(dataUrl) => { setDiSigning(false); submitDI(dataUrl); }} />
 
           <Text style={styles.lbl}>Rectify + CRS (certification — M.A.801)</Text>
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>

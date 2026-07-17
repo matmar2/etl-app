@@ -232,8 +232,9 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
         })()}
       </View>
 
+      {/* Opened from a specific check button on the Menu → show only that checklist; otherwise both tabs. */}
       <View style={s.tabs}>
-        {(['2day', '10day'] as const).map((k) => (
+        {(route?.params?.kind ? [route.params.kind as '2day' | '10day'] : (['2day', '10day'] as const)).map((k) => (
           <TouchableOpacity key={k} style={[s.tab, kind === k && s.tabOn]} onPress={() => setKind(k)}>
             <Text style={[s.tabTxt, kind === k && s.tabTxtOn]}>{k === '2day' ? '02 Days Check' : '10 Days Check'}</Text>
           </TouchableOpacity>

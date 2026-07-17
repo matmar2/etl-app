@@ -621,8 +621,9 @@ export const listAttachments = (q: { defect_id?: string; sector_id?: string }): 
 };
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}`;
 
-export const addServicing = (body: { sector_id: string; system: string; uplift_lt?: number; depart_lt?: number }) =>
+export const addServicing = (body: { sector_id: string; system: string; uplift_lt?: number; depart_lt?: number; arrival_lt?: number; arrival_at?: string }) =>
   mutateOrQueue('/servicing', { method: 'POST', body: JSON.stringify(body) });
+export const listServicing = (sectorId: string): Promise<any[]> => api(`/servicing?sector_id=${sectorId}`);
 
 export type Fleet = { registration: string; type: string; msn?: string };
 export const fleetList = (): Promise<Fleet[]> => api('/aircraft');

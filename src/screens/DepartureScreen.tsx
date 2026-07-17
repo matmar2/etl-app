@@ -140,7 +140,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('bowser_uplift_lt', 'Bowser uplift', 'fuel', hasV(fuel.bowser_uplift_lt));
     add('fuel_grade', 'Fuel grade', 'fuel', !!fuel.fuel_grade);
     add('pfi', 'PFI', 'pfi', !!(s.pfi_signature || s.pfi_at));
-    add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green));
+    add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
     return out;
   }
   async function accept() {
@@ -469,7 +469,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         <Text style={{ color: theme.sub }}>Nil oils / fluids uplift</Text>
         <Switch value={!!fuel.nil_oils_fluids} onValueChange={(v) => setFuel({ ...fuel, nil_oils_fluids: v })} />
       </View>
-      {!fuel.nil_oils_fluids && !serv.eng1 && !serv.eng2 && !serv.hyd_green ? (
+      {!fuel.nil_oils_fluids && !serv.eng1 && !serv.eng2 && !serv.hyd_green && !serv.hyd_blue && !serv.hyd_yellow ? (
         <Text style={{ color: theme.accent, fontSize: 11, marginTop: -2, marginBottom: 8 }}>
           Record an oil / hydraulic uplift below, or tick &ldquo;Nil oils / fluids&rdquo; — required before release.
         </Text>
@@ -491,22 +491,25 @@ export default function DepartureScreen({ route, navigation }: any) {
         return (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
             <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 1 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
+              <View style={topWrap}><Text style={oilLbl}>{`Eng 1 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU} qt` : ''}`}</Text></View>
               <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng1)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng1: v === '' ? '' : oilToL(v) }); }} />
               <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 1 oil (qt) *</Text>
               <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
             </View>
             <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 2 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
+              <View style={topWrap}><Text style={oilLbl}>{`Eng 2 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU} qt` : ''}`}</Text></View>
               <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng2)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng2: v === '' ? '' : oilToL(v) }); }} />
               <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 2 oil (qt) *</Text>
               <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
             </View>
-            <View style={{ width: 150 }}>
-              {/* Hydraulic entered in QUARTS like the engine oil (FCOM minimums are held in litres → shown as qt); stored canonically in litres. */}
-              <View style={topWrap}><Text style={oilLbl}>{`Hyd (${oilUnitLbl})${servMin?.hyd_min_green_l != null ? ` · min G${qtOf(servMin.hyd_min_green_l)}/B${qtOf(servMin.hyd_min_blue_l)}/Y${qtOf(servMin.hyd_min_yellow_l)} · total ${qtOf(servMin.hyd_min_green_l + servMin.hyd_min_blue_l + servMin.hyd_min_yellow_l)}` : ''}`}</Text></View>
-              <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.hyd_green)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, hyd_green: v === '' ? '' : oilToL(v) }); }} />
-            </View>
+            {/* Hydraulic uplift — three separate systems (Green / Blue / Yellow) in QUARTS like the oil;
+                the per-system FCOM minimum is held in litres and shown as qt. Stored canonically in litres. */}
+            {([['hyd_green', 'Green', servMin?.hyd_min_green_l], ['hyd_blue', 'Blue', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Yellow', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
+              <View key={key} style={{ width: 150 }}>
+                <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)} qt` : ''}`}</Text></View>
+                <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+              </View>
+            ))}
           </View>
         );
       })()}
@@ -521,6 +524,8 @@ export default function DepartureScreen({ route, navigation }: any) {
           { system: 'eng1', up: serv.eng1, totQt: serv.eng1_total },   // total in quarts (Airbus oil qty)
           { system: 'eng2', up: serv.eng2, totQt: serv.eng2_total },
           { system: 'hyd_green', up: serv.hyd_green, totQt: undefined as any },
+          { system: 'hyd_blue', up: serv.hyd_blue, totQt: undefined as any },
+          { system: 'hyd_yellow', up: serv.hyd_yellow, totQt: undefined as any },
         ];
         for (const r of rows) {
           const up = num(r.up);

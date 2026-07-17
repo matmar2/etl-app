@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, publicConfig, role, signRecord, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -27,6 +27,13 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
   const [testing, setTesting] = useState(false);
+  const [oilArr, setOilArr] = useState<{ eng1: string; eng2: string }>({ eng1: '', eng2: '' });   // oil qty on arrival (qt)
+  const [oilMsg, setOilMsg] = useState('');
+  const QT_L = 0.946353;                                  // US quart -> litre (oil stored canonically in litres)
+  useEffect(() => { listServicing(sectorId).then((rows: any[]) => {
+    const g = (sys: string) => { const r = (rows || []).find((x) => x.system === sys && x.arrival_lt != null); return r ? String(Math.round((r.arrival_lt / QT_L) * 10) / 10) : ''; };
+    setOilArr({ eng1: g('eng1'), eng2: g('eng2') });
+  }).catch(() => {}); }, [sectorId]);
   const noteShown = useRef(false);
   useEffect(() => { appSettings().then((x: any) => setMand(x.mandatory_fields?.arrival || {})).catch(() => {}); }, []);
   useEffect(() => { publicConfig().then((c: any) => setTesting(!!c.testing_mode)).catch(() => {}); }, []);
@@ -212,6 +219,37 @@ export default function ArrivalScreen({ route, navigation }: any) {
           </View>
         </View>
         <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) save({ landing_fuel_kg: num(lf), fuel_remaining_kg: num(rem) }); }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>
+      </View>
+
+      {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
+          mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
+      <Text style={sx.section}>Oil quantity on arrival (qt)</Text>
+      <View style={sx.card}>
+        <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
+        <View style={[sx.grid, { alignItems: 'flex-start' }]}>
+          <View style={{ width: 160 }}>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt)</Text>
+            <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}
+              keyboardType="decimal-pad" value={oilArr.eng1} onChangeText={(v) => setOilArr({ ...oilArr, eng1: numericOnly(v) })} />
+          </View>
+          <View style={{ width: 160 }}>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt)</Text>
+            <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}
+              keyboardType="decimal-pad" value={oilArr.eng2} onChangeText={(v) => setOilArr({ ...oilArr, eng2: numericOnly(v) })} />
+          </View>
+        </View>
+        <TouchableOpacity style={[sx.save, { marginTop: 4 }]} onPress={async () => {
+          if (!oilArr.eng1 && !oilArr.eng2) { setOilMsg('Enter Eng 1 and/or Eng 2 oil quantity.'); return; }
+          if (!(await confirmAction('Save oil quantity on arrival? (read 5–30 min after shutdown)', 'Oil on arrival'))) return;
+          const at = new Date().toISOString();
+          try {
+            for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
+              if (val) await addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at });
+            }
+            setOilMsg('Oil on arrival saved ✓');
+          } catch (e: any) { setOilMsg(e?.message || 'Could not save'); }
+        }}><Text style={sx.saveText}>Save oil on arrival</Text></TouchableOpacity>
+        {oilMsg ? <Text style={{ color: /saved/.test(oilMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{oilMsg}</Text> : null}
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['ldg'] = e.nativeEvent.layout.y; }}>Landings (cycles)</Text>
