@@ -65,7 +65,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // returns both ETL + Leon candidates
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
-      fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg,
+      fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
       bowser_uplift_lt: s.bowser_uplift_lt, fuel_grade: s.fuel_grade, nil_oils_fluids: !!s.nil_oils_fluids });
     setBowserText(s.bowser_uplift_lt == null || s.bowser_uplift_lt === '' ? '' : String(round1(Number(s.bowser_uplift_lt))));   // L (default unit)
     aircraftConfig(s.aircraft_id).then((c) => {
@@ -100,8 +100,14 @@ export default function DepartureScreen({ route, navigation }: any) {
     ? (prevChoice === 'etl' ? etlC : prevChoice === 'leon' ? leonC : null)   // paused until a source is chosen
     : (prevF && prevF.fuel_kg != null ? prevF : null);
   const prevKg = prevResolved?.fuel_kg ?? null;
-  const depCalc: number | null = prevKg != null ? Math.round(prevKg + upliftKg) : null;   // departure fuel = prev landing fuel + total uplift
-  const depCalcSrc = `prev landing ${fmt(round1(prevKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
+  // Fuel remaining before refueling — the actual on-board fuel read before uplift. It can be LESS
+  // than the previous leg's landing fuel when maintenance ran the APU or did an engine run in
+  // between. When entered it becomes the base for the departure-fuel fallback (else the prev-leg fuel).
+  const fuelFoundKg: number | null = (fuel.fuel_found_kg === '' || fuel.fuel_found_kg == null || isNaN(Number(fuel.fuel_found_kg))) ? null : Number(fuel.fuel_found_kg);
+  const fuelFoundDiff: number | null = (fuelFoundKg != null && prevKg != null) ? Math.round((fuelFoundKg - prevKg) * 10) / 10 : null;   // – = used by APU/engine run
+  const baseKg = fuelFoundKg != null ? fuelFoundKg : prevKg;
+  const depCalc: number | null = baseKg != null ? Math.round(baseKg + upliftKg) : null;   // departure fuel = (fuel before refuelling, else prev landing) + total uplift
+  const depCalcSrc = `${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
   const depEff: number | null = depCalc != null ? depCalc : (fuel.dep_fuel_kg === '' || fuel.dep_fuel_kg == null ? null : Number(fuel.dep_fuel_kg));
   const oilUnitLbl = 'qt';
   const oilMinU = servMin?.oil_min_qt ?? null;
@@ -313,6 +319,24 @@ export default function DepartureScreen({ route, navigation }: any) {
           {prevResolved.continuity_ok === false ? (
             <Text style={{ color: theme.red, fontSize: 11, marginTop: 3, fontWeight: '800' }}>⚠ Previous destination {prevResolved.arr} ≠ this departure {s.dep} — check continuity</Text>
           ) : null}
+          {/* Fuel remaining before refuelling (may be less than the previous leg on landing if
+              maintenance ran the APU / did an engine run) + the difference vs the previous leg. */}
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <View style={{ width: 170 }}>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
+              <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+                keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
+                onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+            </View>
+            <View style={{ width: 170 }}>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Difference vs previous leg (kg)</Text>
+              <View style={{ backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
+                <Text style={{ color: fuelFoundDiff == null ? theme.sub : (fuelFoundDiff < 0 ? theme.red : theme.text), fontWeight: '800' }}>
+                  {fuelFoundDiff == null ? '—' : `${fuelFoundDiff > 0 ? '+' : ''}${fmt(fuelFoundDiff)}${fuelFoundDiff < 0 ? '  (used)' : ''}`}
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
       ) : null}
       <View style={[sx.card, canDep ? null : { opacity: 0.55 }]} pointerEvents={canDep ? 'auto' : 'none'}>
@@ -462,7 +486,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       })()}
       {canDep ? <TouchableOpacity style={sx.save} onPress={async () => {
         if (!(await confirmAction('Save departure fuel figures?'))) return;
-        const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
+        const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
         tanks.forEach((t) => (p[t.field] = num(fuel[t.field]))); save(p);
       }}><Text style={sx.saveText}>Save departure fuel</Text></TouchableOpacity> : null}
       </View>
