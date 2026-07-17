@@ -19,8 +19,6 @@ const TILES: Tile[] = [
   { key: 'flight', title: 'Flight Details', sub: 'Leon · today', nav: 'Sectors', icon: '✈️', group: 'Operations', tint: '#3d9be0' },
   { key: 'defects', title: 'Defects', sub: 'PIREP / MAREP / HIL', nav: 'Defects', icon: '🔧', group: 'Operations', tint: theme.accent },
   { key: 'signoff', title: 'Flight Sign Off', sub: 'Recent sign-offs', nav: 'SignOff', icon: '🖊️', group: 'Operations', tint: theme.red },
-  { key: 'planned', title: 'Planned Maint.', sub: '2-Day / 10-Day checks', nav: 'Planned', perm: 'checks', icon: '🛠️', group: 'Maintenance', tint: theme.green },
-  { key: 'maint', title: 'Maintenance', sub: 'Ground · no crew (CRS)', nav: 'Maintenance', perm: 'maintenance', icon: '⚙️', group: 'Maintenance', tint: theme.green },
   { key: 'docs', title: 'Documents', sub: 'Controlled documents', nav: 'Documents', icon: '📄', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'forms', title: 'Forms', sub: 'Role forms to fill', nav: 'Forms', icon: '📝', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'induction', title: 'Welcome & Quick Ref', sub: 'Your role induction', nav: '', icon: '👋', group: 'Help & feedback', tint: '#9b8cf0' },
@@ -354,12 +352,22 @@ export default function MainMenuScreen({ navigation }: any) {
         {st?.reasons?.length ? <Text style={styles.heroReason}>{st.reasons.join('   ·   ')}</Text> : null}
         {(st?.checks?.length || util) ? (
           <View style={styles.checks}>
-            {(st?.checks || []).map((c) => (
-              <View key={c.kind} style={styles.checkPill}>
-                <Text style={styles.checkLbl}>{c.label}</Text>
-                <Text style={[styles.checkVal, { color: c.expired ? theme.red : c.baseline ? theme.green : theme.sub }]}>{fmtLeft(c)}</Text>
-              </View>
-            ))}
+            {/* 2-Day / 10-Day check buttons — mechanics open & sign the check, Captain/FO view the
+                completed one. Colour stays green (in date) / red (overdue). */}
+            {(st?.checks || []).map((c) => {
+              const canOpen = access('checks') !== 'none';
+              const col = c.expired ? theme.red : c.baseline ? theme.green : theme.sub;
+              const inner = (<>
+                <Text style={styles.checkLbl}>{c.label}{canOpen ? '  ›' : ''}</Text>
+                <Text style={[styles.checkVal, { color: col }]}>{fmtLeft(c)}</Text>
+              </>);
+              return canOpen ? (
+                <TouchableOpacity key={c.kind} activeOpacity={0.7} style={[styles.checkPill, { borderColor: col }]}
+                  onPress={() => navigation.navigate('Planned', { aircraftId: ac?.registration ?? reg, kind: c.kind })}>
+                  {inner}
+                </TouchableOpacity>
+              ) : <View key={c.kind} style={styles.checkPill}>{inner}</View>;
+            })}
             {util ? (
               <>
                 {(() => {

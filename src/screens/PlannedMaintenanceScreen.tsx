@@ -12,7 +12,7 @@ import { theme } from '../theme';
 
 export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   const reg = route?.params?.aircraftId ?? 'LZ-FSA';
-  const [kind, setKind] = useState<'2day' | '10day'>('2day');
+  const [kind, setKind] = useState<'2day' | '10day'>(route?.params?.kind === '10day' ? '10day' : '2day');   // preselect the check tapped on the Menu
   const [tpl, setTpl] = useState<CheckTemplate | null>(null);
   const [state, setState] = useState<Record<string, any>>({});   // taskId -> {mech, insp, fields:{}}
   const [signer, setSigner] = useState(userName() ?? '');   // pre-filled from profile, editable

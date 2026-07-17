@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listClearedCabin, listHIL, syncPush } from '../api/client';
+import { access, can, cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listClearedCabin, listHIL, syncPush } from '../api/client';
 import { printHtml } from '../print';
 import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
 import { theme } from '../theme';
@@ -96,11 +96,20 @@ export default function DefectsScreen({ route, navigation }: any) {
         {canCabin ? <Tab id="cabin" label="Cabin" n={cabin.length} /> : null}
         {canTech ? <Tab id="hil" label="HIL" n={hil.length} /> : null}
       </View>
-      {tab === 'cabin' ? (
-        <TouchableOpacity style={styles.addBtn} onPress={() => navigation.navigate('ReportDefect', { aircraftId })}>
-          <Text style={styles.addTxt}>＋ Report cabin defect</Text>
+      {/* Report a defect from here (same options as the sector button): PIREP / MAREP / CABIN.
+          Certifying staff can also open a ground-maintenance log with NO crew on board and issue the CRS. */}
+      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        <TouchableOpacity style={[styles.addBtn, { flex: 1, minWidth: 150 }]}
+          onPress={() => navigation.navigate('ReportDefect', { aircraftId, ...(tab === 'cabin' ? { source: 'cabin' } : {}) })}>
+          <Text style={styles.addTxt}>＋ {tab === 'cabin' ? 'Report cabin defect' : 'Report defect'}</Text>
         </TouchableOpacity>
-      ) : null}
+        {can('maintenance') ? (
+          <TouchableOpacity style={[styles.addBtn, { flex: 1, minWidth: 150, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]}
+            onPress={() => navigation.navigate('Maintenance', { aircraftId })}>
+            <Text style={styles.addTxt}>⚙ Ground maintenance · no crew (CRS)</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       {note ? <Text style={styles.note}>{note}</Text> : data.length ? null : <Text style={styles.note}>{empty}</Text>}
       <FlatList
         data={data}

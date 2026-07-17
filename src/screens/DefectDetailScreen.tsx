@@ -6,8 +6,6 @@ import { printHtml } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
-import TaskCardPicker from '../components/TaskCardPicker';
-import MpdPicker from '../components/MpdPicker';
 import AmmPicker from '../components/AmmPicker';
 import PhotoCapture from '../components/PhotoCapture';
 import SignaturePad from '../components/SignaturePad';
@@ -240,20 +238,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           <TextInput style={[styles.input, { minHeight: Math.max(88, narr.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
             value={narr} onChangeText={setNarr} placeholder="Narrative / action taken… (add task cards below)" placeholderTextColor={theme.sub} multiline />
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setTaskPick(true)}>
-              <Text style={styles.act2t}>＋ Task card (i.a.w)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setMpdOpen(true)}>
-              <Text style={styles.act2t}>＋ Task Card2 (MPD)</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setAmmOpen(true)}>
-              <Text style={styles.act2t}>＋ Task Card3 (AMM)</Text>
+              <Text style={styles.act2t}>＋ Task Card (AMM)</Text>
             </TouchableOpacity>
           </View>
-          <TaskCardPicker visible={taskPick} defaultAta={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setTaskPick(false)}
-            onPick={(t) => { setNarr((n) => taskLineWithHeader(n, iawText(t), ampRev || t.revision || '', ammRev)); setTaskPick(false); }} />
-          <MpdPicker visible={mpdOpen} defaultAta={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setMpdOpen(false)}
-            onPick={(m) => { setNarr((n) => { const line = mpdIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; }); setMpdOpen(false); }} />
           <AmmPicker visible={ammOpen} reg={d?.aircraft_id} defaultAta={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setAmmOpen(false)}
             onPick={(m) => { setNarr((n) => { const line = ammIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; }); setAmmOpen(false); }} />
           {isMech && (<>

@@ -7,8 +7,6 @@ import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
 import MelPicker from '../components/MelPicker';
 import RoBanner from '../components/RoBanner';
-import TaskCardPicker from '../components/TaskCardPicker';
-import MpdPicker from '../components/MpdPicker';
 import AmmPicker from '../components/AmmPicker';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -109,37 +107,10 @@ export default function MaintenanceScreen({ route, navigation }: any) {
           <TextInput style={[s.input, { marginTop: 8, minHeight: Math.max(60, note.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
             value={note} onChangeText={setNote} placeholder="Scope of maintenance (optional)… add task cards below" placeholderTextColor={theme.sub} multiline />
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setTaskPick(true)}>
-              <Text style={s.btnTxt}>＋ Task card (i.a.w)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setMpdOpen(true)}>
-              <Text style={s.btnTxt}>＋ Task Card2 (MPD)</Text>
-            </TouchableOpacity>
             <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setAmmOpen(true)}>
-              <Text style={s.btnTxt}>＋ Task Card3 (AMM)</Text>
+              <Text style={s.btnTxt}>＋ Task Card (AMM)</Text>
             </TouchableOpacity>
           </View>
-          <TaskCardPicker visible={taskPick} onClose={() => setTaskPick(false)}
-            onPick={(t) => {
-              const rev = ampRev || t.revision || '';           // live AMP rev; fall back to the card's own
-              setNote((n) => taskLineWithHeader(n, iawText(t), rev, ammRev));
-              setWo((w) => {                                  // task-card number(s) into the WO / task-card ref
-                const nums = (w || '').split(',').map((x) => x.trim()).filter(Boolean);
-                if (t.task_number && !nums.includes(t.task_number)) nums.push(t.task_number);
-                return nums.join(', ');
-              });
-              setTaskPick(false);
-            }} />
-          <MpdPicker visible={mpdOpen} onClose={() => setMpdOpen(false)}
-            onPick={(m) => {
-              setNote((n) => { const line = mpdIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; });
-              setWo((w) => {                                  // AMM reference into the WO / task-card ref
-                const nums = (w || '').split(',').map((x) => x.trim()).filter(Boolean);
-                if (m.reference && !nums.includes(m.reference)) nums.push(m.reference);
-                return nums.join(', ');
-              });
-              setMpdOpen(false);
-            }} />
           <AmmPicker visible={ammOpen} reg={reg} onClose={() => setAmmOpen(false)}
             onPick={(m) => {
               setNote((n) => { const line = ammIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; });

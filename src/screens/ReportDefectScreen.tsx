@@ -4,8 +4,6 @@ import { ammIawLine, ammRevision, ampRevision, appSettings, can, CdlItem, iawTex
 import { ATA_CHAPTERS } from '../ata';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
-import TaskCardPicker from '../components/TaskCardPicker';
-import MpdPicker from '../components/MpdPicker';
 import AmmPicker from '../components/AmmPicker';
 import SignaturePad from '../components/SignaturePad';
 import { createDefect } from '../db/defects';
@@ -117,22 +115,13 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={styles.refBtn} onPress={() => setMelOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO MEL ▾</Text></TouchableOpacity>
         <TouchableOpacity style={styles.refBtn} onPress={() => setCdlOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO CDL ▾</Text></TouchableOpacity>
-        {can('defects', 'taskcards') ? (<>
-          <TouchableOpacity style={styles.refBtn} onPress={() => setTaskPick(true)}><Text style={styles.refBtnTxt}>＋ Task card (i.a.w)</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.refBtn} onPress={() => setMpdOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card2 (MPD)</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.refBtn} onPress={() => setAmmOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card3 (AMM)</Text></TouchableOpacity>
-        </>) : null}
+        {can('defects', 'taskcards') ? (
+          <TouchableOpacity style={styles.refBtn} onPress={() => setAmmOpen(true)}><Text style={styles.refBtnTxt}>＋ Task Card (AMM)</Text></TouchableOpacity>
+        ) : null}
       </View>
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>Selected MEL / task cards are added to the defect description above.</Text>
       <MelPicker visible={melOpen} ata={(ata || '').split('-')[0] || undefined} onClose={() => setMelOpen(false)} onPick={pickMel} />
       <CdlPicker visible={cdlOpen} ata={(ata || '').split('-')[0] || undefined} onClose={() => setCdlOpen(false)} onPick={pickCdl} />
-      <TaskCardPicker visible={taskPick} defaultAta={(ata || '').split('-')[0] || undefined} onClose={() => setTaskPick(false)} onPick={(t) => { setDesc((d) => taskLineWithHeader(d, iawText(t), ampRev || t.revision || '', ammRev)); setTaskPick(false); }} />
-      <MpdPicker visible={mpdOpen} defaultAta={(ata || '').split('-')[0] || undefined} onClose={() => setMpdOpen(false)} onPick={(m) => {
-        const line = mpdIawLine(m);
-        setDesc((d) => { const base = (d || '').trim(); return base ? `${line}\n\n${base}` : line; });   // description starts with the i.a.w AMM reference line
-        if (m.reference && !ata.trim()) setAta(m.reference.slice(0, 2));
-        setMpdOpen(false);
-      }} />
       <AmmPicker visible={ammOpen} reg={aircraftId} defaultAta={(ata || '').split('-')[0] || undefined} onClose={() => setAmmOpen(false)} onPick={(m) => {
         const line = ammIawLine(m);
         setDesc((d) => { const base = (d || '').trim(); return base ? `${line}\n\n${base}` : line; });   // description starts with the AMM rev · i.a.w Task# line

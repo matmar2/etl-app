@@ -86,6 +86,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   // Engine oil is measured in QUARTS (Airbus oil-quantity indication); stored canonically in litres.
   const oilToL = (v: string) => +(((Number(v) || 0) * QT_L).toFixed(2));
   const oilShown = (lv: any) => { if (lv === '' || lv == null) return ''; return String(Math.round((Number(lv) / QT_L) * 10) / 10); };
+  const qtOf = (l: number) => Math.round((l / QT_L) * 10) / 10;           // FCOM litre minimum -> quarts (display)
   // Departure fuel = Σ tanks if any tank entered; else previous landing fuel + uplift (kg). Manual only as a last resort.
   const tankVals = tanks.map((t) => Number(fuel[t.field])).filter((n) => !isNaN(n) && n > 0);
   const tankSumKg = tankVals.reduce((a, b) => a + b, 0);
@@ -476,7 +477,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       {servMin?.oil_consumption_qt_h != null ? (
         <Text style={{ color: theme.sub, fontSize: 11, marginBottom: 6 }}>FCOM minimums shown per field below · oil avg consumption {servMin.oil_consumption_qt_h} qt/h (LIM‑ENG / PRO‑ABN‑HYD)</Text>
       ) : null}
-      <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Engine oil in quarts (qt) · hydraulic in litres (L)</Text>
+      <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Engine oil and hydraulic in quarts (qt)</Text>
       {(() => {
         const oilLbl = { color: theme.sub, fontSize: 12, marginBottom: 4 } as const;
         // reserve 2 lines so the boxes align under the wrapping Hyd label, but bottom-align the
@@ -502,8 +503,9 @@ export default function DepartureScreen({ route, navigation }: any) {
               <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
             </View>
             <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Hyd (L)${servMin?.hyd_min_green_l != null ? ` · min G${servMin.hyd_min_green_l}/B${servMin.hyd_min_blue_l}/Y${servMin.hyd_min_yellow_l} · total ${Math.round((servMin.hyd_min_green_l + servMin.hyd_min_blue_l + servMin.hyd_min_yellow_l) * 10) / 10}` : ''}`}</Text></View>
-              <TextInput style={oilInput} keyboardType="decimal-pad" value={serv.hyd_green ?? ''} onChangeText={(v) => setServ({ ...serv, hyd_green: numericOnly(v) })} />
+              {/* Hydraulic entered in QUARTS like the engine oil (FCOM minimums are held in litres → shown as qt); stored canonically in litres. */}
+              <View style={topWrap}><Text style={oilLbl}>{`Hyd (${oilUnitLbl})${servMin?.hyd_min_green_l != null ? ` · min G${qtOf(servMin.hyd_min_green_l)}/B${qtOf(servMin.hyd_min_blue_l)}/Y${qtOf(servMin.hyd_min_yellow_l)} · total ${qtOf(servMin.hyd_min_green_l + servMin.hyd_min_blue_l + servMin.hyd_min_yellow_l)}` : ''}`}</Text></View>
+              <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.hyd_green)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, hyd_green: v === '' ? '' : oilToL(v) }); }} />
             </View>
           </View>
         );
@@ -610,9 +612,29 @@ export default function DepartureScreen({ route, navigation }: any) {
         </View>
       ) : (
         <>
+          {/* Maintenance release (CRS) gate: the commander accepts only after maintenance has signed
+              the CRS. Maintenance can sign it even with NO defect and NO servicing — the Tech Log
+              then simply shows NIL. */}
+          {!s.released_at ? (
+            <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12, marginBottom: 10 }}>
+              <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance release (CRS) required</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
+                Commander acceptance unlocks once maintenance has signed the CRS — this is signed even with no defect and no servicing (the Tech Log shows NIL).
+              </Text>
+              {can('release', 'crs') ? (
+                <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => navigation.navigate('Release', { sectorId })}>
+                  <Text style={sx.saveText}>🔧 Maintenance — sign CRS</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
+              ✓ Maintenance release (CRS) signed{s.release_kind === 'nil' ? ' · NIL' : ''}
+            </Text>
+          )}
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
-          <TouchableOpacity disabled={!isCrew} style={[sx.save, { backgroundColor: theme.accent, opacity: isCrew ? 1 : 0.4 }]} onPress={accept}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || 'Sign — accept aircraft (departure)'}</Text>
+          <TouchableOpacity disabled={!isCrew || !s.released_at} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && s.released_at) ? 1 : 0.4 }]} onPress={accept}>
+            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
           </TouchableOpacity>
           <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
         </>
