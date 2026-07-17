@@ -4,6 +4,7 @@ import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, cu
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
+import RoBanner from '../components/RoBanner';
 import TechLogPageModal from '../components/TechLogPageModal';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
@@ -68,6 +69,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const canFuelA = can('arrival', 'fuel');         // fuel at touch-down / remaining
   const canLdgA = can('arrival', 'landings');      // landings / cycles / autoland
   const canDivA = can('arrival', 'diversion');     // diversion airport
+  const canOilA = can('arrival', 'servicing');     // oil quantity on arrival — crew (per AMM) + mechanic at arrival station
   const canAcceptA = can('arrival', 'acceptance'); // post-flight acceptance / close
   const depAccepted = s.status !== 'draft';        // commander accepted the departure (preflight signed)
   // Testing: Arrival is accessible without completing Departure (a note explains the go-live rule).
@@ -86,7 +88,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const oasesTsn = util?.camo?.tsn ?? util?.etl?.tsn_fh ?? null;   // total hours (OASES; ETL fallback)
   const thisLdgs = 1 + (Number(ldg.touch_go) || 0);   // one full-stop landing this flight + any touch-and-goes
   const legFh = s.flight_time_min != null ? Math.round((s.flight_time_min / 60) * 10) / 10 : null;   // this leg flight hours
-  const newTsn = (oasesTsn != null && legFh != null) ? Math.round((oasesTsn + legFh) * 10) / 10 : null;
+  const newTsn = oasesTsn != null ? Math.round((oasesTsn + (legFh || 0)) * 10) / 10 : null;   // baseline shows at once; leg FH folds in once takeoff+landing are stamped
   const newCsn = oasesCsn != null ? oasesCsn + thisLdgs : null;
 
   const hasV = (v: any) => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
@@ -226,19 +228,20 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <Text style={sx.section}>Oil quantity on arrival (qt)</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
+        {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
           <View style={{ width: 160 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt)</Text>
-            <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}
+            <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng1} onChangeText={(v) => setOilArr({ ...oilArr, eng1: numericOnly(v) })} />
           </View>
           <View style={{ width: 160 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt)</Text>
-            <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}
+            <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng2} onChangeText={(v) => setOilArr({ ...oilArr, eng2: numericOnly(v) })} />
           </View>
         </View>
-        <TouchableOpacity style={[sx.save, { marginTop: 4 }]} onPress={async () => {
+        <TouchableOpacity disabled={!canOilA} style={[sx.save, { marginTop: 4 }, !canOilA && { opacity: 0.4 }]} onPress={async () => {
           if (!oilArr.eng1 && !oilArr.eng2) { setOilMsg('Enter Eng 1 and/or Eng 2 oil quantity.'); return; }
           if (!(await confirmAction('Save oil quantity on arrival? (read 5–30 min after shutdown)', 'Oil on arrival'))) return;
           const at = new Date().toISOString();

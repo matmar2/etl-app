@@ -382,6 +382,12 @@ export default function MainMenuScreen({ navigation }: any) {
                         <Text style={styles.checkLbl}>CSN · FC ({src})</Text>
                         <Text style={[styles.checkVal, { color: theme.text }]}>{fmt((util.camo?.csn ?? util.etl?.csn_fc)) || '—'}</Text>
                       </View>
+                      {st?.next_tl ? (
+                        <View style={styles.checkPill}>
+                          <Text style={styles.checkLbl}>Next TL #</Text>
+                          <Text style={[styles.checkVal, { color: theme.text }]}>{st.next_tl}</Text>
+                        </View>
+                      ) : null}
                     </>
                   );
                 })()}

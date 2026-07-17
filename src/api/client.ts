@@ -765,7 +765,8 @@ export async function prefetchLastFuel(): Promise<number> {
 export type CheckStatus = { kind: string; label: string; baseline: boolean; expired: boolean;
   last: string | null; due: string | null; days_left: number | null; hours_left: number | null };
 export type AircraftStatus = { registration: string; type: string; dispatchable: boolean;
-  serviceable: boolean; blocking_defects: number; reasons: string[]; checks: CheckStatus[] };
+  serviceable: boolean; blocking_defects: number; reasons: string[]; checks: CheckStatus[];
+  next_tl?: string | null };
 const _normReg = (r: string) => (r || '').replace(/[-\s]/g, '').toUpperCase();
 
 // Fold locally-signed (not-yet-synced) 2/10-day checks into a status so the banner

@@ -614,6 +614,13 @@ export default function DepartureScreen({ route, navigation }: any) {
           <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
             <Text style={sx.saveText}>View / clear defects</Text>
           </TouchableOpacity>
+          {/* Maintenance's CRS button stays visible while unserviceable but is NOT clickable —
+              open defects must be rectified/deferred (via "View / clear defects") first. */}
+          {can('release', 'crs') ? (
+            <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
+              <Text style={sx.saveText}>🔧 Maintenance — sign CRS (clear defects first)</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         <>
