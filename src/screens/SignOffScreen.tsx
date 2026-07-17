@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { appSettings, checkHtml, currentAircraft, defectCrsPreview, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
@@ -18,10 +18,18 @@ export default function SignOffScreen({ navigation }: any) {
   const [cached, setCached] = useState(false);
   const [cat, setCat] = useState('All');
   const [pick, setPick] = useState(false);
+  const [q, setQ] = useState('');                             // free-text search over the whole row
   const [catOpts, setCatOpts] = useState<string[]>([]);       // admin-configured categories (Settings)
   const CATS = ['All', ...catOpts, 'Others'];
-  const count = (c: string) => c === 'All' ? (list?.length || 0) : (list || []).filter((g) => (g.category || 'Others') === c).length;
-  const filtered = (list || []).filter((g) => cat === 'All' ? true : (g.category || 'Others') === cat);
+  // Search any content of a row: type, tail, WO#/flight, signer, licence, defect/check summary, category, date.
+  const matchQ = (g: SignOff) => {
+    const s = q.trim().toLowerCase();
+    if (!s) return true;
+    const hay = `${KIND[g.kind] || g.kind} ${g.registration || ''} ${g.flight_no || ''} ${g.dep || ''} ${g.arr || ''} ${g.signer_name || ''} ${g.licence_no || ''} ${g.defects_summary || ''} ${g.category || ''} ${g.flight_date || ''} ${(g.signed_at || '').slice(0, 10)}`.toLowerCase();
+    return s.split(/\s+/).every((w) => hay.includes(w));      // all words must match (AND)
+  };
+  const count = (c: string) => (list || []).filter((g) => (c === 'All' || (g.category || 'Others') === c) && matchQ(g)).length;
+  const filtered = (list || []).filter((g) => (cat === 'All' ? true : (g.category || 'Others') === cat) && matchQ(g));
 
   const reg = currentAircraft()?.registration;
   useEffect(() => { appSettings().then((sx) => setDays(sx.signoff_view_days || 15)).catch(() => {}); }, []);
@@ -60,6 +68,13 @@ export default function SignOffScreen({ navigation }: any) {
       <Text style={s.title}>Flight Sign Off</Text>
       <Text style={s.sub}>{reg ? `${reg} · ` : ''}sign-offs in the last {days} days (configurable in admin). Tap a row to open the signed Tech Log / CRS.{cached ? ' · Offline — showing the last cached list.' : ''}</Text>
 
+      <View style={s.searchWrap}>
+        <Text style={s.searchIcon}>🔍</Text>
+        <TextInput style={s.search} value={q} onChangeText={setQ} placeholder="Search — WO#, check, defect, name, date…"
+          placeholderTextColor={theme.sub} autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" />
+        {q ? <TouchableOpacity onPress={() => setQ('')} hitSlop={10}><Text style={s.searchClr}>✕</Text></TouchableOpacity> : null}
+      </View>
+
       <TouchableOpacity style={s.ddBtn} onPress={() => setPick((p) => !p)} activeOpacity={0.7}>
         <Text style={s.ddBtnTxt}>Category: {cat} ({count(cat)})</Text>
         <Text style={s.ddCaret}>{pick ? '▴' : '▾'}</Text>
@@ -77,7 +92,7 @@ export default function SignOffScreen({ navigation }: any) {
 
       {msg ? <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>{msg}</Text> : null}
       {list === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :
-        filtered.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>{list.length === 0 ? `No sign-offs in the last ${days} days.` : `No ${cat} sign-offs in the last ${days} days.`}</Text> :
+        filtered.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>{list.length === 0 ? `No sign-offs in the last ${days} days.` : q.trim() ? `No sign-offs match “${q.trim()}”${cat !== 'All' ? ` in ${cat}` : ''}.` : `No ${cat} sign-offs in the last ${days} days.`}</Text> :
         filtered.map((g) => (
           <TouchableOpacity key={g.id} style={s.row} activeOpacity={openable(g) ? 0.6 : 1} onPress={() => open(g)} disabled={!openable(g) || openingId === g.id}>
             <View style={{ flex: 1 }}>
@@ -116,6 +131,10 @@ const s = StyleSheet.create({
   open: { color: theme.accent, fontSize: 12, fontWeight: '700' },
   details: { color: theme.sub, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   when: { color: theme.accent, fontSize: 12, fontWeight: '700' },
+  searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingHorizontal: 12, marginTop: 12 },
+  searchIcon: { color: theme.sub, fontSize: 14 },
+  search: { flex: 1, color: theme.text, fontSize: 14, paddingVertical: 10 },
+  searchClr: { color: theme.sub, fontSize: 15, fontWeight: '700', paddingHorizontal: 4 },
   ddBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14, marginTop: 12, maxWidth: 320 },
   ddBtnTxt: { color: theme.text, fontWeight: '700', fontSize: 14 },
   ddCaret: { color: theme.sub, fontSize: 14, marginLeft: 10 },
