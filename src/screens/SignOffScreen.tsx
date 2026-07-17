@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, oasesCheckHtml, role, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { appSettings, cabinLogHtml, cabinLogHtmlOne, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, hilHtml, hilHtmlOne, oasesCheckHtml, role, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { printHtml } from '../print';
 import { theme } from '../theme';
 
@@ -46,6 +46,21 @@ export default function SignOffScreen({ navigation }: any) {
     setCleared(null);
     clearedItems(view, days, reg).then((r) => { setCleared(r.items); setClearedCached(!!r.cached); }).catch(() => setCleared([]));
   }, [view, days, reg]);
+
+  // Cleared HIL / Cabin → render the HIL or Cabin Defect Log FORM (not the CRS): date raised,
+  // closed date and signed-by, in the proper logbook format. defectId = one item; omitted = all.
+  async function openClearedForm(defectId?: string) {
+    setMsg('');
+    setOpeningId(defectId || 'all');
+    try {
+      const { html } = view === 'hil'
+        ? (defectId ? await hilHtmlOne(defectId) : await hilHtml(reg!))
+        : (defectId ? await cabinLogHtmlOne(defectId) : await cabinLogHtml(reg!));
+      await printHtml(html);
+    } catch (e: any) {
+      setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the form.'));
+    } finally { setOpeningId(null); }
+  }
 
   async function open(g: SignOff) {
     setMsg('');
@@ -100,18 +115,23 @@ export default function SignOffScreen({ navigation }: any) {
       {view !== 'signoffs' ? (
         cleared === null ? <ActivityIndicator style={{ marginTop: 20 }} /> :
         cleared.length === 0 ? <Text style={[s.sub, { marginTop: 20 }]}>No cleared {view === 'hil' ? 'HIL items' : 'cabin defects'} in the last {days} days.</Text> :
-        cleared.map((c) => (
-          <TouchableOpacity key={c.id} style={s.row} activeOpacity={0.6} onPress={() => navigation.navigate('DefectDetail', { defectId: c.id })}>
+        <>
+          <TouchableOpacity style={s.previewAll} activeOpacity={0.7} disabled={openingId === 'all'} onPress={() => openClearedForm()}>
+            <Text style={s.previewAllTxt}>{openingId === 'all' ? 'Opening…' : `📄  Preview all — ${view === 'hil' ? 'Hold Item List' : 'Cabin Defect Log'} (${cleared.length})`}</Text>
+          </TouchableOpacity>
+          {cleared.map((c) => (
+          <TouchableOpacity key={c.id} style={s.row} activeOpacity={0.6} disabled={openingId === c.id} onPress={() => openClearedForm(c.id)}>
             <View style={{ flex: 1 }}>
               <Text style={s.k}>{c.ref || c.title || c.description || (view === 'hil' ? 'HIL item' : 'Cabin defect')}</Text>
               <Text style={s.meta}>ATA {c.ata_chapter || '—'}{c.mel_ref ? ` · ${view === 'hil' ? 'MEL ' : ''}${c.mel_ref}` : ''}{c.source ? ` · ${c.source.toUpperCase()}` : ''}</Text>
               {c.description && c.ref ? <Text style={s.defs}>{c.description}</Text> : null}
               {c.action_taken ? <Text style={s.defs}>Action: {c.action_taken}</Text> : null}
               <Text style={s.meta}>Raised {c.raised_date || '—'} · Cleared {c.closed_date || '—'}{c.closed_by ? ` · by ${c.closed_by}` : ''}</Text>
-              <Text style={s.open}>details ›</Text>
+              <Text style={s.open}>{openingId === c.id ? 'Opening…' : `Open ${view === 'hil' ? 'HIL' : 'Cabin Defect'} form ›`}</Text>
             </View>
           </TouchableOpacity>
-        ))
+          ))}
+        </>
       ) : (<>
 
       <View style={s.searchWrap}>
@@ -189,7 +209,9 @@ const s = StyleSheet.create({
   chkTagTxt: { color: '#fff', fontWeight: '900', fontSize: 11, letterSpacing: 0.5 },
   meta: { color: theme.sub, fontSize: 12, marginTop: 2 },
   defs: { color: theme.text, fontSize: 12, marginTop: 4 },
-  open: { color: theme.accent, fontSize: 12, fontWeight: '700' },
+  open: { color: theme.accent, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  previewAll: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.accent, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 },
+  previewAllTxt: { color: theme.accent, fontWeight: '800', fontSize: 14 },
   details: { color: theme.sub, fontSize: 12, fontWeight: '700', textDecorationLine: 'underline' },
   when: { color: theme.accent, fontSize: 12, fontWeight: '700' },
   searchWrap: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingHorizontal: 12, marginTop: 12 },
