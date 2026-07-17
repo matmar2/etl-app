@@ -336,7 +336,7 @@ export default function MainMenuScreen({ navigation }: any) {
               </TouchableOpacity>
               {pick ? (
                 <View style={styles.dropdown}>
-                  <ScrollView style={{ maxHeight: 264 }} keyboardShouldPersistTaps="handled">
+                  <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator nestedScrollEnabled>
                     {fleet.map((a) => (
                       <TouchableOpacity key={a.registration} style={[styles.ddRow, a.registration === reg && styles.ddRowOn]} onPress={() => choose(a)}>
                         <Text style={styles.ddReg}>{a.registration}</Text>

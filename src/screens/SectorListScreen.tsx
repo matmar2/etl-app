@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, syncPush } from '../api/client';
+import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, sectorTlHtmlCached, syncPush } from '../api/client';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
+import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
 import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
@@ -206,6 +207,12 @@ export default function SectorListScreen({ route, navigation }: any) {
     try { setStatus('Syncing…'); await syncPush(); await pull(); setStatus('Server Synced ✓'); }
     catch { setStatus('Offline — queued'); }
   }
+  // A previous (closed / exported) flight is VIEW-ONLY — open its Tech Log document, not the editor.
+  async function viewTechLog(s: Sector) {
+    setStatus('Opening Tech Log…');
+    try { const { html } = await sectorTlHtmlCached(s.id); await printHtml(html); setStatus(''); }
+    catch (e: any) { setStatus(/cached|offline|network/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the Tech Log.')); }
+  }
 
   async function removeOne(s: Sector) {
     if (!(await confirmAction(`Remove ${s.flight_no} (${s.flight_date})?`, 'Remove sector'))) return;
@@ -333,9 +340,10 @@ export default function SectorListScreen({ route, navigation }: any) {
         const delta = leonDelta(item);
         const carried = !histOpen && inProgress(item) && (item.flight_date ?? '') < today;   // still-open sector from an earlier day
         const nm = openerName(item);
+        const closed = ['closed', 'exported'].includes(item.status);   // previous flight → view-only
         return (
         <View key={item.id} style={styles.row}>
-          <TouchableOpacity style={styles.rowOpen} onPress={() => navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
+          <TouchableOpacity style={styles.rowOpen} onPress={() => closed ? viewTechLog(item) : navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={styles.rowFlight}>{item.flight_no}</Text>
               {histOpen ? <Text style={styles.srcEtl}>ETL</Text> : null}
@@ -345,6 +353,7 @@ export default function SectorListScreen({ route, navigation }: any) {
             {nm ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>opened by {nm}</Text> : null}
             {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
+            {closed ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700', marginTop: 3 }}>Tap to view Tech Log ›</Text> : null}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => removeOne(item)} hitSlop={10} style={styles.delBtn}><Text style={styles.del}>✕</Text></TouchableOpacity>
         </View>
