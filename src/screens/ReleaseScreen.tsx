@@ -162,6 +162,12 @@ export default function ReleaseScreen({ route, navigation }: any) {
         </View>
       ) : null}
 
+      {(st as any).check_blockers?.length ? (
+        <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12, marginTop: 10 }}>
+          <Text style={{ color: theme.red, fontWeight: '800' }}>▲ {(st as any).check_blockers.join(' · ')}</Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>A flight CRS cannot be issued while a 2/10-day check is overdue or not recorded — complete the check first (2 Days / 10 Days Check buttons on the Main Menu).</Text>
+        </View>
+      ) : null}
       <Group title={`Blocking defects (${st.blockers.length})`} items={st.blockers} empty="None"
         color={theme.red} nav={navigation} />
       <Group title={`Deferred · HIL (${st.deferred.length})`} items={st.deferred} empty="None"
@@ -218,7 +224,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
             onPress={previewCRS}>
             <Text style={s.btnTxt}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.btn, { backgroundColor: st.blockers.length ? '#444' : theme.green }]} disabled={busy || st.blockers.length > 0}
+          <TouchableOpacity style={[s.btn, { backgroundColor: (st.blockers.length || (st as any).check_blockers?.length) ? '#444' : theme.green }]} disabled={busy || st.blockers.length > 0 || !!(st as any).check_blockers?.length}
             onPress={() => {
               if (st.blockers.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before release.'); return; }
               if (!signer.trim() || !licence.trim()) { setMsg('Enter mechanic name and licence first.'); return; }
