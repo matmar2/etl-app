@@ -215,6 +215,21 @@ export default function SectorListScreen({ route, navigation }: any) {
     catch (e: any) { setStatus(/cached|offline|network/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the Tech Log.')); }
   }
 
+  // Per-device list-hide — pointless for the one OPEN flight (the list always keeps the blocking
+  // open flight visible so crew can see what "close current first" refers to). Explain instead of
+  // silently doing nothing.
+  async function hideFromList(s: Sector, msg: string) {
+    if (s.id === openSector?.id) {
+      setStatus(`${s.flight_no} is the current OPEN flight — it stays in the list until it is closed or removed. Close it, or ask the administrator (back office) to remove it.`);
+      return;
+    }
+    if (await confirmAction(msg, 'Remove from list')) {
+      await hideSectorFromList(s.id);
+      setHidden((h) => new Set(h).add(s.id));
+      setStatus(`Removed ${s.flight_no} from the list (record kept)`);
+    }
+  }
+
   async function removeOne(s: Sector) {
     if (!(await confirmAction(`Remove ${s.flight_no} (${s.flight_date})?`, 'Remove sector'))) return;
     try { await deleteSector(s.id); setStatus(`Removed ${s.flight_no}`); pull(); return; }
@@ -223,21 +238,13 @@ export default function SectorListScreen({ route, navigation }: any) {
       // it from this list instead — the record is kept, it just leaves "Your sectors" on this iPad.
       const undeletable = !e?.message?.includes('409') || !e.message.includes('Force remove');
       if (undeletable) {
-        if (await confirmAction(`${s.flight_no} is a released/exported record and can’t be deleted. Remove it from this list only? The Tech Log record is kept.`, 'Remove from list')) {
-          await hideSectorFromList(s.id);
-          setHidden((h) => new Set(h).add(s.id));
-          setStatus(`Removed ${s.flight_no} from the list (record kept)`);
-        }
+        await hideFromList(s, `${s.flight_no} is a released/exported record and can’t be deleted. Remove it from this list only? The Tech Log record is kept.`);
         return;
       }
     }
     // 409 — closed / signed. A Tech Log record: deleting it requires the CAMO Manager's approval
     // (done from the back office, like a CRS reset) — never unilaterally from the iPad.
-    if (await confirmAction(`${s.flight_no} is closed or signed — a Tech Log record. Removing it requires the CAMO Manager's approval (back office).\n\nRemove it from THIS list only? The record is kept.`, 'Remove from list')) {
-      await hideSectorFromList(s.id);
-      setHidden((h) => new Set(h).add(s.id));
-      setStatus(`Removed ${s.flight_no} from the list (record kept)`);
-    }
+    await hideFromList(s, `${s.flight_no} is closed or signed — a Tech Log record. Removing it requires the CAMO Manager's approval (back office).\n\nRemove it from THIS list only? The record is kept.`);
   }
   async function clearList() {
     if (!(await confirmAction('Remove all sectors from this list? Released / closed / signed ones are kept; unsynced work on the iPad is kept.', 'Clear list'))) return;
