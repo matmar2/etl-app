@@ -231,10 +231,13 @@ export default function SectorListScreen({ route, navigation }: any) {
         return;
       }
     }
-    // 409 — closed / signed. Offer a force remove.
-    if (!(await confirmAction(`${s.flight_no} is closed or signed. Force‑remove it and delete its signatures? This cannot be undone.`, 'Force remove'))) return;
-    try { await deleteSector(s.id, true); setStatus(`Force‑removed ${s.flight_no}`); pull(); }
-    catch (e2: any) { setStatus(`Cannot remove — ${e2.message}`); }
+    // 409 — closed / signed. A Tech Log record: deleting it requires the CAMO Manager's approval
+    // (done from the back office, like a CRS reset) — never unilaterally from the iPad.
+    if (await confirmAction(`${s.flight_no} is closed or signed — a Tech Log record. Removing it requires the CAMO Manager's approval (back office).\n\nRemove it from THIS list only? The record is kept.`, 'Remove from list')) {
+      await hideSectorFromList(s.id);
+      setHidden((h) => new Set(h).add(s.id));
+      setStatus(`Removed ${s.flight_no} from the list (record kept)`);
+    }
   }
   async function clearList() {
     if (!(await confirmAction('Remove all sectors from this list? Released / closed / signed ones are kept; unsynced work on the iPad is kept.', 'Clear list'))) return;
