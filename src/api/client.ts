@@ -1393,10 +1393,13 @@ export async function pendingInduction(): Promise<Induction | null> {
   try {
     const r = await api('/induction/pending');
     if (r && r.role) { await _cacheSet('induction', r); return r; }   // server says: still owed
-    return null;                                                       // server says: acknowledged / none
+    await _cacheSet('induction', null);   // server says acknowledged/none — clear the stale cache so a
+    return null;                          // later offline/blip fallback can NEVER resurrect an old deck
   } catch {
-    const cached = await _cacheGet<Induction>('induction');           // offline → last cached, unless locally acked
-    return cached && cached.version !== ackedVer ? cached : null;
+    // Offline → last cached, but only if NEWER than what was acknowledged (an equal/older cached
+    // version after an ack must never re-show — that caused the repeat welcome on every page).
+    const cached = await _cacheGet<Induction>('induction');
+    return cached && Number(cached.version || 0) > Number(ackedVer || 0) ? cached : null;
   }
 }
 // Whether this role has a Welcome & Quick Reference at all (admin/CAMO don't) — the menu hides the
@@ -1414,7 +1417,11 @@ export async function viewInduction(role?: string): Promise<Induction | null> { 
   } catch { return (await _cacheGet<Induction>(key)) || (role ? null : (await _cacheGet<Induction>('induction'))) || null; }
 }
 export async function ackInduction(version: number): Promise<void> {
-  await _cacheSet('induction_acked', version);                        // never re-show, even offline
+  // Only ever RAISE the local acked marker (acking a stale re-shown deck must not lower it),
+  // and drop the cached deck so the offline fallback can't re-show what was just acknowledged.
+  const prev = Number((await _cacheGet<number>('induction_acked')) || 0);
+  await _cacheSet('induction_acked', Math.max(prev, Number(version) || 0));
+  await _cacheSet('induction', null);
   try { await api('/induction/ack', { method: 'POST', body: JSON.stringify({ version }) }); }
   catch {
     const q = (await _cacheGet<number[]>('induction_ack_queue')) || [];

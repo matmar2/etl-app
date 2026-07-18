@@ -36,9 +36,14 @@ export default function InductionGate() {
   const [chooser, setChooser] = useState(false);       // admin/CAMO role picker is open
   const [previewRole, setPreviewRole] = useState<string | null>(null);   // role being previewed by admin/CAMO
   const showing = useRef(false);
+  // Version already auto-shown THIS session: the welcome auto-pops at most ONCE per sign-in (even
+  // when not acknowledged, e.g. "show me again at my next sign-in") — never again on other pages.
+  // A genuinely NEW version arriving mid-session still pops (different version number).
+  const shownVer = useRef<number | null>(null);
 
   function start(p: Induction, m: 'auto' | 'view', pr?: string | null) {
     showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false);
+    if (m === 'auto') shownVer.current = Number(p.version) || 0;
     setPreviewRole(pr ?? null); setInd(p);
   }
   async function pickRole(rl: string) {
@@ -60,7 +65,8 @@ export default function InductionGate() {
       if (!userName()) { setInd(null); return; }            // only while signed in
       try {
         const p = await pendingInduction();
-        if (alive && p && (p.slides?.length || p.email_body)) start(p, 'auto');
+        if (alive && p && (p.slides?.length || p.email_body)
+            && shownVer.current !== (Number(p.version) || 0)) start(p, 'auto');   // once per sign-in
       } catch { /* offline handled in client */ }
     }
     async function open() {
