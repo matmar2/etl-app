@@ -103,9 +103,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
     add('on_block', 'IN (on-block)', 'oooi', !!s.on_block, true);
     add('landing_fuel_kg', 'Fuel at touch-down', 'fuel', hasV(lf));
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
-    // Oil quantity on arrival is MANDATORY to close the sector (read 5–30 min after shutdown per AMM).
-    add('oil_eng1', 'Eng 1 oil on arrival', 'oil', hasV(oilArr.eng1), true);
-    add('oil_eng2', 'Eng 2 oil on arrival', 'oil', hasV(oilArr.eng2), true);
+    // Oil quantity on arrival (read 5–30 min after shutdown per AMM) — admin-toggleable
+    // (Settings → Mandatory fields → Arrival → "Oil on arrival"); mandatory by default.
+    if (m.oil_arrival) {
+      add('oil_eng1', 'Eng 1 oil on arrival', 'oil', hasV(oilArr.eng1), true);
+      add('oil_eng2', 'Eng 2 oil on arrival', 'oil', hasV(oilArr.eng2), true);
+    }
     add('landings', 'Landings', 'ldg', true);   // one full-stop landing is implicit per flight
     add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport, div.on);   // required when diverted
     return out;
@@ -235,18 +238,18 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
           mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
-      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt) *</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? ' *' : ''}</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
         {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
           <View style={{ width: 160 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt) *</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt){mand?.oil_arrival ? ' *' : ''}</Text>
             <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('oil_eng1') ? 2 : 1, borderColor: badSet.has('oil_eng1') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng1} onChangeText={(v) => setOilArr({ ...oilArr, eng1: numericOnly(v) })} />
           </View>
           <View style={{ width: 160 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt) *</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt){mand?.oil_arrival ? ' *' : ''}</Text>
             <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('oil_eng2') ? 2 : 1, borderColor: badSet.has('oil_eng2') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng2} onChangeText={(v) => setOilArr({ ...oilArr, eng2: numericOnly(v) })} />
           </View>
