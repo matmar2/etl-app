@@ -16,7 +16,9 @@ export default function SignOffScreen({ navigation }: any) {
     ? [{ key: 'cabin', label: 'Cleared Cabin' }]
     : [{ key: 'signoffs', label: 'Sign-offs' }, { key: 'hil', label: 'Cleared HIL' }, { key: 'cabin', label: 'Cleared Cabin' }];
   const [view, setView] = useState<'signoffs' | 'hil' | 'cabin'>(isCabin ? 'cabin' : 'signoffs');
-  const [cleared, setCleared] = useState<ClearedItem[] | null>(null);
+  const [hilItems, setHilItems] = useState<ClearedItem[] | null>(null);
+  const [cabItems, setCabItems] = useState<ClearedItem[] | null>(null);
+  const cleared = view === 'hil' ? hilItems : cabItems;
   const [clearedCached, setClearedCached] = useState(false);
   const [days, setDays] = useState(15);
   const [list, setList] = useState<SignOff[] | null>(null);
@@ -41,11 +43,12 @@ export default function SignOffScreen({ navigation }: any) {
   const reg = currentAircraft()?.registration;
   useEffect(() => { appSettings().then((sx) => setDays(sx.signoff_view_days || 15)).catch(() => {}); }, []);
   useEffect(() => { if (isCabin) return; signoffsRecent(days, reg).then((r) => { setList(r.signoffs); setCached(!!r.cached); setCatOpts(r.categories || []); }).catch(() => setList([])); }, [days, reg]);
+  // Load BOTH cleared lists up-front so every tab shows its total count.
   useEffect(() => {
-    if (view === 'signoffs') return;
-    setCleared(null);
-    clearedItems(view, days, reg).then((r) => { setCleared(r.items); setClearedCached(!!r.cached); }).catch(() => setCleared([]));
-  }, [view, days, reg]);
+    setHilItems(null); setCabItems(null);
+    if (!isCabin) clearedItems('hil', days, reg).then((r) => { setHilItems(r.items); setClearedCached(!!r.cached); }).catch(() => setHilItems([]));
+    clearedItems('cabin', days, reg).then((r) => { setCabItems(r.items); setClearedCached(!!r.cached); }).catch(() => setCabItems([]));
+  }, [days, reg]);
 
   // Cleared HIL / Cabin → render the HIL or Cabin Defect Log FORM (not the CRS): date raised,
   // closed date and signed-by, in the proper logbook format. defectId = one item; omitted = all.
@@ -106,7 +109,10 @@ export default function SignOffScreen({ navigation }: any) {
         <View style={s.tabs}>
           {VIEWS.map((v) => (
             <TouchableOpacity key={v.key} style={[s.tab, view === v.key && s.tabOn]} onPress={() => setView(v.key)} activeOpacity={0.7}>
-              <Text style={[s.tabTxt, view === v.key && s.tabTxtOn]}>{v.label}</Text>
+              <Text style={[s.tabTxt, view === v.key && s.tabTxtOn]}>{v.label}{(() => {
+                const n = v.key === 'signoffs' ? list?.length : v.key === 'hil' ? hilItems?.length : cabItems?.length;
+                return n == null ? '' : ` (${n})`;
+              })()}</Text>
             </TouchableOpacity>
           ))}
         </View>
