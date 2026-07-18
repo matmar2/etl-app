@@ -72,6 +72,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [st, setSt] = useState<AircraftStatus | null>(null);
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [testing, setTesting] = useState(false);
+  const [switchOk, setSwitchOk] = useState(false);
   const [trialBanner, setTrialBanner] = useState('⚠ TESTING MODE — MFA code 123456 · tap “Switch aircraft” to change tail. Off at go-live.');
   const [hasInduction, setHasInduction] = useState<boolean | null>(null);   // null = unknown (show); false = hide the tile (admin/CAMO)
   const [ac, setAc] = useState<Fleet | null>(currentAircraft());
@@ -204,7 +205,7 @@ export default function MainMenuScreen({ navigation }: any) {
     const jobs: Promise<any>[] = [
       flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
       flushInductionAcks().catch(() => {}),          // send any induction acks made while offline
-      publicConfig().then((c) => { if (isAlive()) { setTesting(!!c.testing_mode); if (c.trial_banner) setTrialBanner(c.trial_banner); } }).catch(() => {}),
+      publicConfig().then((c) => { if (isAlive()) { setTesting(!!c.testing_mode); setSwitchOk(c.switch_aircraft ?? !!c.testing_mode); if (c.trial_banner) setTrialBanner(c.trial_banner); } }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
@@ -340,8 +341,8 @@ export default function MainMenuScreen({ navigation }: any) {
               </View>
             ) : <Text style={styles.heroType}>checking…</Text>}
             <View style={{ position: 'relative', zIndex: 50 }}>
-              <TouchableOpacity style={[styles.acChip, testing && styles.acChipTest]} disabled={!testing} onPress={() => setPick((p) => !p)}>
-                <Text style={styles.acChipTxt}>{testing ? `Switch aircraft  ${pick ? '▴' : '▾'}` : (ac?.type ?? '')}</Text>
+              <TouchableOpacity style={[styles.acChip, switchOk && styles.acChipTest]} disabled={!switchOk} onPress={() => setPick((p) => !p)}>
+                <Text style={styles.acChipTxt}>{switchOk ? `Switch aircraft  ${pick ? '▴' : '▾'}` : (ac?.type ?? '')}</Text>
               </TouchableOpacity>
               {pick ? (() => {
                 // Cover ALL aircraft — grow to fit the whole fleet, but never taller than the iPad
