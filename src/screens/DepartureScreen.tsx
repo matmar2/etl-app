@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -32,6 +32,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [routeEdit, setRouteEdit] = useState<any>({});
   const [minFuel, setMinFuel] = useState<number | null>(null);
   const [prevF, setPrevF] = useState<PrevFuel | null>(null);
+  const [receiptN, setReceiptN] = useState<number | null>(null);   // fuel-receipt photos on this sector (null = unknown/offline)
   const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
   const [servMin, setServMin] = useState<any>(null);
   const [pfiName, setPfiName] = useState('');
@@ -63,6 +64,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});
     setPrevChoice(null);
     prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // returns both ETL + Leon candidates
+    listAttachments({ sector_id: sectorId }).then((a) => setReceiptN(a.filter((x) => x.kind === 'receipt').length)).catch(() => setReceiptN(null));
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
       fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
@@ -137,6 +139,8 @@ export default function DepartureScreen({ route, navigation }: any) {
     const m = mand || {}; const out: { key: string; label: string; sec: string }[] = [];
     const add = (key: string, label: string, sec: string, ok: boolean) => { if (m[key] && !ok) out.push({ key, label, sec }); };
     add('dep', 'Departure airport', 'route', !!s.dep);
+    add('arr', 'Arrival airport', 'route', !!s.arr);
+    add('flight_type', 'Flight type', 'route', !!s.flight_type);
     add('off_block', 'OUT (off-block)', 'oooi', !!s.off_block);
     add('fuel_density', 'Specific gravity', 'fuel', num(fuel.fuel_density) > 0);
     add('fuel_planned_kg', 'Planned fuel', 'fuel', hasV(fuel.fuel_planned_kg));
@@ -145,6 +149,10 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('tanks', 'Tank entries (all)', 'fuel', tanks.length > 0 && tanks.every((t) => hasV(fuel[t.field])));
     add('bowser_uplift_lt', 'Bowser uplift', 'fuel', hasV(fuel.bowser_uplift_lt));
     add('fuel_grade', 'Fuel grade', 'fuel', !!fuel.fuel_grade);
+    add('fuel_uplift_kg', 'Actual total uplift', 'fuel', upliftKg > 0);
+    add('fuel_found_kg', 'Fuel remaining before refuelling', 'fuel', hasV(fuel.fuel_found_kg));
+    add('fuel_receipt', 'Fuel receipt photo', 'fuel', receiptN == null ? true : receiptN > 0);   // lenient when offline/unknown
+    add('ice', 'Ice protection (de-icing details when used)', 'ice', !s.ice_protect || !!(s.deice && (s.deice as any).code));
     add('pfi', 'PFI', 'pfi', !!(s.pfi_signature || s.pfi_at));
     add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
     return out;
@@ -566,7 +574,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       }}><Text style={sx.saveText}>Save servicing</Text></TouchableOpacity> : null}
       </View>
 
-      <Text style={sx.section}>Ice protection</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
       <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
         <Switch value={!!s.ice_protect} disabled={!canIce} onValueChange={async (v) => {
           await save({ ice_protect: v });
