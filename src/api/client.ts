@@ -94,12 +94,12 @@ async function cacheOfflineCred(username: string, password: string, token: strin
     // working authenticator while mfa_enabled is still False. Needed for offline real-code MFA
     // and offline password reset.
     try { secret = (await api('/auth/mfa/secret')).secret; } catch {}
-    let testing = false;
-    try { testing = !!(await publicConfig()).testing_mode; } catch {}   // mirror the server's testing MFA rule offline
+    let testing = false, testMfa = true;
+    try { const pc = await publicConfig(); testing = !!pc.testing_mode; testMfa = pc.test_mfa !== false; } catch {}   // mirror the server's testing MFA rule offline
     const salt = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     await SecureStore.setItem(offKey(username), JSON.stringify({
       username, salt, pwHash: sha1Hex(salt + password), secret,
-      role: me.role, name: me.name, licence: me.licence ?? null, mfa_enabled: !!me.mfa_enabled, testing,
+      role: me.role, name: me.name, licence: me.licence ?? null, mfa_enabled: !!me.mfa_enabled, testing, test_mfa: testMfa,
       clearance: !!me.clearance_authorized, perms: _perms, token, at: Date.now(),
     }));
   } catch { /* best-effort */ }
@@ -232,7 +232,7 @@ export async function loginOffline(username: string, password: string, otp?: str
   if (c.mfa_enabled || c.testing || c.secret) {   // require MFA offline whenever the account has an authenticator
     if (!otp) throw new MfaRequired();
     const code = otp.trim();
-    const testingBypass = c.testing && code === TEST_MFA_CODE;
+    const testingBypass = c.testing && c.test_mfa !== false && code === TEST_MFA_CODE;   // honours the admin 123456 kill-switch offline
     const realOk = !!c.secret && verifyTotp(c.secret, code);
     if (!testingBypass && !realOk) throw new Error('Invalid MFA code (offline).');
     mfaMethod = testingBypass ? 'test_code' : 'authenticator';   // audited when the offline login syncs

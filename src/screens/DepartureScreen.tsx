@@ -45,7 +45,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [badSet, setBadSet] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
-  useEffect(() => { appSettings().then((x: any) => setMand(x.mandatory_fields?.departure || {})).catch(() => {}); }, []);
+  const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
+  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); }).catch(() => {}); }, []);
   async function checkDepGps() { if (s?.dep) { setDepGps({ state: 'checking' }); setDepGps(await checkAirportGps(s.dep)); } }
   const refreshStatus = useCallback(() => {
     const reg = currentAircraft()?.registration || s?.aircraft_id;
@@ -459,7 +460,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         const bowserKg = (Number(fuel.bowser_uplift_lt) || 0) * sg;
         if (!(gauge > 0 && bowserKg > 0)) return null;
         const diff = ((gauge - bowserKg) / bowserKg) * 100;
-        const off = Math.abs(diff) > 2;
+        const off = Math.abs(diff) > fuelTol;
         return <Text style={{ color: off ? theme.red : theme.green, fontSize: 11, marginTop: 2, fontWeight: off ? '800' : '600' }}>Bowser {fmt(round1(bowserKg))} kg (SG {sg}) vs total uplift {fmt(round1(gauge))} kg — diff {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%{off ? ' ⚠ check' : ' ✓'}</Text>;
       })()}
 
