@@ -325,6 +325,13 @@ export default function MainMenuScreen({ navigation }: any) {
             <Text style={styles.heroReg}>{reg}</Text>
             <Text style={styles.heroType}>{ac?.type ?? '—'}{ac?.msn ? `   ·   MSN ${ac.msn}` : ''}</Text>
           </View>
+          {/* Next TL # — centred between the registration and the serviceability labels */}
+          {st?.next_tl ? (
+            <View style={styles.tlBox}>
+              <Text style={styles.tlLbl}>Next TL # · {reg}/{ac?.msn ?? '—'}</Text>
+              <Text style={styles.tlVal}>{st.next_tl}</Text>
+            </View>
+          ) : null}
           <View style={{ alignItems: 'flex-end', gap: 8 }}>
             {st ? (
               <View style={[styles.svcPill, { backgroundColor: ok ? 'rgba(124,179,66,0.15)' : 'rgba(217,83,79,0.18)', borderColor: ok ? theme.green : theme.red }]}>
@@ -401,12 +408,6 @@ export default function MainMenuScreen({ navigation }: any) {
                         <Text style={styles.checkLbl}>CSN · FC ({src})</Text>
                         <Text style={[styles.checkVal, { color: theme.text }]}>{fmt((util.camo?.csn ?? util.etl?.csn_fc)) || '—'}</Text>
                       </View>
-                      {st?.next_tl ? (
-                        <View style={styles.checkPill}>
-                          <Text style={styles.checkLbl}>Next TL # · {reg}/{ac?.msn ?? '—'}</Text>
-                          <Text style={[styles.checkVal, { color: theme.text }]}>{st.next_tl}</Text>
-                        </View>
-                      ) : null}
                     </>
                   );
                 })()}
@@ -503,6 +504,9 @@ const styles = StyleSheet.create({
   cardSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
 
   dropdown: { position: 'absolute', top: 38, right: 0, width: 230, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, zIndex: 1000, elevation: 12, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 6 } },
+  tlBox: { alignSelf: 'center', alignItems: 'center', backgroundColor: theme.tile, borderWidth: 1.5, borderColor: theme.accent, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 18 },
+  tlLbl: { color: theme.sub, fontSize: 12, fontWeight: '700' },
+  tlVal: { color: theme.text, fontSize: 22, fontWeight: '900', marginTop: 2, letterSpacing: 1 },
   ddArrow: { alignItems: 'center', paddingVertical: 4, backgroundColor: theme.tile, borderBottomWidth: 1, borderBottomColor: theme.border },
   ddArrowTxt: { color: theme.accent, fontSize: 13, fontWeight: '800' },
   ddRow: { paddingVertical: 10, paddingHorizontal: 13, borderBottomWidth: 1, borderBottomColor: theme.border },
