@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -103,11 +103,14 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         <Text style={styles.cardState}>{arrDone ? `On-block ${hhmm(s.on_block)} · ${s.status}` : 'Not started'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.card, { borderColor: s.released_at ? theme.green : theme.border }]} onPress={() => navigation.navigate('Release', { sectorId })}>
-        <Text style={styles.cardTitle}>Release &amp; Print  ›</Text>
-        <Text style={styles.cardSub}>Serviceability, mechanic CRS release (NIL / deferred / HIL / rectified), print or transfer the Tech Log</Text>
-        <Text style={styles.cardState}>{s.released_at ? `Released ${hhmm(s.released_at)}` : 'Not released'}</Text>
-      </TouchableOpacity>
+      {/* Hidden for roles without release access (permission-matrix driven — e.g. cabin crew). */}
+      {access('release') !== 'none' ? (
+        <TouchableOpacity style={[styles.card, { borderColor: s.released_at ? theme.green : theme.border }]} onPress={() => navigation.navigate('Release', { sectorId })}>
+          <Text style={styles.cardTitle}>Release &amp; Print  ›</Text>
+          <Text style={styles.cardSub}>Serviceability, mechanic CRS release (NIL / deferred / HIL / rectified), print or transfer the Tech Log</Text>
+          <Text style={styles.cardState}>{s.released_at ? `Released ${hhmm(s.released_at)}` : 'Not released'}</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
