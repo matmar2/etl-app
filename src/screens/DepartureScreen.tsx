@@ -630,11 +630,20 @@ export default function DepartureScreen({ route, navigation }: any) {
           <Text style={sx.section}>Maintenance release (CRS)</Text>
           {(acSt && !acSt.serviceable) ? (
             <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
-              <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.blocking_defects} open defect(s)</Text>
-              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL before the release. The Tech Log keeps the entered information.</Text>
-              <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
-                <Text style={sx.saveText}>View / clear defects</Text>
-              </TouchableOpacity>
+              {/* State the REAL grounding reasons — open defects AND/OR overdue / not-recorded checks. */}
+              <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.reasons?.length ? acSt.reasons.join(' · ') : `${acSt.blocking_defects} open defect(s)`}</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL, and complete any overdue / not-recorded 2/10-day check, before the release. The Tech Log keeps the entered information.</Text>
+              {acSt.blocking_defects > 0 ? (
+                <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
+                  <Text style={sx.saveText}>View / clear defects</Text>
+                </TouchableOpacity>
+              ) : null}
+              {(acSt.checks || []).filter((c) => c.expired).map((c) => (
+                <TouchableOpacity key={c.kind} style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]}
+                  onPress={() => navigation.navigate('Planned', { aircraftId: currentAircraft()?.registration || s.aircraft_id, kind: c.kind })}>
+                  <Text style={sx.saveText}>Open {c.label} {c.baseline ? '(overdue)' : '(not recorded)'} ›</Text>
+                </TouchableOpacity>
+              ))}
               {/* CRS button stays visible while unserviceable but is NOT clickable — clear defects first. */}
               {can('release', 'crs') ? (
                 <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
