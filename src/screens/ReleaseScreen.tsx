@@ -184,25 +184,14 @@ export default function ReleaseScreen({ route, navigation }: any) {
           ) : st.reset_request?.status === 'rejected' ? (
             <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>CRS reset request was rejected by CAMO{st.reset_request.review_note ? ` — ${st.reset_request.review_note}` : ''}. The CRS stands.</Text>
           ) : isMech ? (
-            !showReset ? (
-              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 10 }]} onPress={() => { setShowReset(true); setMsg(''); }}>
-                <Text style={[s.btnTxt, { color: theme.red }]}>Request CRS reset (CAMO approval)</Text>
+            <View style={{ marginTop: 10 }}>
+              {/* CRS corrections are ADMIN-ONLY. Crew request one through the Feedback tile —
+                  no self-service reset from the iPad. */}
+              <Text style={s.sub}>Signed by mistake? A CRS correction is made by the <Text style={{ fontWeight: '800' }}>administrator only</Text>. Send the request — flight, TL # and the full reason — via <Text style={{ fontWeight: '800' }}>Feedback</Text>.</Text>
+              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Feedback')}>
+                <Text style={s.btnTxt}>Request a correction via Feedback ›</Text>
               </TouchableOpacity>
-            ) : (
-              <View style={{ marginTop: 10 }}>
-                <Text style={s.sub}>A CRS can only be reset with a full written reason, approved by the CAMO Manager. Allowed before the aircraft departs.</Text>
-                <TextInput style={[s.input, { minHeight: 70 }]} value={resetReason} onChangeText={setResetReason} multiline
-                  placeholder="Full reason for resetting this CRS…" placeholderTextColor={theme.sub} />
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TouchableOpacity style={[s.btn, { flex: 1, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => { setShowReset(false); setResetReason(''); }}>
-                    <Text style={s.btnTxt}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[s.btn, { flex: 2, backgroundColor: theme.red }]} onPress={submitResetRequest}>
-                    <Text style={s.btnTxt}>Submit reset request to CAMO</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )
+            </View>
           ) : null}
         </View>
       ) : (
