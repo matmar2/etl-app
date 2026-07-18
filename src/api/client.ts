@@ -959,7 +959,7 @@ export const createMaintenance = (body: { aircraft_id: string; station: string; 
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
-  registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; search_text?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
+  registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; action_summary?: string; search_text?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
 
 export type ClearedItem = { id: string; ref?: string; ata_chapter?: string; mel_ref?: string; title?: string;
   description?: string; source?: string; action_taken?: string; closed_by?: string; raised_date?: string; closed_date?: string; registration?: string };
