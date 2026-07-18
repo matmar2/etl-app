@@ -998,13 +998,13 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
 
 // Cache the public config so OFFLINE it keeps the last-known testing_mode. Without this, an offline
 // fetch failure forced testing_mode=false, which hid the testing-only "Switch aircraft" dropdown.
-export async function publicConfig(): Promise<{ testing_mode: boolean }> {
+export async function publicConfig(): Promise<{ testing_mode: boolean; test_mfa?: boolean; trial_banner?: string; trial_login_note?: string }> {
   try {
     const c = await fetch(`${BASE}/auth/config`).then((r) => r.json());
     if (c && typeof c.testing_mode === 'boolean') { await _cacheSet('public_config', c); return c; }
     throw new Error('bad config');
   } catch {
-    return (await _cacheGet<{ testing_mode: boolean }>('public_config')) ?? { testing_mode: false };
+    return (await _cacheGet<{ testing_mode: boolean; test_mfa?: boolean; trial_banner?: string; trial_login_note?: string }>('public_config')) ?? { testing_mode: false };
   }
 }
 

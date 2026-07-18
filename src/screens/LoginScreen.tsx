@@ -13,6 +13,7 @@ export default function LoginScreen({ navigation }: any) {
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [testing, setTesting] = useState(false);
+  const [trialNote, setTrialNote] = useState('TESTING PERIOD — use MFA code 123456');
   const [reset, setReset] = useState(false);        // authenticator reset panel
   const [rOtp, setROtp] = useState('');
   const [rNew, setRNew] = useState('');
@@ -23,7 +24,7 @@ export default function LoginScreen({ navigation }: any) {
   const flashLoop = useRef<Animated.CompositeAnimation | null>(null);
   const [offlineReady, setOfflineReady] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);   // null = checking
-  useEffect(() => { publicConfig().then((c) => setTesting(!!c.testing_mode)); }, []);
+  useEffect(() => { publicConfig().then((c) => { setTesting(!!c.testing_mode); if (c.trial_login_note) setTrialNote(c.trial_login_note); }); }, []);
   useEffect(() => { hasOfflineSession(u).then(setOfflineReady); }, [u]);   // seeded for offline login?
   useEffect(() => {
     let alive = true;
@@ -112,7 +113,7 @@ export default function LoginScreen({ navigation }: any) {
       </View>
       <Text style={styles.title}>Electronic Tech Log</Text>
       <Text style={styles.sub}>Fly2Sky · Sign in</Text>
-      {testing ? <Text style={styles.testing}>TESTING PERIOD — use MFA code 123456</Text> : null}
+      {testing ? <Text style={styles.testing}>{trialNote}</Text> : null}
       <TextInput style={styles.input} value={u} onChangeText={setU} autoCapitalize="none"
         placeholder="User ID" placeholderTextColor={theme.sub}
         returnKeyType="next" onSubmitEditing={() => { if (!busy) submit(); }} blurOnSubmit={false} />

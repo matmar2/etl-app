@@ -72,6 +72,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [st, setSt] = useState<AircraftStatus | null>(null);
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [testing, setTesting] = useState(false);
+  const [trialBanner, setTrialBanner] = useState('⚠ TESTING MODE — MFA code 123456 · tap “Switch aircraft” to change tail. Off at go-live.');
   const [hasInduction, setHasInduction] = useState<boolean | null>(null);   // null = unknown (show); false = hide the tile (admin/CAMO)
   const [ac, setAc] = useState<Fleet | null>(currentAircraft());
   const [fleet, setFleet] = useState<Fleet[]>([]);
@@ -203,7 +204,7 @@ export default function MainMenuScreen({ navigation }: any) {
     const jobs: Promise<any>[] = [
       flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
       flushInductionAcks().catch(() => {}),          // send any induction acks made while offline
-      publicConfig().then((c) => { if (isAlive()) setTesting(!!c.testing_mode); }).catch(() => {}),
+      publicConfig().then((c) => { if (isAlive()) { setTesting(!!c.testing_mode); if (c.trial_banner) setTrialBanner(c.trial_banner); } }).catch(() => {}),
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
@@ -291,7 +292,7 @@ export default function MainMenuScreen({ navigation }: any) {
 
       {testing ? (
         <View style={styles.testBanner}>
-          <Text style={styles.testTxt}>⚠ TESTING MODE — MFA code 123456 · tap “Switch aircraft” to change tail. Off at go-live.</Text>
+          <Text style={styles.testTxt}>{trialBanner}</Text>
         </View>
       ) : null}
 
