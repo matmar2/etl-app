@@ -104,7 +104,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       {isMaint ? (
         <>
         <Text style={{ color: theme.sub, fontSize: 12, marginTop: 10 }}>
-          Ground maintenance log — no flight. Work the defects from the Defects page; issue the CRS and print via Release &amp; Print below.
+          Ground maintenance log — no flight. Work the defects and issue the CRS from the Defects page (⚙ Ground maintenance); print via ⎙ Preview above.
         </Text>
         <View style={[styles.card, { marginTop: 10 }]}>
           <Text style={styles.cardTitle}>Defects on this log</Text>
@@ -144,7 +144,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       ) : null}
 
       {/* Hidden for roles without release access (permission-matrix driven — e.g. cabin crew). */}
-      {access('release') !== 'none' ? (
+      {access('release') !== 'none' && !isMaint ? (
         (st && !st.serviceable) ? (
           <View style={[styles.card, { borderColor: theme.red, opacity: 0.55 }]}>
             <Text style={styles.cardTitle}>Release &amp; Print</Text>
