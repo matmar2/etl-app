@@ -190,7 +190,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>{d.title || 'Defect'} <Text style={[styles.badge, { color }]}>· {d.status}</Text></Text>
       <Text style={styles.desc}>{d.description}</Text>
-      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
+      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.tl ? ` · TL # ${d.tl}${d.tl_flight ? ` (${d.tl_flight})` : ''}` : ''}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
       {/* Deferred item: remaining calendar time and/or remaining cycles (cycle-based MEL). */}
       {d.status === 'deferred' && (d.due_date || d.max_cycles != null) ? (
         <Text style={[styles.sub, { fontWeight: '700', color: (/OVERDUE/.test(remainingDue(d.due_date) || '') || (d.remaining_cycles != null && d.remaining_cycles <= 0)) ? theme.red : theme.accent }]}>
