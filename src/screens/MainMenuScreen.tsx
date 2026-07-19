@@ -51,7 +51,7 @@ async function runOfflinePrep(reg?: string) {
     _offlineDone = true;
     _emitOffline({ frac: 1, label: 'Ready for offline' });
     setTimeout(() => { if (_offlineDone) _emitOffline(null); }, 2500);
-  } catch { /* leave _offlineDone false so it resumes */ }
+  } catch { _emitOffline(null); /* release the block; _offlineDone stays false so it resumes next focus */ }
   finally { _offlineRunning = false; }
 }
 
@@ -330,7 +330,10 @@ export default function MainMenuScreen({ navigation }: any) {
       })() : null}
 
       <ClockBanner />
-      <SyncBlock visible={initialSync} />
+      <SyncBlock visible={initialSync || (offlineProg != null && offlineProg.frac < 1)}
+        label={offlineProg != null && offlineProg.frac < 1
+          ? `Wait — preparing offline data… ${Math.round(offlineProg.frac * 100)}% (${offlineProg.label})`
+          : undefined} />
       {/* aircraft + serviceability hero */}
       <View style={[styles.hero, { borderColor: st ? (ok ? theme.green : theme.red) : theme.border }]}>
         <View style={styles.heroTop}>
