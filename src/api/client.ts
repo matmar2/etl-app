@@ -531,6 +531,11 @@ export type ReleaseStatus = {
   released: boolean; release: { by?: string; at?: string; kind?: string; serviceable?: boolean; note?: string };
   reset_request?: { status: string; reason?: string; by?: string; at?: string; review_note?: string; reviewed_by?: string } | null;
 };
+// Ground maintenance log: which rectified/closed defects THIS TL page claims (mechanic selects).
+export type ClosingItem = { id: string; ref?: string; title?: string; description?: string; area: string; status: string; at?: string; selected: boolean };
+export const closedDefects = (sectorId: string): Promise<{ items: ClosingItem[] }> => api(`/sectors/${sectorId}/closed-defects`);
+export const setClosedDefects = (sectorId: string, ids: string[]) => api(`/sectors/${sectorId}/closed-defects`, { method: 'POST', body: JSON.stringify({ ids }) });
+
 export const releaseStatus = (sectorId: string): Promise<ReleaseStatus> =>
   api(`/sectors/${sectorId}/release-status`);
 export async function releaseSector(sectorId: string, body: { note?: string; signer_name?: string; licence_no?: string; signature_image?: string; otp?: string; device_id?: string }) {

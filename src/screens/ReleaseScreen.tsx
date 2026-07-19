@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, sectorTlHtml, sectorTlHtmlCached, userLicence, userName } from '../api/client';
+import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
@@ -44,6 +44,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const isMech = can('release', 'crs');
 
   const [checks, setChecks] = useState<CheckStatus[]>([]);
+  const [closing, setClosing] = useState<ClosingItem[] | null>(null);   // maintenance log: items this TL page claims
   const [corrections, setCorrections] = useState<Correction[]>([]);
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
@@ -51,6 +52,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
     releaseStatus(sectorId).then(setSt)                                    // online → authoritative
       .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
+    getSector(sectorId).then((sec: any) => {
+      if (sec?.page_kind === 'maintenance_only' || sec?.flight_no === 'MAINT') closedDefects(sectorId).then((r) => setClosing(r.items)).catch(() => setClosing(null));
+    }).catch(() => {});
     const reg = currentAircraft()?.registration;
     if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
   }, [sectorId]);
@@ -197,6 +201,31 @@ export default function ReleaseScreen({ route, navigation }: any) {
       ) : (
         <Text style={s.sub}>Not yet released.</Text>
       )}
+
+      {closing !== null ? (
+        <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginTop: 12 }}>
+          <Text style={{ color: theme.text, fontWeight: '800' }}>Closed on this Tech Log page — select the items</Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
+            Tick each HIL / cabin / other defect this TL # closes. The printed page lists exactly the selected items (each cited by its HIL / Cabin №).
+          </Text>
+          {closing.length === 0 ? <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>No rectified/closed items since this log was opened.</Text> :
+            closing.map((c) => (
+              <TouchableOpacity key={c.id} disabled={!isMech} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                onPress={async () => {
+                  const next = closing.map((x) => x.id === c.id ? { ...x, selected: !x.selected } : x);
+                  setClosing(next);
+                  try { await setClosedDefects(sectorId, next.filter((x) => x.selected).map((x) => x.id)); }
+                  catch (e: any) { setMsg(e?.message || 'Could not save the selection'); load(); }
+                }}>
+                <Text style={{ fontSize: 16 }}>{c.selected ? '☑' : '☐'}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.text, fontSize: 13 }} numberOfLines={2}>{c.ref ? `${c.ref} · ` : ''}{c.title || c.description}</Text>
+                  <Text style={{ color: theme.sub, fontSize: 11 }}>{c.area === 'cabin' ? 'CABIN' : 'TECH'} · {c.status.toUpperCase()}{c.at ? ` · ${c.at}z` : ''}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+        </View>
+      ) : null}
 
       {!isMech ? <RoBanner text="only certifying staff (mechanic) may issue a CRS release" /> : null}
       {isMech && (
