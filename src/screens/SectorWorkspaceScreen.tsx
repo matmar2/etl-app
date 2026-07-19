@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -15,6 +15,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [err, setErr] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
   const [defs, setDefs] = useState<any[] | null>(null);   // active defects for the MAINT-log summary
+  const [st, setSt] = useState<AircraftStatus | null>(null);   // serviceability — gates Release & Print
 
   const refresh = useCallback(async () => {
     setErr('');
@@ -36,6 +37,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   }, [navigation, refresh]);
   useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
     const isM = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';
+    if (s?.aircraft_id) aircraftStatus(s.aircraft_id).then(setSt).catch(() => setSt(null));
     if (s?.aircraft_id && isM) Promise.all([listActiveDefects(s.aircraft_id), listHIL(s.aircraft_id).catch(() => [])])
       .then(([a, h]: any[]) => { const seen = new Set((a || []).map((x: any) => x.id)); setDefs([...(a || []), ...(h || []).filter((x: any) => !seen.has(x.id))]); })
       .catch(() => setDefs(null));
@@ -93,7 +95,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         <Text style={styles.previewTxt}>⎙  Preview / print Tech Log (current info)</Text>
       </TouchableOpacity>
 
-      {!closed ? (
+      {!closed && !isMaint ? (
         <TouchableOpacity style={styles.reportBtn} onPress={() => navigation.navigate('ReportDefect', { sectorId, aircraftId: s.aircraft_id })}>
           <Text style={styles.reportTxt}>＋  Report defect — any time (in flight / after departure)</Text>
         </TouchableOpacity>
@@ -143,11 +145,19 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
 
       {/* Hidden for roles without release access (permission-matrix driven — e.g. cabin crew). */}
       {access('release') !== 'none' ? (
+        (st && !st.serviceable) ? (
+          <View style={[styles.card, { borderColor: theme.red, opacity: 0.55 }]}>
+            <Text style={styles.cardTitle}>Release &amp; Print</Text>
+            <Text style={[styles.cardSub, { color: theme.red, fontWeight: '700' }]}>▲ Aircraft UNSERVICEABLE — {st.reasons?.join(' · ') || 'see Main Menu'}</Text>
+            <Text style={styles.cardSub}>Available once every open defect is rectified/deferred and the checks are current. Print via ⎙ Preview above.</Text>
+          </View>
+        ) : (
         <TouchableOpacity style={[styles.card, { borderColor: s.released_at ? theme.green : theme.border }]} onPress={() => navigation.navigate('Release', { sectorId })}>
           <Text style={styles.cardTitle}>Release &amp; Print  ›</Text>
           <Text style={styles.cardSub}>Serviceability, mechanic CRS release (NIL / deferred / HIL / rectified), print or transfer the Tech Log</Text>
           <Text style={styles.cardState}>{s.released_at ? `Released ${hhmm(s.released_at)}` : 'Not released'}</Text>
         </TouchableOpacity>
+        )
       ) : null}
     </ScrollView>
   );
