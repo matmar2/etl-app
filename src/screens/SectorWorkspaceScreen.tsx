@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, listActiveDefects, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -14,6 +14,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [tl, setTl] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
+  const [defs, setDefs] = useState<any[] | null>(null);   // active defects for the MAINT-log summary
 
   const refresh = useCallback(async () => {
     setErr('');
@@ -33,6 +34,10 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
     refresh();
     return unsub;
   }, [navigation, refresh]);
+  useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
+    const isM = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';
+    if (s?.aircraft_id && isM) listActiveDefects(s.aircraft_id).then(setDefs).catch(() => setDefs(null));
+  }, [s?.aircraft_id, s?.page_kind]);
 
   async function previewTl() {
     try { const { html } = await sectorTlHtmlCached(sectorId); await printHtml(html); }   // cached VAW-ETL-01 offline; fresh online
@@ -93,9 +98,29 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       ) : null}
 
       {isMaint ? (
+        <>
         <Text style={{ color: theme.sub, fontSize: 12, marginTop: 10 }}>
           Ground maintenance log — no flight. Work the defects from the Defects page; issue the CRS and print via Release &amp; Print below.
         </Text>
+        <View style={[styles.card, { marginTop: 10 }]}>
+          <Text style={styles.cardTitle}>Defects on this log</Text>
+          {defs === null ? <Text style={styles.cardSub}>Loading…</Text> :
+           defs.length === 0 ? <Text style={styles.cardSub}>NIL — no active defects on this aircraft.</Text> :
+           defs.map((d: any) => (
+            <TouchableOpacity key={d.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.border }}
+              onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <Text style={{ color: d.status === 'deferred' ? theme.sub : theme.red, fontWeight: '800', fontSize: 11 }}>
+                  {(d.status || 'open').toUpperCase()}{d.mel_ref ? ` · ${d.mel_ref}` : ''}
+                </Text>
+                {d.area === 'cabin' ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>CABIN{d.dispatch_accepted === true ? ' · dispatch accepted' : d.dispatch_accepted === false ? ' · NOT dispatchable' : ' · decision pending'}</Text> : null}
+              </View>
+              <Text style={{ color: theme.text, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{d.title || d.description}</Text>
+            </TouchableOpacity>
+          ))}
+          <Text style={[styles.cardSub, { marginTop: 6 }]}>Cleared items appear on the printed Tech Log page (Preview above). Tap a defect to open it.</Text>
+        </View>
+        </>
       ) : null}
 
       {!isMaint ? (
