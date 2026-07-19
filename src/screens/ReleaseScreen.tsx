@@ -52,9 +52,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
     releaseStatus(sectorId).then(setSt)                                    // online → authoritative
       .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
-    getSector(sectorId).then((sec: any) => {
-      if (sec?.page_kind === 'maintenance_only' || sec?.flight_no === 'MAINT') closedDefects(sectorId).then((r) => setClosing(r.items)).catch(() => setClosing(null));
-    }).catch(() => {});
+    // Direct server call — the endpoint 404s for flight sectors (card hidden); never depend on the
+    // local copy (a server-created maintenance log may not be in the device DB yet).
+    closedDefects(sectorId).then((r) => setClosing(r.items)).catch(() => setClosing(null));
     const reg = currentAircraft()?.registration;
     if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
   }, [sectorId]);
@@ -204,7 +204,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
       {closing !== null ? (
         <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginTop: 12 }}>
-          <Text style={{ color: theme.text, fontWeight: '800' }}>Closed on this Tech Log page — select the items</Text>
+          <Text style={{ color: theme.text, fontWeight: '800' }}>To be closed on this Tech Log page — select the items</Text>
           <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>
             Tick each HIL / cabin / other defect this TL # closes. The printed page lists exactly the selected items (each cited by its HIL / Cabin №).
           </Text>
