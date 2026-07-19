@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -88,7 +88,8 @@ export default function MainMenuScreen({ navigation }: any) {
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
   const [initialSync, setInitialSync] = useState(true);   // first server refresh of the menu — block input (time-boxed)
-  const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped at 15 s — then the app is usable while prep continues
+  const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped (admin-set seconds) — then the app is usable while prep continues
+  const prepWaitRef = useRef(15);                          // offline_prep_wait_seconds (admin)
 
   async function syncNow() {
     if (syncing) return;
@@ -225,9 +226,14 @@ export default function MainMenuScreen({ navigation }: any) {
     pendingSyncCount().then((n) => { if (isAlive()) setPending(n); }).catch(() => {});
   }, []);
 
+  useEffect(() => { appSettings().then((x: any) => {
+    const v = Number(x.offline_prep_wait_seconds); if (!isNaN(v)) prepWaitRef.current = Math.max(0, v);
+    if (prepWaitRef.current === 0) setPrepWaived(true);
+  }).catch(() => {}); }, []);
   useEffect(() => {
     if (prepWaived || offlineProg == null || offlineProg.frac >= 1) return;
-    const t = setTimeout(() => setPrepWaived(true), 15000);   // cap the prep block at 15 s — then release (prep continues in background)
+    if (prepWaitRef.current === 0) { setPrepWaived(true); return; }
+    const t = setTimeout(() => setPrepWaived(true), prepWaitRef.current * 1000);   // admin-set cap — then release (prep continues in background)
     return () => clearTimeout(t);
   }, [offlineProg != null && offlineProg.frac < 1, prepWaived]);
   const initialSyncDone = useRef(false);
