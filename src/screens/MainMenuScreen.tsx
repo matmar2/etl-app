@@ -88,6 +88,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
   const [initialSync, setInitialSync] = useState(true);   // first server refresh of the menu — block input (time-boxed)
+  const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped at 15 s — then the app is usable while prep continues
 
   async function syncNow() {
     if (syncing) return;
@@ -224,6 +225,11 @@ export default function MainMenuScreen({ navigation }: any) {
     pendingSyncCount().then((n) => { if (isAlive()) setPending(n); }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (prepWaived || offlineProg == null || offlineProg.frac >= 1) return;
+    const t = setTimeout(() => setPrepWaived(true), 15000);   // cap the prep block at 15 s — then release (prep continues in background)
+    return () => clearTimeout(t);
+  }, [offlineProg != null && offlineProg.frac < 1, prepWaived]);
   const initialSyncDone = useRef(false);
   useFocusEffect(useCallback(() => {
     let alive = true;
@@ -330,7 +336,7 @@ export default function MainMenuScreen({ navigation }: any) {
       })() : null}
 
       <ClockBanner />
-      <SyncBlock visible={initialSync || (offlineProg != null && offlineProg.frac < 1)}
+      <SyncBlock visible={initialSync || (!prepWaived && offlineProg != null && offlineProg.frac < 1)}
         label={offlineProg != null && offlineProg.frac < 1
           ? `Wait — preparing offline data… ${Math.round(offlineProg.frac * 100)}% (${offlineProg.label})`
           : undefined} />
