@@ -106,6 +106,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         <Text style={{ color: theme.sub, fontSize: 12, marginTop: 10 }}>
           Ground maintenance log — no flight. Work the defects and issue the CRS from the Defects page (⚙ Ground maintenance); print via ⎙ Preview above.
         </Text>
+        {(s as any).maint_sealed
+          ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6, fontWeight: '800' }}>🔒 SEALED — the aircraft has departed since this log; it can no longer be edited. Open a new Ground maintenance log for further work.</Text>
+          : <Text style={{ color: theme.green, fontSize: 12, marginTop: 6, fontWeight: '700' }}>✎ Editable until the aircraft next departs — corrections and the CRS are still possible.</Text>}
         <View style={[styles.card, { marginTop: 10 }]}>
           <Text style={styles.cardTitle}>Defects on this log</Text>
           {defs === null ? <Text style={styles.cardSub}>Loading…</Text> :
