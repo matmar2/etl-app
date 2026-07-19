@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
 import { printHtml } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -41,6 +41,8 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [askDel, setAskDel] = useState(false);
   const [approver, setApprover] = useState('');
   const isMech = can('defects', 'rectify');     // rectification / CRS action — maintenance
+  // Chain-closure: after a CRS, offer to close ANOTHER item on the same ground TL # until 'no more'.
+  const [chain, setChain] = useState<{ logId: string; tl: string; items: any[] } | null>(null);
   const canDefer = can('defects', 'defer');     // defer against MEL / CDL — maintenance
   const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
   const isCommander = role() === 'admin' ||
@@ -122,11 +124,34 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
       else setMsg('Rectified + CRS issued ✓');
       setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); load();
+      offerChain();   // same-TL# chaining: claim this item on the open ground log + offer the next
     } catch (e: any) {
       if (e instanceof MfaRequired) { setCrsSig(signature); setNeedOtp(true); setMsg('Enter your authenticator code to issue the CRS.'); }
       else setMsg(`Failed: ${e.message}`);
     }
   }
+  // After a CRS on this defect: if an open (unsealed) ground maintenance log exists, claim the
+  // item on that TL # and offer the remaining open/HIL/cabin items — repeat until "No more".
+  async function offerChain() {
+    try {
+      const secs = await serverSectors(d?.aircraft_id);
+      const log = (secs || []).filter((x: any) => (x.page_kind === 'maintenance_only' || x.flight_no === 'MAINT') && x.status === 'maintenance')
+        .sort((a: any, b: any) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0];
+      if (!log) return;
+      try {
+        const cur = await closedDefects(log.id);
+        const keep = cur.items.filter((i: any) => i.selected).map((i: any) => i.id);
+        if (!keep.includes(defectId)) await setClosedDefects(log.id, [...keep, defectId]);
+      } catch { /* sealed or offline — selection stays manual on the Release page */ }
+      const [act, hil] = await Promise.all([
+        listActiveDefects(d?.aircraft_id).catch(() => []), listHIL(d?.aircraft_id).catch(() => [])]);
+      const seen = new Set<string>([defectId]);
+      const items = [...(act || []), ...(hil || [])].filter((x: any) => !seen.has(x.id) && !(seen.add(x.id) && false));
+      const tl = log.page_no ? `${String(Math.floor(log.page_no / 1000)).padStart(3, '0')}-${String(log.page_no % 1000).padStart(3, '0')}` : '—';
+      setChain({ logId: log.id, tl, items });
+    } catch { /* no chaining offline */ }
+  }
+
   // Double inspection (DI): a second qualified person's independent inspection — captures their
   // name, licence, signature and the date/time.
   async function submitDI(signature: string) {
@@ -374,6 +399,38 @@ export default function DefectDetailScreen({ route, navigation }: any) {
 
       <MelPicker visible={melOpen} ata={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setMelOpen(false)} onPick={pickMel} />
       <CdlPicker visible={cdlOpen} ata={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setCdlOpen(false)} onPick={pickCdl} />
+
+      {chain ? (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setChain(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(10,20,35,0.6)', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 12, padding: 16, width: '100%', maxWidth: 560, maxHeight: '80%' }}>
+            <Text style={{ color: theme.text, fontWeight: '800', fontSize: 16 }}>Close another item on TL # {chain.tl}?</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
+              This defect has been claimed on the ground log. Pick the next open / HIL / cabin item to work under the same TL #, or finish and go to the CRS.
+            </Text>
+            <ScrollView style={{ marginTop: 10, maxHeight: 300 }}>
+              {chain.items.length === 0 ? <Text style={{ color: theme.sub, fontSize: 12 }}>No other active items on this aircraft.</Text> :
+                chain.items.map((c: any) => (
+                  <TouchableOpacity key={c.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border }}
+                    onPress={() => { setChain(null); navigation.replace('DefectDetail', { defectId: c.id }); }}>
+                    <Text style={{ color: c.status === 'deferred' ? theme.sub : theme.red, fontWeight: '800', fontSize: 11 }}>
+                      {(c.status || 'open').toUpperCase()}{c.mel_ref ? ` · ${c.mel_ref}` : ''}{c.hil_no ? ` · ${c.hil_no}` : ''}{c.area === 'cabin' ? ' · CABIN' : ''}
+                    </Text>
+                    <Text style={{ color: theme.text, fontSize: 13 }} numberOfLines={2}>{c.title || c.description}</Text>
+                  </TouchableOpacity>
+                ))}
+            </ScrollView>
+            <TouchableOpacity style={{ backgroundColor: theme.accent, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
+              onPress={() => { const id = chain.logId; setChain(null); navigation.navigate('Release', { sectorId: id }); }}>
+              <Text style={{ color: '#1a1300', fontWeight: '800' }}>No more — go to the TL CRS ›</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => setChain(null)}>
+              <Text style={{ color: theme.sub, fontSize: 13 }}>Stay on this defect</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        </Modal>
+      ) : null}
     </ScrollView>
   );
 }
