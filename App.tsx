@@ -27,6 +27,7 @@ import AssistantScreen from './src/screens/AssistantScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
 import AckOverlay from './src/components/AckOverlay';
+import { SyncBlockHost } from './src/components/SyncBlock';
 import BroadcastGate from './src/components/BroadcastGate';
 import InductionGate from './src/components/InductionGate';
 import OnlineStatus from './src/components/OnlineStatus';
@@ -183,6 +184,7 @@ export default function App() {
         <Stack.Screen name="MasterDevice" component={MasterDeviceScreen} options={{ title: 'Master iPad' }} />
       </Stack.Navigator>
     </NavigationContainer>
+    <SyncBlockHost />
     <AckOverlay navRef={navRef} />
     <BroadcastGate />
     <InductionGate />
