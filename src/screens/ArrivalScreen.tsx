@@ -8,12 +8,13 @@ import RoBanner from '../components/RoBanner';
 import TechLogPageModal from '../components/TechLogPageModal';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
+import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
 
 export default function ArrivalScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
-  const { s, msg, save, stamp, setManual, clearTime } = useSector(sectorId);
+  const { s, msg, syncing, save, stamp, setManual, clearTime } = useSector(sectorId);
   const [ldg, setLdg] = useState<any>({});
   const [rem, setRem] = useState<any>('');
   const [lf, setLf] = useState<any>('');
@@ -140,6 +141,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <SyncBlock visible={syncing} />
       <Text style={sx.title}>After Departure closed / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>

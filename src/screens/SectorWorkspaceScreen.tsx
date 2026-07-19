@@ -4,6 +4,7 @@ import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sec
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
+import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { hhmm } from './sectorShared';
 import { fmtTl, parseTl } from '../util/tl';
@@ -14,6 +15,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [tl, setTl] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
+  const [syncing, setSyncing] = useState(true);   // first server pull — block input (time-boxed)
   const [defs, setDefs] = useState<any[] | null>(null);   // active defects for the MAINT-log summary
   const [st, setSt] = useState<AircraftStatus | null>(null);   // serviceability — gates Release & Print
 
@@ -32,7 +34,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   }, [sectorId]);
   useEffect(() => {
     const unsub = navigation.addListener('focus', refresh);
-    refresh();
+    const done = () => setSyncing(false);
+    const t = setTimeout(done, 6000);                        // never trap the crew (offline/slow)
+    refresh().then(done).catch(done).finally(() => clearTimeout(t));
     return unsub;
   }, [navigation, refresh]);
   useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
@@ -74,6 +78,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <SyncBlock visible={syncing} />
       {!closed ? (
         <View style={styles.tlBar}>
           <Text style={styles.tlTxt}>TL # {tl != null ? fmtTl(tl) : '…'}</Text>

@@ -41,10 +41,20 @@ const OOOI_LABEL: Record<string, string> = {
 export function useSector(sectorId: string) {
   const [s, setS] = useState<any>(null);
   const [msg, setMsg] = useState('');
+  const [syncing, setSyncing] = useState(true);   // initial server pull in flight — screens block input
 
   async function reload() { setS(await getSector(sectorId)); }                 // local (instant)
   async function refresh() { setS(await pullSector(sectorId)); }               // pull-on-open (server-authoritative)
-  useEffect(() => { reload(); refresh(); }, [sectorId]);
+  useEffect(() => {
+    let alive = true;
+    reload();
+    // Block interaction until the server copy lands — but never trap the crew: an offline/failed
+    // pull releases immediately and a slow one is time-boxed (6 s), then the pull continues silently.
+    const done = () => { if (alive) setSyncing(false); };
+    const t = setTimeout(done, 6000);
+    refresh().then(done).catch(done).finally(() => clearTimeout(t));
+    return () => { alive = false; clearTimeout(t); };
+  }, [sectorId]);
 
   async function save(patch: any) {
     const next = await updateSector(sectorId, patch);
@@ -68,7 +78,7 @@ export function useSector(sectorId: string) {
     const n = { ...s, [field]: null };
     await save({ [field]: null, block_time_min: mins(n.off_block, n.on_block), flight_time_min: mins(n.takeoff, n.landing) });
   }
-  return { s, msg, save, stamp, setManual, clearTime, reload, refresh };
+  return { s, msg, syncing, save, stamp, setManual, clearTime, reload, refresh };
 }
 
 // Schedule / ETA: ETA = STA shifted by the departure delay (actual off-block vs STD).

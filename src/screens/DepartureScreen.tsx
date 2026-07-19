@@ -11,12 +11,13 @@ import SignaturePad from '../components/SignaturePad';
 import WalkaroundModal from '../components/WalkaroundModal';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps, GpsState } from '../util/geo';
+import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
 
 export default function DepartureScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
-  const { s, msg, save, stamp, setManual, clearTime, refresh } = useSector(sectorId);
+  const { s, msg, syncing, save, stamp, setManual, clearTime, refresh } = useSector(sectorId);
   const [fuel, setFuel] = useState<any>({});
   const [serv, setServ] = useState<any>({});
   const [servBad, setServBad] = useState(false);      // mandatory total-oil validation
@@ -186,6 +187,7 @@ export default function DepartureScreen({ route, navigation }: any) {
 
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <SyncBlock visible={syncing} />
       <Text style={sx.title}>Departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>

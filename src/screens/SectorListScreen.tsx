@@ -5,6 +5,7 @@ import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, sect
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
+import SyncBlock from '../components/SyncBlock';
 import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, unhideSectorFromList, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -18,6 +19,7 @@ export default function SectorListScreen({ route, navigation }: any) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);   // reveal rows removed-from-list (per device)   // per-device "removed from list" (record kept)
   const [status, setStatus] = useState('');
+  const [syncing, setSyncing] = useState(true);   // first server pull — block input (time-boxed)
   const [feed, setFeed] = useState('Loading…');
   const [manualForm, setManualForm] = useState<any | null>(null);
   const [displayN, setDisplayN] = useState(10);    // picker shows next-N; full window stays cached offline
@@ -48,7 +50,12 @@ export default function SectorListScreen({ route, navigation }: any) {
   // Re-sync sectors AND pull the latest Leon schedule the instant this screen is focused, so any
   // change from Leon shows immediately when online (in addition to the 60 s live timer below).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useFocusEffect(useCallback(() => { pull(); loadFlights(); }, [pull]));
+  useFocusEffect(useCallback(() => {
+    const done = () => setSyncing(false);
+    const t = setTimeout(done, 6000);
+    pull().then(done).catch(done).finally(() => clearTimeout(t));
+    loadFlights();
+  }, [pull]));
 
   // Show flights "from the last 3 hours" onward — drop anything scheduled to depart
   // more than 3 h ago so old/stale flights don't clutter the list (active sectors always stay).
@@ -259,6 +266,7 @@ export default function SectorListScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <SyncBlock visible={syncing} />
       <Text style={styles.title}>Flight Details · {reg}</Text>
       {status ? <Text style={styles.status}>{status}</Text> : null}
 
