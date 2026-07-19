@@ -4,6 +4,7 @@ import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TouchableO
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
 import ClockBanner from '../components/ClockBanner';
+import SyncBlock from '../components/SyncBlock';
 import HeaderLogo from '../components/HeaderLogo';
 import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
@@ -86,6 +87,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
+  const [initialSync, setInitialSync] = useState(true);   // first server refresh of the menu — block input (time-boxed)
 
   async function syncNow() {
     if (syncing) return;
@@ -222,12 +224,20 @@ export default function MainMenuScreen({ navigation }: any) {
     pendingSyncCount().then((n) => { if (isAlive()) setPending(n); }).catch(() => {});
   }, []);
 
+  const initialSyncDone = useRef(false);
   useFocusEffect(useCallback(() => {
     let alive = true;
     _offlineListener = (p) => { if (alive) setOfflineProg(p); };   // reflect prep progress while focused
     setOfflineProg(_offlineProg);                                  // show current progress on (re)entry
     runOfflinePrep(currentAircraft()?.registration);               // start/continue immediately (independent of reload)
-    reload(() => alive);
+    if (!initialSyncDone.current) {
+      initialSyncDone.current = true;
+      const done = () => setInitialSync(false);
+      const t = setTimeout(done, 6000);                       // never trap the crew (offline/slow)
+      Promise.resolve(reload(() => alive)).then(done).catch(done).finally(() => clearTimeout(t));
+    } else {
+      reload(() => alive);
+    }
     return () => { alive = false; _offlineListener = null; };      // unsubscribe UI, but never stop the prep
   }, [reload]));
 
@@ -320,6 +330,7 @@ export default function MainMenuScreen({ navigation }: any) {
       })() : null}
 
       <ClockBanner />
+      <SyncBlock visible={initialSync} />
       {/* aircraft + serviceability hero */}
       <View style={[styles.hero, { borderColor: st ? (ok ? theme.green : theme.red) : theme.border }]}>
         <View style={styles.heroTop}>
