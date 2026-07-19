@@ -61,6 +61,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const depDone = !!s.off_block;
   const arrDone = s.status === 'closed' || !!s.on_block;
   const closed = s.status === 'closed' || s.status === 'exported';
+  const isMaint = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';   // ground maintenance log — no flight
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
@@ -91,17 +92,27 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         </TouchableOpacity>
       ) : null}
 
+      {isMaint ? (
+        <Text style={{ color: theme.sub, fontSize: 12, marginTop: 10 }}>
+          Ground maintenance log — no flight. Work the defects from the Defects page; issue the CRS and print via Release &amp; Print below.
+        </Text>
+      ) : null}
+
+      {!isMaint ? (
       <TouchableOpacity style={[styles.card, { borderColor: depDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Departure', { sectorId })}>
         <Text style={styles.cardTitle}>Departure  ›</Text>
         <Text style={styles.cardSub}>Off-block, fuel, servicing, ice, PIREP defects, commander acceptance</Text>
         <Text style={styles.cardState}>{depDone ? `Off-block ${hhmm(s.off_block)} · uplift ${s.fuel_uplift_kg ?? '—'} kg` : 'Not started'}</Text>
       </TouchableOpacity>
+      ) : null}
 
+      {!isMaint ? (
       <TouchableOpacity style={[styles.card, { borderColor: arrDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Arrival', { sectorId })}>
         <Text style={styles.cardTitle}>After Departure closed / Arrival  ›</Text>
         <Text style={styles.cardSub}>Take-off (at brake release) / landed / on-block times, fuel, landings, MAREP defects, post-flight acceptance</Text>
         <Text style={styles.cardState}>{arrDone ? `On-block ${hhmm(s.on_block)} · ${s.status}` : 'Not started'}</Text>
       </TouchableOpacity>
+      ) : null}
 
       {/* Hidden for roles without release access (permission-matrix driven — e.g. cabin crew). */}
       {access('release') !== 'none' ? (
