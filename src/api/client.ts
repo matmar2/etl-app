@@ -1000,7 +1000,8 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
 // fetch failure forced testing_mode=false, which hid the testing-only "Switch aircraft" dropdown.
 export async function publicConfig(): Promise<{ testing_mode: boolean; test_mfa?: boolean; switch_aircraft?: boolean; trial_banner?: string; trial_login_note?: string }> {
   try {
-    const c = await fetch(`${BASE}/auth/config`).then((r) => r.json());
+    const did = await deviceId().catch(() => '');
+    const c = await fetch(`${BASE}/auth/config${did ? `?device=${encodeURIComponent(did)}` : ''}`).then((r) => r.json());
     if (c && typeof c.testing_mode === 'boolean') { await _cacheSet('public_config', c); return c; }
     throw new Error('bad config');
   } catch {
