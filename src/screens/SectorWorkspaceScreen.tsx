@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, listActiveDefects, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -36,7 +36,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   }, [navigation, refresh]);
   useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
     const isM = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';
-    if (s?.aircraft_id && isM) listActiveDefects(s.aircraft_id).then(setDefs).catch(() => setDefs(null));
+    if (s?.aircraft_id && isM) Promise.all([listActiveDefects(s.aircraft_id), listHIL(s.aircraft_id).catch(() => [])])
+      .then(([a, h]: any[]) => { const seen = new Set((a || []).map((x: any) => x.id)); setDefs([...(a || []), ...(h || []).filter((x: any) => !seen.has(x.id))]); })
+      .catch(() => setDefs(null));
   }, [s?.aircraft_id, s?.page_kind]);
 
   async function previewTl() {
