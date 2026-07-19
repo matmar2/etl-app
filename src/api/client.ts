@@ -108,10 +108,14 @@ async function cacheOfflineCred(username: string, password: string, token: strin
 const TEST_MFA_CODE = '123456';   // mirrors backend mfa.TEST_MFA_CODE (accepted while testing_mode is on)
 
 // Stable per-install device id for the login/audit log — generated once, kept in the Keychain.
+// Web browsers get a 'web-' prefix: they are sessions, not iPads — the server logs them for audit
+// but does NOT enter them in the device registry (no self-registration/approval noise).
 export async function deviceId(): Promise<string> {
+  const { Platform } = require('react-native');
+  const prefix = Platform.OS === 'web' ? 'web-' : 'ipad-';
   let id = await SecureStore.getItem('device_id');
-  if (!id) {
-    id = 'ipad-' + Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  if (!id || (Platform.OS === 'web' && !id.startsWith('web-'))) {   // migrate old web ids
+    id = prefix + Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
     await SecureStore.setItem('device_id', id);
   }
   return id;
