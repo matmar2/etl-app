@@ -2,7 +2,7 @@ import { createNavigationContainerRef, NavigationContainer } from '@react-naviga
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Text, View } from 'react-native';
-import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, reportDeviceError, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
+import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, onAircraftStatus, reportDeviceError, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalScreen from './src/screens/ArrivalScreen';
 import DefectDetailScreen from './src/screens/DefectDetailScreen';
@@ -124,18 +124,23 @@ export default function App() {
 
   // Aircraft serviceability → tints the header green (serviceable) / red (unserviceable) on every page.
   const [svc, setSvc] = useState<boolean | null>(null);
+  const pollSvc = useRef(async () => {
+    const ac = currentAircraft();
+    if (!ac?.registration) { setSvc(null); return; }
+    try { const s = await aircraftStatus(ac.registration); setSvc(!!s.serviceable); }
+    catch (e: any) { if (e?.message?.includes('401')) setSvc(null); }
+  }).current;
   useEffect(() => {
     let alive = true;
-    const poll = async () => {
-      const ac = currentAircraft();
-      if (!ac?.registration) { if (alive) setSvc(null); return; }
-      try { const s = await aircraftStatus(ac.registration); if (alive) setSvc(!!s.serviceable); }
-      catch (e: any) { if (alive && e?.message?.includes('401')) setSvc(null); }
-    };
-    poll();
-    const t = setInterval(poll, 30000);
-    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') poll(); });
-    return () => { alive = false; clearInterval(t); sub.remove(); };
+    // Single source of truth: whatever status ANY screen just fetched drives the header too,
+    // so the menu pill and the header bar can never disagree.
+    onAircraftStatus((reg, s) => {
+      if (alive && reg === currentAircraft()?.registration) setSvc(!!s.serviceable);
+    });
+    pollSvc();
+    const t = setInterval(pollSvc, 30000);
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') pollSvc(); });
+    return () => { alive = false; onAircraftStatus(null); clearInterval(t); sub.remove(); };
   }, []);
 
   const headerOpts: NativeStackNavigationOptions = {
@@ -159,7 +164,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { resetIdle(); return false; }}>
-    <NavigationContainer ref={navRef}>
+    <NavigationContainer ref={navRef} onStateChange={() => pollSvc()}>
       <Stack.Navigator initialRouteName="Login" screenOptions={headerOpts}>
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="MfaSetup" component={MfaSetupScreen} options={{ headerShown: false }} />

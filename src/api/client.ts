@@ -822,11 +822,18 @@ async function _mergeLocalChecks(reg: string, st: AircraftStatus): Promise<Aircr
   return { ...st, checks, reasons, serviceable, dispatchable: serviceable };
 }
 
+// Any screen that fetches a status also feeds subscribers (the header tint), so the
+// serviceability shown on different pages can never disagree for the same aircraft.
+let _statusListener: ((reg: string, st: AircraftStatus) => void) | null = null;
+export function onAircraftStatus(cb: ((reg: string, st: AircraftStatus) => void) | null) { _statusListener = cb; }
+
 export async function aircraftStatus(reg: string): Promise<AircraftStatus> {
   try {
     const st: AircraftStatus = await api(`/aircraft/${encodeURIComponent(reg)}/status`);
     try { await setRef(`status_${_normReg(reg)}`, st); } catch { /* best-effort cache */ }
-    return _mergeLocalChecks(reg, st);
+    const merged = await _mergeLocalChecks(reg, st);
+    _statusListener?.(reg, merged);
+    return merged;
   } catch (e) {
     const { data } = await getRef<AircraftStatus>(`status_${_normReg(reg)}`);    // offline → last known status
     if (data) return _mergeLocalChecks(reg, data);
