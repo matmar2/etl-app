@@ -5,7 +5,7 @@ import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, sect
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
-import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, Sector } from '../db/sectors';
+import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, unhideSectorFromList, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -15,7 +15,8 @@ export default function SectorListScreen({ route, navigation }: any) {
   const reg = route?.params?.aircraftId ?? 'LZ-FSA';
   const [flights, setFlights] = useState<LeonFlight[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());   // per-device "removed from list" (record kept)
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [showHidden, setShowHidden] = useState(false);   // reveal rows removed-from-list (per device)   // per-device "removed from list" (record kept)
   const [status, setStatus] = useState('');
   const [feed, setFeed] = useState('Loading…');
   const [manualForm, setManualForm] = useState<any | null>(null);
@@ -103,7 +104,7 @@ export default function SectorListScreen({ route, navigation }: any) {
     : sectors.filter((s) => s.flight_date === today || inProgress(s)))
     // drop per-device "removed from list" records — but NEVER hide the open flight that is blocking
     // new legs, or the crew can't see the thing they're told to "close first".
-    .filter((s) => !hidden.has(s.id) || s.id === openSector?.id);
+    .filter((s) => showHidden || !hidden.has(s.id) || s.id === openSector?.id);
   // History view: also list PAST Leon flights for the tail. If a Leon flight was opened in ETL
   // (same flight_no + date) show only the ETL one — no duplicate.
   const etlKeys = new Set(sectors.map((s) => `${(s.flight_no || '').toUpperCase()}|${s.flight_date ?? ''}`));
@@ -313,6 +314,13 @@ export default function SectorListScreen({ route, navigation }: any) {
 
       <View style={styles.feedHead}>
         <Text style={styles.section}>Your sectors · {histOpen ? `${histFrom} → ${histTo}` : 'today'}</Text>
+        {hidden.size > 0 ? (
+          <TouchableOpacity onPress={() => setShowHidden((v) => !v)}>
+            <Text style={{ color: theme.sub, fontSize: 12, textDecorationLine: 'underline', marginTop: 2 }}>
+              {showHidden ? 'Hide removed items' : `Show removed from this list (${hidden.size})`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
         <View style={{ flexDirection: 'row', gap: 16, alignItems: 'baseline' }}>
           <TouchableOpacity onPress={() => { setHistOpen(!histOpen); if (!histOpen) { setHistFrom(today); setHistTo(today); } }}>
             <Text style={styles.histLink}>{histOpen ? '✕ Back to today' : '🗓 List previous flights'}</Text>
@@ -362,6 +370,11 @@ export default function SectorListScreen({ route, navigation }: any) {
             <Text style={styles.rowRoute}>{item.dep} → {item.arr}</Text>
             <Text style={[styles.rowMeta, carried && { color: '#e0a800', fontWeight: '700' }]}>{item.flight_date}{carried ? '  ·  ⏱ carried over (not today)' : ''}</Text>
             {nm ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>opened by {nm}</Text> : null}
+            {hidden.has(item.id) ? (
+              <TouchableOpacity onPress={async (e: any) => { e?.stopPropagation?.(); await unhideSectorFromList(item.id); setHidden((h) => { const n = new Set(h); n.delete(item.id); return n; }); setStatus(`Restored ${item.flight_no} to the list`); }}>
+                <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700', marginTop: 3 }}>↩ removed from this list — tap to restore</Text>
+              </TouchableOpacity>
+            ) : null}
             {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
             {closed ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700', marginTop: 3 }}>Tap to view Tech Log ›</Text> : null}
