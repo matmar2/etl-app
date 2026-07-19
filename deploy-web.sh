@@ -11,9 +11,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-KEY="${DEPLOY_KEY:-$HOME/.ssh/etl_box_deploy}"
-HOST="${DEPLOY_HOST:-ubuntu@100.73.102.107}"
-SSH_OPTS=(-i "$KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new)
+KEY="${DEPLOY_KEY:-}"
+HOST="${DEPLOY_HOST:-aws-camo}"   # ssh alias (tailnet; public :22 closed)
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new); [ -n "$KEY" ] && SSH_OPTS+=(-i "$KEY" -o IdentitiesOnly=yes)
 
 # Bundle code: stamp the SAME commit the iPad binary uses. The iPad is built by the Avora
 # monorepo CI, which stamps the MONOREPO commit — so the web must stamp it too, or the
