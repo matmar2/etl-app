@@ -48,6 +48,12 @@ export default function DepartureScreen({ route, navigation }: any) {
   const secY = useRef<Record<string, number>>({});
   const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
   useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); }).catch(() => {}); }, []);
+  // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
+  useEffect(() => {
+    if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
+      setFuel((f: any) => (f.fuel_density == null || f.fuel_density === '') ? { ...f, fuel_density: String(Number(servMin.fuel_density_ref) || 0.785) } : f);
+    }
+  }, [servMin]);
   async function checkDepGps() { if (s?.dep) { setDepGps({ state: 'checking' }); setDepGps(await checkAirportGps(s.dep)); } }
   const refreshStatus = useCallback(() => {
     const reg = currentAircraft()?.registration || s?.aircraft_id;
@@ -77,7 +83,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       setMinFuel(c.min_fuel_kg ?? null);
       setServMin(c);
       setFuel((p: any) => { const n = { ...p }; c.tanks.forEach((t) => (n[t.field] = s[t.field])); return n; });
-      const savedTankSum = c.tanks.reduce((a, t) => a + (Number(s[t.field]) || 0), 0);   // saved uplift ≠ Σ tanks ⇒ it was a manual override
+      const savedTankSum = c.tanks.reduce((a, t) => a + (Number(s[t.field]) || 0), 0);   // legacy: saved uplift equal to Σ tanks ⇒ auto
       if (Number(s.fuel_uplift_kg) > 0 && Math.round(Number(s.fuel_uplift_kg)) !== Math.round(savedTankSum)) {
         setUpliftManual(true);
         setUpliftText(String(round1(Number(s.fuel_uplift_kg))));   // KG (default unit)
@@ -91,10 +97,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   const oilToL = (v: string) => +(((Number(v) || 0) * QT_L).toFixed(2));
   const oilShown = (lv: any) => { if (lv === '' || lv == null) return ''; return String(Math.round((Number(lv) / QT_L) * 10) / 10); };
   const qtOf = (l: number) => Math.round((l / QT_L) * 10) / 10;           // FCOM litre minimum -> quarts (display)
-  // Departure fuel = Σ tanks if any tank entered; else previous landing fuel + uplift (kg). Manual only as a last resort.
+  // Tanks hold the INDICATED CONTENTS after refuelling. Actual Total uplift (auto) =
+  // Σ tanks − (fuel before refuelling, else previous-leg landing fuel). Manual override allowed.
   const tankVals = tanks.map((t) => Number(fuel[t.field])).filter((n) => !isNaN(n) && n > 0);
   const tankSumKg = tankVals.reduce((a, b) => a + b, 0);
-  const upliftKg = upliftManual ? (Number(fuel.fuel_uplift_kg) || 0) : tankSumKg;   // total uplift = Σ tanks unless manually overridden
   // Two previous-leg sources: ETL (operator record) and Leon JL. If they disagree, the pilot
   // must pick which to use before the departure-fuel calculation runs.
   const etlC = prevF?.etl && prevF.etl.fuel_kg != null ? prevF.etl : null;
@@ -110,8 +116,14 @@ export default function DepartureScreen({ route, navigation }: any) {
   const fuelFoundKg: number | null = (fuel.fuel_found_kg === '' || fuel.fuel_found_kg == null || isNaN(Number(fuel.fuel_found_kg))) ? null : Number(fuel.fuel_found_kg);
   const fuelFoundDiff: number | null = (fuelFoundKg != null && prevKg != null) ? Math.round((fuelFoundKg - prevKg) * 10) / 10 : null;   // – = used by APU/engine run
   const baseKg = fuelFoundKg != null ? fuelFoundKg : prevKg;
-  const depCalc: number | null = baseKg != null ? Math.round(baseKg + upliftKg) : null;   // departure fuel = (fuel before refuelling, else prev landing) + total uplift
-  const depCalcSrc = `${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
+  // auto uplift = Σ tank contents − starting fuel (no base yet → Σ tanks, first record)
+  const autoUpliftKg = tankVals.length ? round1(tankSumKg - (baseKg || 0)) : 0;
+  const upliftKg = upliftManual ? (Number(fuel.fuel_uplift_kg) || 0) : autoUpliftKg;
+  const depCalc: number | null = tankVals.length ? Math.round(tankSumKg)
+    : baseKg != null ? Math.round(baseKg + upliftKg) : null;   // departure fuel = Σ tank contents (else base + uplift)
+  const depCalcSrc = tankVals.length
+    ? `Σ tank contents ${fmt(round1(tankSumKg))} kg (uplift ${fmt(round1(upliftKg))} kg over ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))})`
+    : `${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
   const depEff: number | null = depCalc != null ? depCalc : (fuel.dep_fuel_kg === '' || fuel.dep_fuel_kg == null ? null : Number(fuel.dep_fuel_kg));
   const oilUnitLbl = 'qt';
   const oilMinU = servMin?.oil_min_qt ?? null;
@@ -349,12 +361,19 @@ export default function DepartureScreen({ route, navigation }: any) {
             </View>
           </View>
         </View>
-      ) : null}
+      ) : (
+        <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          {/* No previous-leg record resolved (first leg / re-opened flight) — the reading must still be enterable. */}
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
+          <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 170, opacity: canFuel ? 1 : 0.5 }}
+            keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
+            onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+        </View>
+      )}
       <View style={[sx.card, canDep ? null : { opacity: 0.55 }]} pointerEvents={canDep ? 'auto' : 'none'}>
-      <Text style={sx.subhead}>Planned &amp; specific gravity</Text>
+      <Text style={sx.subhead}>Planned</Text>
       <View style={sx.grid}>
         <NumField label="Planned (kg)" bad={badSet.has('fuel_planned_kg')} value={fuel.fuel_planned_kg} onChange={(v: string) => setFuel({ ...fuel, fuel_planned_kg: v })} />
-        <NumField label="Specific gravity" bad={badSet.has('fuel_density')} value={fuel.fuel_density} onChange={(v: string) => setFuel({ ...fuel, fuel_density: v })} />
       </View>
       <Text style={sx.subhead}>Tanks (kg)</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
@@ -365,8 +384,8 @@ export default function DepartureScreen({ route, navigation }: any) {
             const over = !empty && Number(fuel[t.field]) > maxKg;
             const tankBad = over || (badSet.has('tanks') && empty);
             return (
-              <View key={t.field} style={{ width: 110 }}>
-                <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Tank {t.label} (≤{fmt(maxKg)} kg)</Text>
+              <View key={t.field} style={{ width: 124 }}>
+                <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{t.label.length > 2 ? t.label : `Tank ${t.label}`} (≤{fmt(maxKg)} kg)</Text>
                 <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: tankBad ? 2 : 1, borderColor: tankBad ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
                   keyboardType="decimal-pad" value={fuel[t.field] == null ? '' : String(fuel[t.field])} onChangeText={(v) => setFuel({ ...fuel, [t.field]: numericOnly(v) })} />
               </View>
@@ -382,7 +401,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           return upliftUnit === 'LB' ? n * LB_KG : upliftUnit === 'IG' ? n * IG_L * dens : upliftUnit === 'L' ? n * dens : n; };
         const fromKgU = (kg: number, u: typeof upliftUnit) =>
           u === 'LB' ? kg / LB_KG : u === 'IG' ? kg / (IG_L * dens) : u === 'L' ? kg / dens : kg;
-        const shown = upliftManual ? upliftText : (tankSumKg > 0 ? String(round1(fromKgU(tankSumKg, upliftUnit))) : '');
+        const shown = upliftManual ? upliftText : (tankVals.length ? String(round1(fromKgU(autoUpliftKg, upliftUnit))) : '');
         const changeUnit = (u: typeof upliftUnit) => {
           if (upliftManual && fuel.fuel_uplift_kg !== '' && fuel.fuel_uplift_kg != null) setUpliftText(String(round1(fromKgU(Number(fuel.fuel_uplift_kg), u))));
           setUpliftUnit(u);
@@ -404,11 +423,11 @@ export default function DepartureScreen({ route, navigation }: any) {
               </View>
             </View>
             <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>
-              {upliftManual ? `Manual override = ${fmt(round1(Number(fuel.fuel_uplift_kg) || 0))} kg` : `= Σ tanks ${fmt(round1(tankSumKg))} kg`}{(upliftUnit === 'IG' || upliftUnit === 'L') ? ` (SG ${dens})` : ''}
+              {upliftManual ? `Manual override = ${fmt(round1(Number(fuel.fuel_uplift_kg) || 0))} kg` : `= Σ tanks ${fmt(round1(tankSumKg))} − ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev leg'} ${fmt(round1(baseKg || 0))} kg`}{(upliftUnit === 'IG' || upliftUnit === 'L') ? ` (SG ${dens})` : ''}
             </Text>
             {upliftManual ? (
-              <TouchableOpacity onPress={() => { setUpliftManual(false); setUpliftText(''); setFuel({ ...fuel, fuel_uplift_kg: tankSumKg }); }}>
-                <Text style={{ color: theme.accent, fontSize: 11, marginTop: 2, fontWeight: '700' }}>Use calculated Σ tanks ({fmt(round1(tankSumKg))} kg)</Text>
+              <TouchableOpacity onPress={() => { setUpliftManual(false); setUpliftText(''); setFuel({ ...fuel, fuel_uplift_kg: autoUpliftKg }); }}>
+                <Text style={{ color: theme.accent, fontSize: 11, marginTop: 2, fontWeight: '700' }}>Use calculated (Σ tanks − start fuel = {fmt(round1(autoUpliftKg))} kg)</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -447,6 +466,13 @@ export default function DepartureScreen({ route, navigation }: any) {
             </View>
           );
         })()}
+        <View style={{ width: 120, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Specific gravity</Text>
+          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_density') ? 2 : 1, borderColor: badSet.has('fuel_density') ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
+            keyboardType="decimal-pad" value={fuel.fuel_density == null || fuel.fuel_density === '' ? '' : String(fuel.fuel_density)}
+            onChangeText={(v) => setFuel({ ...fuel, fuel_density: numericOnly(v) })} />
+          <Text style={{ color: theme.sub, fontSize: 10, marginTop: 3 }}>default {refDens}</Text>
+        </View>
         <View style={{ width: 150, marginBottom: 10 }}>
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel grade / type</Text>
           <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
@@ -601,7 +627,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       ) : (
         <View>
           <Text style={sx.sub}>Walkaround / pre-flight inspection — open the FCOM exterior walkaround, then accept &amp; sign (mechanic or crew).</Text>
-          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginTop: 6 }} value={pfiName} onChangeText={setPfiName} placeholder="Inspector name / ID" placeholderTextColor={theme.sub} />
+          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginTop: 6 }} value={pfiName} onChangeText={setPfiName} placeholder="Name PFI performed by" placeholderTextColor={theme.sub} />
           <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => { if (!pfiName.trim()) { setSignMsg('Enter the inspector name.'); return; } setWalkOpen(true); }}>
             <Text style={sx.saveText}>Open walkaround &amp; sign PFI</Text>
           </TouchableOpacity>
@@ -611,7 +637,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       <Text style={sx.section}>Defects (PIREP)</Text>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={[sx.save, { backgroundColor: theme.red, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('ReportDefect', { sectorId, aircraftId: s.aircraft_id })}><Text style={sx.saveText}>+ Report defect</Text></TouchableOpacity>
-        <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}><Text style={sx.saveText}>View defects / HIL</Text></TouchableOpacity>
+        <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration || s.aircraft_id })}><Text style={sx.saveText}>View defects / HIL</Text></TouchableOpacity>
       </View>
 
       {canCabinDec && cabinPending.length ? (
@@ -645,7 +671,7 @@ export default function DepartureScreen({ route, navigation }: any) {
               <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.reasons?.length ? acSt.reasons.join(' · ') : `${acSt.blocking_defects} open defect(s)`}</Text>
               <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL, and complete any overdue / not-recorded 2/10-day check, before the release. The Tech Log keeps the entered information.</Text>
               {acSt.blocking_defects > 0 ? (
-                <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}>
+                <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration || s.aircraft_id })}>
                   <Text style={sx.saveText}>View / clear defects</Text>
                 </TouchableOpacity>
               ) : null}

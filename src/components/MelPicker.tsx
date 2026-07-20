@@ -42,7 +42,7 @@ export default function MelPicker({ visible, onClose, onPick, ata }: {
             </View>
           ) : null}
           {rows ? <Text style={s.hint}>{rows.length >= 200 ? 'Showing first 200 — type an ATA or keyword to narrow' : `${rows.length} item(s)`}</Text> : null}
-          <ScrollView style={s.results}>
+          <ScrollView keyboardShouldPersistTaps="handled" style={s.results}>
             {rows === null ? <ActivityIndicator style={{ marginTop: 20 }} /> : null}
             {rows !== null && rows.length === 0 ? <Text style={s.sub}>No MEL items match{filterAta ? ` in ATA ${filterAta}` : ''}.</Text> : null}
             {(rows || []).map((m) => (
@@ -62,7 +62,7 @@ export default function MelPicker({ visible, onClose, onPick, ata }: {
         <View style={s.detailCard}>
           <Text style={s.dHdr}>MEL {sel?.ata || ''}</Text>
           {sel ? (
-            <ScrollView style={{ maxHeight: '76%' }} contentContainerStyle={{ padding: 18 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: '76%' }} contentContainerStyle={{ padding: 18 }}>
               <Text style={s.dAta}>{sel.ata}</Text>
               <Text style={s.dItem}>{sel.item}</Text>
               <View style={s.table}>

@@ -664,6 +664,8 @@ export const listAttachments = (q: { defect_id?: string; sector_id?: string }): 
   return api(`/attachments?${p.toString()}`);
 };
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}`;
+export const deleteAttachment = (id: string): Promise<{ deleted: boolean }> =>
+  api(`/attachments/${id}`, { method: 'DELETE' });
 
 export const addServicing = (body: { sector_id: string; system: string; uplift_lt?: number; depart_lt?: number; arrival_lt?: number; arrival_at?: string }) =>
   mutateOrQueue('/servicing', { method: 'POST', body: JSON.stringify(body) });

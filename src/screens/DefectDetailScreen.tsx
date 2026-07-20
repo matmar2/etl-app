@@ -490,7 +490,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
               This defect has been claimed on the ground log. Pick the next open / HIL / cabin item to work under the same TL #, or finish and go to the CRS.
             </Text>
-            <ScrollView style={{ marginTop: 10, maxHeight: 300 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ marginTop: 10, maxHeight: 300 }}>
               {chain.items.length === 0 ? <Text style={{ color: theme.sub, fontSize: 12 }}>No other active items on this aircraft.</Text> :
                 chain.items.map((c: any) => (
                   <TouchableOpacity key={c.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border }}

@@ -169,7 +169,7 @@ export default function ComponentChangeScreen({ route }: any) {
             <TextInput style={[s.input, { marginTop: 10 }]} value={invQ} onChangeText={invSearch} autoFocus
               placeholder="Search part №, serial № or description (min 2 chars)" placeholderTextColor={theme.sub} />
             {invMsg ? <Text style={[s.sub, { color: theme.red }]}>{invMsg}</Text> : null}
-            <ScrollView style={{ marginTop: 8 }}>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ marginTop: 8 }}>
               {(invItems || []).map((it, i) => (
                 <TouchableOpacity key={i} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border }} onPress={() => invPick(it)}>
                   <Text style={{ color: theme.text, fontWeight: '700' }}>{it.part_no}  ·  S/N {it.serial_no || '—'}{it.serviceable === false ? '  ·  UNSVC' : ''}</Text>

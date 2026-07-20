@@ -318,7 +318,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <Text style={sx.section}>Defects on arrival ({role() === 'mechanic' ? 'MAREP' : 'PIREP'})</Text>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={[sx.save, { backgroundColor: theme.red, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('ReportDefect', { sectorId, aircraftId: s.aircraft_id })}><Text style={sx.saveText}>+ Report defect</Text></TouchableOpacity>
-        <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('Defects', { aircraftId: s.aircraft_id })}><Text style={sx.saveText}>View defects / HIL</Text></TouchableOpacity>
+        <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, flex: 1, minWidth: 160, maxWidth: undefined, marginTop: 0 }]} onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration || s.aircraft_id })}><Text style={sx.saveText}>View defects / HIL</Text></TouchableOpacity>
       </View>
 
       {isCrew && cabinPending.length ? (

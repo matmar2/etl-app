@@ -70,7 +70,7 @@ export default function AmmPicker({ visible, reg, onClose, onPick, defaultAta }:
             </ScrollView>
           </View>
 
-          <ScrollView style={s.results}>
+          <ScrollView keyboardShouldPersistTaps="handled" style={s.results}>
             {rows === null ? <ActivityIndicator style={{ marginTop: 20 }} /> : null}
             {rows !== null && rows.length === 0 ? <Text style={s.sub}>No AMM task cards match for this aircraft.</Text> : null}
             {(rows || []).map((m, i) => {

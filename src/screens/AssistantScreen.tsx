@@ -38,7 +38,7 @@ export default function AssistantScreen() {
 
   return (
     <KeyboardAvoidingView style={s.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
-      <ScrollView ref={scroll} style={{ flex: 1 }} contentContainerStyle={s.content}>
+      <ScrollView keyboardShouldPersistTaps="handled" ref={scroll} style={{ flex: 1 }} contentContainerStyle={s.content}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={s.title}>AI Assistant</Text>
           {turns.length > 0 ? (
