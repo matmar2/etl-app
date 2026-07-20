@@ -133,8 +133,11 @@ export default function MainMenuScreen({ navigation }: any) {
     try {
       const ch = (Updates as any).channel || '—';
       const rv = (Updates as any).runtimeVersion || '—';
+      // Same identifier as the top-left header (git stamp) — the EAS update UUID is a different
+      // namespace and confused users when shown alone.
+      const stamp = (Constants.expoConfig as any)?.extra?.commit || '';
       const id = (Updates.updateId || '').slice(0, 8) || (Updates.isEmbeddedLaunch ? 'built-in' : '—');
-      return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${id}`;
+      return `\n\nBuild channel: ${ch}\nRuntime version: ${rv}\nRunning bundle: ${stamp || id}${stamp ? ` (OTA ${id})` : ''}`;
     } catch { return ''; }
   }
   // Updates.reloadAsync() proved UNRELIABLE on this iOS build — it hard-crashed the app more than
