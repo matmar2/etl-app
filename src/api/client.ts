@@ -173,6 +173,7 @@ export async function login(username: string, password: string, otp?: string) {
   }
   const json = await res.json();
   await SecureStore.setItem('token', json.access_token);
+  _cacheToken(json.access_token);
   _role = json.role ?? null;
   _username = username;
   _clearanceAuthorized = !!json.clearance_authorized;
@@ -313,7 +314,7 @@ export const mfaSetup = (): Promise<{ secret: string; otpauth_uri: string; issue
 // just-enrolled user has full access without re-typing their password.
 export async function mfaVerify(code: string) {
   const r = await api('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ code }) });
-  if (r?.access_token) { await SecureStore.setItem('token', r.access_token); await loadPermissions(); }
+  if (r?.access_token) { await SecureStore.setItem('token', r.access_token); _cacheToken(r.access_token); await loadPermissions(); }
   return r;
 }
 
@@ -663,7 +664,10 @@ export const listAttachments = (q: { defect_id?: string; sector_id?: string }): 
   if (q.sector_id) p.set('sector_id', q.sector_id);
   return api(`/attachments?${p.toString()}`);
 };
-export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}`;
+let _tokCache = '';
+SecureStore.getItem('token').then((t) => { if (t) _tokCache = t; }).catch(() => {});
+export const _cacheToken = (t: string) => { _tokCache = t; };
+export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}?t=${encodeURIComponent(_tokCache)}`;
 export const deleteAttachment = (id: string): Promise<{ deleted: boolean }> =>
   api(`/attachments/${id}`, { method: 'DELETE' });
 

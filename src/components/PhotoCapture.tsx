@@ -22,6 +22,7 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
   const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState(false);
   const [sel, setSel] = useState(0);
+  const [note, setNote] = useState('');
 
   async function load() {
     try { setItems(await listAttachments({ defect_id: defectId, sector_id: sectorId })); } catch {}
@@ -73,7 +74,7 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
     try {
       await uploadAttachment(body);
       if (replaceId) await deleteAttachment(replaceId).catch(() => {});   // replace = new photo in, old out
-    } catch { await queueAttachment(body); }      // offline → flush on sync (old photo stays until online)
+    } catch { await queueAttachment(body); setNote('📷 saved — will sync when online ✓'); }
     finally { setBusy(false); setSel(0); load(); }
   }
 
@@ -83,22 +84,15 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
   return (
     <View style={{ marginTop: label ? 12 : 0 }}>
       {label ? <Text style={s.lbl}>{label}</Text> : null}
-      {hasItems || busy ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
-          {items.map((a, i) => (
-            <TouchableOpacity key={a.id} onPress={() => { setSel(i); setViewer(true); }}>
-              <Image source={{ uri: attachmentUrl(a.id) }} style={s.thumb} />
-            </TouchableOpacity>
-          ))}
-          {busy ? <View style={[s.thumb, s.center]}><ActivityIndicator color={theme.accent} /></View> : null}
-        </ScrollView>
-      ) : null}
-      <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+      <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: label ? 6 : 0 }}>
+        {busy ? <ActivityIndicator color={theme.accent} /> : null}
         {hasItems ? (
           <TouchableOpacity style={s.btn} onPress={() => { setSel(0); setViewer(true); }}>
             <Text style={s.btnTxt}>👁 View photo{items.length > 1 ? `s (${items.length})` : ''}</Text>
           </TouchableOpacity>
-        ) : !readOnly ? (<>
+        ) : null}
+        {note ? <Text style={s.lbl}>{note}</Text> : null}
+        {!readOnly && !hasItems ? (<>
           <TouchableOpacity style={s.btn} onPress={() => add(true)}><Text style={s.btnTxt}>📷 Take photo</Text></TouchableOpacity>
           <TouchableOpacity style={s.btn} onPress={() => add(false)}><Text style={s.btnTxt}>🖼 Library</Text></TouchableOpacity>
         </>) : null}
