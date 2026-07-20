@@ -20,7 +20,9 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [msg, setMsg] = useState('');
   const [narr, setNarr] = useState('');
   const [amo, setAmo] = useState('');
-  const [mel, setMel] = useState('');
+  const [mel, setMel] = useState('');                    // doc reference (MEL/CDL item or approved-data doc)
+  const [basis, setBasis] = useState<'mel' | 'cdl' | 'approved_data'>('mel');   // deferral authority
+  const [maxFh, setMaxFh] = useState('');                // FH-based limit: flight hours allowed from deferral
   const [rectIv, setRectIv] = useState('');
   const [due, setDue] = useState('');
   const [maxCyc, setMaxCyc] = useState('');              // cycle-based MEL: max landings/cycles
@@ -57,12 +59,15 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     return ms < 0 ? `OVERDUE by ${d}d ${h}h ${m}m` : `${d}d ${h}h ${m}m left`;
   }
   function pickMel(m: MelItem) {
+    setBasis('mel');
     setMel(m.ata || '');                              // deferral ref + category
     if (m.category) setRectIv(m.category);
     appendNarr(`MEL ${m.ata || ''} · ${m.item}${m.category ? ` (Cat ${m.category}${m.rectification_interval ? `, ${m.rectification_interval}` : ''})` : ''}`.replace(/\s+/g, ' ').trim());
     setMelOpen(false);
   }
   function pickCdl(c: CdlItem) {
+    setBasis('cdl');
+    setMel(c.ata || c.code || '');
     appendNarr(`CDL ${c.ata || ''}${c.code ? ` (${c.code})` : ''} · ${c.item || c.system}${c.dispatch ? ` — ${c.dispatch}` : ''}`.replace(/\s+/g, ' ').trim());
     setCdlOpen(false);
   }
@@ -215,13 +220,15 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={styles.title}>{d.title || 'Defect'} <Text style={[styles.badge, { color }]}>· {d.status}</Text></Text>
       <Text style={styles.desc}>{d.description}</Text>
-      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.tl ? ` · TL # ${d.tl}${d.tl_flight ? ` (${d.tl_flight})` : ''}` : ''}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
-      {/* Deferred item: remaining calendar time and/or remaining cycles (cycle-based MEL). */}
-      {d.status === 'deferred' && (d.due_date || d.max_cycles != null) ? (
-        <Text style={[styles.sub, { fontWeight: '700', color: (/OVERDUE/.test(remainingDue(d.due_date) || '') || (d.remaining_cycles != null && d.remaining_cycles <= 0)) ? theme.red : theme.accent }]}>
-          {d.due_date && remainingDue(d.due_date) ? remainingDue(d.due_date) : ''}
-          {d.due_date && d.max_cycles != null ? '  ·  ' : ''}
-          {d.max_cycles != null ? `${d.remaining_cycles != null ? d.remaining_cycles : d.max_cycles} of ${d.max_cycles} cycles left` : ''}
+      <Text style={styles.sub}>{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.tl ? ` · TL # ${d.tl}${d.tl_flight ? ` (${d.tl_flight})` : ''}` : ''}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.cdl_ref ? ` · CDL ${d.cdl_ref}` : ''}{d.approved_ref ? ` · Approved data ${d.approved_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
+      {/* Deferred item: remaining calendar time / FH / cycles — whichever limit is reached first applies. */}
+      {d.status === 'deferred' && (d.due_date || d.max_cycles != null || d.max_fh != null) ? (
+        <Text style={[styles.sub, { fontWeight: '700', color: (/OVERDUE/.test(remainingDue(d.due_date) || '') || (d.remaining_cycles != null && d.remaining_cycles <= 0) || (d.remaining_fh != null && d.remaining_fh <= 0)) ? theme.red : theme.accent }]}>
+          {[
+            d.due_date && remainingDue(d.due_date) ? remainingDue(d.due_date) : null,
+            d.max_fh != null ? `${d.remaining_fh != null ? d.remaining_fh : d.max_fh} of ${d.max_fh} FH left` : null,
+            d.max_cycles != null ? `${d.remaining_cycles != null ? d.remaining_cycles : d.max_cycles} of ${d.max_cycles} cycles left` : null,
+          ].filter(Boolean).join('  ·  ')}
         </Text>
       ) : null}
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
@@ -341,17 +348,25 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           </>)}
 
           {canDefer && (<>
-          <Text style={styles.section}>Defer per MEL (Hold Item List)</Text>
-          <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setMelOpen(true)}>
-              <Text style={styles.act2t}>Pick from CAMO MEL ▾</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setCdlOpen(true)}>
-              <Text style={styles.act2t}>Pick from CAMO CDL ▾</Text>
-            </TouchableOpacity>
+          <Text style={styles.section}>Defer (Hold Item List)</Text>
+          {/* Deferral authority — one choice: MEL / CDL / other approved data (SB, AMM, DOA letter). */}
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {([['mel', 'MEL'], ['cdl', 'CDL'], ['approved_data', 'Approved data']] as const).map(([b, lbl]) => (
+              <TouchableOpacity key={b} onPress={() => setBasis(b)}
+                style={[styles.iv, { width: 'auto', height: 34, paddingHorizontal: 14 }, basis === b && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
+                <Text numberOfLines={1} style={[styles.ivt, basis === b && { color: '#1a1300' }]}>{lbl}</Text>
+              </TouchableOpacity>
+            ))}
+            {basis !== 'approved_data' ? (
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]}
+                onPress={() => (basis === 'mel' ? setMelOpen(true) : setCdlOpen(true))}>
+                <Text style={styles.act2t}>Pick from CAMO {basis.toUpperCase()} ▾</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
+          {basis === 'approved_data' ? <Text style={[styles.sub, { marginTop: 4 }]}>Deferral against other approved data (SB / AMM / TC-holder or DOA-approved document) — enter the document reference.</Text> : null}
           <View style={styles.row}>
-            <TextInput style={[styles.input, { width: 140, minHeight: 0 }]} value={mel} onChangeText={setMel} placeholder="MEL ref" placeholderTextColor={theme.sub} />
+            <TextInput style={[styles.input, { width: 160, minHeight: 0 }]} value={mel} onChangeText={setMel} placeholder="Doc reference" placeholderTextColor={theme.sub} />
             <View style={{ flexDirection: 'row', gap: 6 }}>
               {INTERVALS.map((iv) => (
                 <TouchableOpacity key={iv} onPress={() => setRectIv(rectIv === iv ? '' : iv)} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
@@ -363,14 +378,25 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           </View>
           {/* Calendar-day limit: show the time remaining live as the due date is entered. */}
           {remainingDue(due) ? <Text style={[styles.sub, { marginTop: 4, color: /OVERDUE/.test(remainingDue(due) || '') ? theme.red : theme.accent }]}>Remaining: {remainingDue(due)}</Text> : null}
-          {/* Cycle-based MEL: enter the max cycles/landings allowed; remaining is computed after deferral. */}
+          {/* FH/FC limits: the rectification interval can also be flight-hours and/or cycles limited —
+              whichever limit (date / FH / FC) is reached first applies. Remaining is tracked from
+              the aircraft TSN/CSN stamped at deferral. */}
           <View style={[styles.row, { marginTop: 8 }]}>
+            <TextInput style={[styles.input, { width: 150, minHeight: 0 }]} value={maxFh} onChangeText={(v) => setMaxFh(v.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" placeholder="Max FH (if FH-limited)" placeholderTextColor={theme.sub} />
             <TextInput style={[styles.input, { width: 150, minHeight: 0 }]} value={maxCyc} onChangeText={(v) => setMaxCyc(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder="Max cycles (if cyclic)" placeholderTextColor={theme.sub} />
-            <Text style={[styles.sub, { flex: 1, minWidth: 140 }]}>For a cycle-limited item — remaining cycles are tracked from the landings after deferral.</Text>
+            <Text style={[styles.sub, { flex: 1, minWidth: 140 }]}>Limit = date / FH / FC, whichever is reached first — remaining FH/cycles are tracked from the aircraft hours/landings after deferral.</Text>
           </View>
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 10 }]}
-            onPress={() => act('deferral', { mel_ref: mel || undefined, rect_interval: rectIv, due_date: due || undefined, max_cycles: maxCyc ? Number(maxCyc) : undefined })}>
-            <Text style={[styles.act2t, { color: '#1a1300' }]}>Defer per MEL{rectIv ? ' ' + rectIv : ''}</Text>
+            onPress={() => act('deferral', {
+              defer_basis: basis,
+              mel_ref: basis === 'mel' ? (mel || undefined) : undefined,
+              cdl_ref: basis === 'cdl' ? (mel || undefined) : undefined,
+              approved_ref: basis === 'approved_data' ? (mel || undefined) : undefined,
+              rect_interval: rectIv, due_date: due || undefined,
+              max_cycles: maxCyc ? Number(maxCyc) : undefined,
+              max_fh: maxFh ? Number(maxFh) : undefined,
+            })}>
+            <Text style={[styles.act2t, { color: '#1a1300' }]}>Defer per {basis === 'approved_data' ? 'Approved data' : basis.toUpperCase()}{rectIv ? ' ' + rectIv : ''}</Text>
           </TouchableOpacity>
           </>)}
 

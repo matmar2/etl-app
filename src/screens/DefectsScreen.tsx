@@ -127,7 +127,11 @@ export default function DefectsScreen({ route, navigation }: any) {
                 {item.source?.toUpperCase()} · ATA {item.ata_chapter || '—'}
                 {item.captain_clearable ? ' · CAPT-clearable' : ''}
                 {item.mel_ref ? ` · MEL ${item.mel_ref}` : ''}
+                {item.cdl_ref ? ` · CDL ${item.cdl_ref}` : ''}
+                {item.approved_ref ? ` · Approved data ${item.approved_ref}` : ''}
                 {item.due_date ? ` · due ${item.due_date}` : ''}
+                {item.max_fh != null ? ` · ${item.max_fh} FH` : ''}
+                {item.max_cycles != null ? ` · ${item.max_cycles} FC` : ''}
               </Text>
               <Text style={styles.dDates}>
                 Opened {fmtD(item.raised_at)}{item.closed_at ? `   ·   Closed ${fmtD(item.closed_at)}` : ''}

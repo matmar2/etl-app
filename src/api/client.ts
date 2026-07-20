@@ -805,6 +805,9 @@ async function _mergeLocalChecks(reg: string, st: AircraftStatus): Promise<Aircr
   const checks = (st.checks || []).map((c) => {
     const ca = done[c.kind];
     if (!ca) return c;
+    // Trial bridge: an OASES-managed check's due-status follows the OASES record — an in-app
+    // completion must NOT reset it (else menu pill and server disagree, flip-flopping the banner).
+    if ((c as any).oases_managed) return c;
     const compl = new Date(ca).getTime();
     if (compl <= new Date(c.last || 0).getTime()) return c;            // server already has a newer completion
     const intervalMs = (c.due && c.last) ? (new Date(c.due).getTime() - new Date(c.last).getTime())
@@ -977,7 +980,7 @@ export const createMaintenance = (body: { aircraft_id: string; station: string; 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
   registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; action_summary?: string; search_text?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
 
-export type ClearedItem = { id: string; ref?: string; ata_chapter?: string; mel_ref?: string; title?: string;
+export type ClearedItem = { id: string; ref?: string; ata_chapter?: string; mel_ref?: string; cdl_ref?: string; approved_ref?: string; title?: string;
   description?: string; source?: string; action_taken?: string; closed_by?: string; raised_date?: string; closed_date?: string; registration?: string };
 // Cleared (closed) Cabin defects OR cleared HIL items over the sign-off window — with offline cache.
 export async function clearedItems(kind: 'cabin' | 'hil', days: number, reg?: string): Promise<{ items: ClearedItem[]; cached?: boolean }> {

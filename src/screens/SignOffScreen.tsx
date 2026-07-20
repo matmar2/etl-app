@@ -129,7 +129,7 @@ export default function SignOffScreen({ navigation }: any) {
           <TouchableOpacity key={c.id} style={s.row} activeOpacity={0.6} disabled={openingId === c.id} onPress={() => openClearedForm(c.id)}>
             <View style={{ flex: 1 }}>
               <Text style={s.k}>{c.ref || c.title || c.description || (view === 'hil' ? 'HIL item' : 'Cabin defect')}</Text>
-              <Text style={s.meta}>ATA {c.ata_chapter || '—'}{c.mel_ref ? ` · ${view === 'hil' ? 'MEL ' : ''}${c.mel_ref}` : ''}{c.source ? ` · ${c.source.toUpperCase()}` : ''}</Text>
+              <Text style={s.meta}>ATA {c.ata_chapter || '—'}{c.mel_ref ? ` · ${view === 'hil' ? 'MEL ' : ''}${c.mel_ref}` : ''}{c.cdl_ref ? ` · CDL ${c.cdl_ref}` : ''}{c.approved_ref ? ` · Approved data ${c.approved_ref}` : ''}{c.source ? ` · ${c.source.toUpperCase()}` : ''}</Text>
               {c.description && c.ref ? <Text style={s.defs}>{c.description}</Text> : null}
               {c.action_taken ? <Text style={s.defs}>Action: {c.action_taken}</Text> : null}
               <Text style={s.meta}>Raised {c.raised_date || '—'} · Cleared {c.closed_date || '—'}{c.closed_by ? ` · by ${c.closed_by}` : ''}</Text>
