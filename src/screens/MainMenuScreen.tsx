@@ -188,7 +188,13 @@ export default function MainMenuScreen({ navigation }: any) {
   function loadCounts(reg: string) {
     return Promise.all([
       Promise.all([listActiveDefects(reg).catch(() => []), listHIL(reg).catch(() => [])])
-        .then(([a, h]) => setCounts((c) => ({ ...c, defects: `${a.length} active${h.length ? ` · ${h.length} HIL` : ''}` }))),
+        .then(([a, h]) => {
+          // Same split as the Defects page tabs: technical 'active' vs cabin — a cabin item must
+          // never read as an ACTIVE (technical) defect on the tile.
+          const cab = a.filter((d: any) => d.area === 'cabin').length;
+          const tech = a.length - cab;
+          setCounts((c) => ({ ...c, defects: `${tech} active${cab ? ` · ${cab} cabin` : ''}${h.length ? ` · ${h.length} HIL` : ''}` }));
+        }),
       leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {}),
       documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {}),
       documentsList('form').then((d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))).catch(() => {}),
