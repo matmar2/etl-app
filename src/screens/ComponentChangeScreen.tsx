@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { CcrRow, ccrReport, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
+import { CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
 import { printHtml } from '../print';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -26,6 +26,29 @@ export default function ComponentChangeScreen({ route }: any) {
   const blank: CcrRow = { id: '', description: '', position: '', pn_off: '', sn_off: '', pn_on: '', sn_on: '', cert_no: '' };
   const [certPhoto, setCertPhoto] = useState<string | null>(null);
   const sealed = rows.some((r) => r.emailed_at);
+
+  // CAMO inventory picker (online only — offline stays manual entry): fills P/N + S/N of one side.
+  const [invSide, setInvSide] = useState<'off' | 'on' | null>(null);
+  const [invQ, setInvQ] = useState('');
+  const [invItems, setInvItems] = useState<CcrStockItem[] | null>(null);
+  const [invMsg, setInvMsg] = useState('');
+  async function invSearch(q: string) {
+    setInvQ(q); setInvMsg('');
+    if (q.trim().length < 2) { setInvItems(null); return; }
+    try { const r = await ccrInventory(q.trim()); setInvItems(r.items); }
+    catch (e: any) { setInvItems([]); setInvMsg(e?.message?.includes('Network') ? 'CAMO inventory needs a connection — enter the part manually.' : (e?.message || 'Inventory unavailable — enter manually.')); }
+  }
+  function invPick(it: CcrStockItem) {
+    setEditing((e) => {
+      if (!e) return e;
+      const upd: any = { ...e };
+      if (invSide === 'off') { upd.pn_off = it.part_no; upd.sn_off = it.serial_no; }
+      else { upd.pn_on = it.part_no; upd.sn_on = it.serial_no; }
+      if (!upd.description && it.description) upd.description = it.description;
+      return upd;
+    });
+    setInvSide(null); setInvQ(''); setInvItems(null);
+  }
 
   async function snapCert(fromCamera: boolean) {
     const perm = fromCamera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -101,9 +124,13 @@ export default function ComponentChangeScreen({ route }: any) {
           <Text style={s.rowTitle}>{editing.id ? 'Edit row' : 'New component change'}</Text>
           <View style={s.row}>{F('description', 'Component description *', 300)}{F('position', 'Position (e.g. ENG 1)')}</View>
           <Text style={s.lbl}>Removed (OFF)</Text>
-          <View style={s.row}>{F('pn_off', 'Part № OFF')}{F('sn_off', 'Serial № OFF')}</View>
+          <View style={s.row}>{F('pn_off', 'Part № OFF')}{F('sn_off', 'Serial № OFF')}
+            <TouchableOpacity style={s.btn2} onPress={() => { setInvSide('off'); setInvQ(''); setInvItems(null); setInvMsg(''); }}><Text style={s.btn2t}>▾ CAMO inventory</Text></TouchableOpacity>
+          </View>
           <Text style={s.lbl}>Installed (ON)</Text>
-          <View style={s.row}>{F('pn_on', 'Part № ON')}{F('sn_on', 'Serial № ON')}</View>
+          <View style={s.row}>{F('pn_on', 'Part № ON')}{F('sn_on', 'Serial № ON')}
+            <TouchableOpacity style={s.btn2} onPress={() => { setInvSide('on'); setInvQ(''); setInvItems(null); setInvMsg(''); }}><Text style={s.btn2t}>▾ CAMO inventory</Text></TouchableOpacity>
+          </View>
           <View style={s.row}>{F('cert_no', 'Certificate № (Form 1 / CoC)', 220)}</View>
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
             <TouchableOpacity style={s.btn2} onPress={() => snapCert(true)}><Text style={s.btn2t}>📷 Photo of certificate</Text></TouchableOpacity>
@@ -130,6 +157,31 @@ export default function ComponentChangeScreen({ route }: any) {
         ) : null}
       </View>
       <Text style={[s.sub, { marginTop: 8 }]}>Recipients are set by Admin (Settings → Component Change Report). At go-live the off/on component records will also synchronise to OASES Aircraft Monitoring.</Text>
+
+      {/* CAMO inventory search — rotable stock (P/N · S/N · batch · condition) from the OASES mirror. */}
+      <Modal visible={invSide != null} transparent animationType="none" onRequestClose={() => setInvSide(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: theme.panel, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme.border, maxHeight: '85%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={s.rowTitle}>CAMO inventory — {invSide === 'off' ? 'removed (OFF)' : 'installed (ON)'} part</Text>
+              <TouchableOpacity onPress={() => setInvSide(null)}><Text style={{ color: theme.accent, fontWeight: '800' }}>Close</Text></TouchableOpacity>
+            </View>
+            <TextInput style={[s.input, { marginTop: 10 }]} value={invQ} onChangeText={invSearch} autoFocus
+              placeholder="Search part №, serial № or description (min 2 chars)" placeholderTextColor={theme.sub} />
+            {invMsg ? <Text style={[s.sub, { color: theme.red }]}>{invMsg}</Text> : null}
+            <ScrollView style={{ marginTop: 8 }}>
+              {(invItems || []).map((it, i) => (
+                <TouchableOpacity key={i} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: theme.border }} onPress={() => invPick(it)}>
+                  <Text style={{ color: theme.text, fontWeight: '700' }}>{it.part_no}  ·  S/N {it.serial_no || '—'}{it.serviceable === false ? '  ·  UNSVC' : ''}</Text>
+                  <Text style={s.meta}>{it.description || '—'}{it.batch ? `  ·  batch ${it.batch}` : ''}{it.condition ? `  ·  ${it.condition}` : ''}</Text>
+                </TouchableOpacity>
+              ))}
+              {invItems && !invItems.length && !invMsg ? <Text style={[s.sub, { marginTop: 8 }]}>No matches in stock.</Text> : null}
+            </ScrollView>
+            <Text style={[s.sub, { marginTop: 8 }]}>Online only — with no connection, enter the part manually. Certificate № stays manual (the mirror holds condition/batch, not the Form 1 №).</Text>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }

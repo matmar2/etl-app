@@ -521,6 +521,9 @@ export const listCcr = (s: { defectId?: string; sectorId?: string }): Promise<{ 
 export const createCcr = (body: any) => api('/component-changes', { method: 'POST', body: JSON.stringify(body) });
 export const updateCcr = (id: string, body: any) => api(`/component-changes/${id}`, { method: 'PUT', body: JSON.stringify(body) });
 export const deleteCcr = (id: string) => api(`/component-changes/${id}`, { method: 'DELETE' });
+export type CcrStockItem = { part_no: string; serial_no: string; batch?: string; condition?: string; serviceable?: boolean; description?: string };
+export const ccrInventory = (q: string): Promise<{ items: CcrStockItem[] }> =>
+  api(`/component-changes/inventory?q=${encodeURIComponent(q)}`);
 export const ccrReport = (s: { defectId?: string; sectorId?: string }): Promise<{ html: string }> =>
   api(`/component-changes/report?${_ccrQs(s)}`);
 export const sendCcrReport = (s: { defectId?: string; sectorId?: string }): Promise<{ ok: boolean; sent_to: string[] }> =>

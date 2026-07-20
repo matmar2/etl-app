@@ -130,7 +130,7 @@ export default function DefectsScreen({ route, navigation }: any) {
                 {item.cdl_ref ? ` · CDL ${item.cdl_ref}` : ''}
                 {item.approved_ref ? ` · Approved data ${item.approved_ref}` : ''}
                 {item.due_date ? ` · due ${item.due_date}` : ''}
-                {item.max_fh != null ? ` · ${item.max_fh} FH` : ''}
+                {item.max_fh != null ? ` · ${Math.floor(item.max_fh)}:${String(Math.round((item.max_fh % 1) * 60)).padStart(2, '0')} FH` : ''}
                 {item.max_cycles != null ? ` · ${item.max_cycles} FC` : ''}
               </Text>
               <Text style={styles.dDates}>
