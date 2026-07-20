@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Attachment, attachmentUrl, deleteAttachment, listAttachments, uploadAttachment } from '../api/client';
 import { queueAttachment } from '../db/attachments';
 import { theme } from '../theme';
@@ -37,14 +37,28 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
         return res.canceled || !res.assets?.[0]?.base64 ? null : res.assets[0].base64!;
       }
     } catch { return null; }
-    const perm = fromCamera
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return null;
-    const res = fromCamera
-      ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 })
-      : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images });
-    return res.canceled || !res.assets?.[0]?.base64 ? null : res.assets[0].base64!;
+    // Native: never fail silently — say WHY the camera did not open and fall back to the library.
+    try {
+      const perm = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(fromCamera ? 'Camera access is off' : 'Photo access is off',
+          fromCamera
+            ? 'Enable it in iOS Settings → ETL → Camera. On a managed (Jamf) iPad the MDM profile may block the camera — use 🖼 Library instead.'
+            : 'Enable photo access in iOS Settings → ETL → Photos.');
+        return null;
+      }
+      const res = fromCamera
+        ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 })
+        : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      return res.canceled || !res.assets?.[0]?.base64 ? null : res.assets[0].base64!;
+    } catch (e: any) {
+      const { reportDeviceError } = require('../api/client');
+      reportDeviceError({ kind: 'error', message: `photo picker failed: ${String(e?.message || e).slice(0, 200)}`, screen: 'PhotoCapture' }).catch(() => {});
+      Alert.alert('Camera unavailable', `${String(e?.message || e).slice(0, 160)}\n\nUse 🖼 Library instead.`);
+      return null;
+    }
   }
 
   async function add(fromCamera: boolean, replaceId?: string) {
