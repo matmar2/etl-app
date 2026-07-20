@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Attachment, attachmentUrl, deleteAttachment, listAttachments, uploadAttachment } from '../api/client';
+import { confirmAction } from '../util/confirm';
 import { queueAttachment } from '../db/attachments';
 import { theme } from '../theme';
 
@@ -117,6 +118,20 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
                 <TouchableOpacity style={s.btn} onPress={() => add(false)}><Text style={s.btnTxt}>🖼 Add from library</Text></TouchableOpacity>
                 {cur ? <TouchableOpacity style={s.btn} onPress={() => add(true, cur.id)}><Text style={s.btnTxt}>♻ Replace (📷)</Text></TouchableOpacity> : null}
                 {cur ? <TouchableOpacity style={s.btn} onPress={() => add(false, cur.id)}><Text style={s.btnTxt}>♻ Replace (🖼)</Text></TouchableOpacity> : null}
+                {cur ? (
+                  <TouchableOpacity style={[s.btn, { borderColor: theme.red }]} onPress={async () => {
+                    if (!(await confirmAction('Delete this photo? Allowed only before the flight departs.', 'Delete photo'))) return;
+                    try {
+                      await deleteAttachment(cur.id);
+                      setSel(0); await load();
+                      if (items.length <= 1) setViewer(false);
+                    } catch (e: any) {
+                      Alert.alert('Cannot delete', String(e?.message || e).replace(/^.*?:\s*/, '').slice(0, 160));
+                    }
+                  }}>
+                    <Text style={[s.btnTxt, { color: theme.red }]}>🗑 Delete</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : null}
             <TouchableOpacity style={[s.btn, { marginTop: 10, alignSelf: 'flex-end', backgroundColor: theme.accent }]} onPress={() => setViewer(false)}>
