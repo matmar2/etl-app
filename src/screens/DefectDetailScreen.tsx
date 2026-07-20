@@ -15,7 +15,6 @@ import { theme } from '../theme';
 const INTERVALS = ['A', 'B', 'C', 'D'];
 const BASIS_LABEL = { '': 'Select', mel: 'MEL', cdl: 'CDL', approved_data: 'Approved data' } as const;
 // Approved-data deferral authorities (doc types) — prefix the Doc reference.
-const APPROVED_TYPES = ['AMM', 'SRM', 'RDAS', 'CRAS', 'Airbus request', 'SB', 'Other'];
 // FH limits are entered/displayed as hh:mm; the API carries decimal hours.
 const parseFH = (v: string): number | null => {
   const m = v.trim().match(/^(\d+)(?::([0-5]?\d))?$/);
@@ -35,7 +34,6 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [mel, setMel] = useState('');                    // doc reference (MEL/CDL item or approved-data doc)
   const [basis, setBasis] = useState<'' | 'mel' | 'cdl' | 'approved_data'>('');   // deferral authority — starts unselected
   const [basisOpen, setBasisOpen] = useState(false);     // authority dropdown expanded
-  const [adType, setAdType] = useState('');              // approved-data doc type (AMM/SRM/RDAS/…)
   const [maxFh, setMaxFh] = useState('');                // FH-based limit: flight hours allowed from deferral
   const [rectIv, setRectIv] = useState('');
   const [due, setDue] = useState('');
@@ -50,6 +48,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [diOpen, setDiOpen] = useState(false);           // double-inspection (DI) — second person's signature
   const [diName, setDiName] = useState('');
   const [diLic, setDiLic] = useState('');
+  const [diTask, setDiTask] = useState('');           // what was inspected — required
   const [diSigning, setDiSigning] = useState(false);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
@@ -194,7 +193,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   async function submitDI(signature: string) {
     setMsg('Recording double inspection…');
     try {
-      const a = { kind: 'double_inspection', signer_name: diName.trim(), licence_no: diLic.trim() || undefined, signature_image: signature };
+      const a = { kind: 'double_inspection', signer_name: diName.trim(), licence_no: diLic.trim() || undefined, narrative: diTask.trim(), signature_image: signature };
       const r = await addDefectAction(defectId, a);
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'double_inspection', narrative: `Double inspection · ${diName.trim()}` }); setMsg('Double inspection saved offline — will sync ✓'); }
       else setMsg('Double inspection recorded ✓');
@@ -355,8 +354,9 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                 <TextInput style={[styles.input, { width: 200, minHeight: 0 }]} value={diName} onChangeText={setDiName} placeholder="DI — inspector name *" placeholderTextColor={theme.sub} />
                 <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={diLic} onChangeText={setDiLic} placeholder="DI — licence / auth no" placeholderTextColor={theme.sub} />
+                <TextInput style={[styles.input, { width: 260, minHeight: 0 }]} value={diTask} onChangeText={setDiTask} placeholder="DI — inspected item / task *" placeholderTextColor={theme.sub} />
               </View>
-              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => { if (!diName.trim()) { setMsg('Enter the double-inspection inspector name.'); return; } setDiSigning(true); }}>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => { if (!diName.trim() || !diTask.trim()) { setMsg('Enter the DI inspector name and the inspected item / task.'); return; } setDiSigning(true); }}>
                 <Text style={[styles.act2t, { color: '#1a1300' }]}>Sign double inspection</Text>
               </TouchableOpacity>
             </View>
@@ -409,17 +409,9 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               ))}
             </View>
           ) : null}
-          {basis === 'approved_data' ? (<>
-            <Text style={[styles.sub, { marginTop: 4 }]}>Deferral against other approved data — pick the document type and enter its reference.</Text>
-            <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-              {APPROVED_TYPES.map((t) => (
-                <TouchableOpacity key={t} onPress={() => setAdType(adType === t ? '' : t)}
-                  style={[styles.iv, { width: 'auto', height: 30, paddingHorizontal: 10 }, adType === t && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
-                  <Text numberOfLines={1} style={[styles.ivt, { fontSize: 12 }, adType === t && { color: '#1a1300' }]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>) : null}
+          {basis === 'approved_data' ? (
+            <Text style={[styles.sub, { marginTop: 4 }]}>Approved data — AMM, SRM, RDAS, CRAS, Airbus request, SB or another approved document. Enter the document reference below.</Text>
+          ) : null}
           <View style={styles.row}>
             <TextInput style={[styles.input, { width: 180, minHeight: 0 }]} value={mel} onChangeText={setMel} placeholder="Doc reference" placeholderTextColor={theme.sub} />
             {/* Category A–D applies to MEL items only — shown once a MEL item is picked/entered. */}
@@ -452,7 +444,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               defer_basis: basis,
               mel_ref: basis === 'mel' ? (mel || undefined) : undefined,
               cdl_ref: basis === 'cdl' ? (mel || undefined) : undefined,
-              approved_ref: basis === 'approved_data' ? ([adType, mel].filter(Boolean).join(' ') || undefined) : undefined,
+              approved_ref: basis === 'approved_data' ? (mel || undefined) : undefined,
               rect_interval: basis === 'mel' ? rectIv : undefined, due_date: due || undefined,
               max_cycles: maxCyc ? Number(maxCyc) : undefined,
               max_fh: maxFh ? (parseFH(maxFh) as number) : undefined,
