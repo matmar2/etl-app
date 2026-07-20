@@ -228,6 +228,14 @@ export default function SectorListScreen({ route, navigation }: any) {
   // silently doing nothing.
   async function hideFromList(s: Sector, msg: string) {
     if (s.id === openSector?.id) {
+      // The one OPEN flight can't be list-hidden — but an unsigned DRAFT can simply be deleted.
+      if (s.status === 'draft') {
+        if (await confirmAction(`${s.flight_no} is the current OPEN flight and cannot be hidden — but it is a DRAFT with nothing signed, so it can be DELETED instead.\n\nDeleting removes it for EVERYONE, frees the Leon leg to be opened again and uses no TL number. Delete it?`, 'Delete draft flight')) {
+          try { await deleteSector(s.id); setStatus(`Deleted draft ${s.flight_no}`); pull(); }
+          catch (e: any) { setStatus(e?.message || 'Could not delete the draft.'); }
+        }
+        return;
+      }
       setStatus(`${s.flight_no} is the current OPEN flight — it stays in the list until it is closed or removed. Close it, or ask the administrator (back office) to remove it.`);
       return;
     }
