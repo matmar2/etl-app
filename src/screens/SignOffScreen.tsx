@@ -7,6 +7,7 @@ import { theme } from '../theme';
 const KIND: Record<string, string> = {
   preflight: 'Pre-flight (commander)', postflight: 'Post-flight (commander)',
   crs: 'Maintenance Release (CRS)', release: 'Maintenance Release (CRS)', defect: 'Defect action',
+  di: 'Double Inspection (DI) — interim', double_inspection: 'Double Inspection (DI) — interim',
   check_2day: '2-Day Check completed', check_10day: '10-Day Check completed',
 };
 
@@ -181,6 +182,7 @@ export default function SignOffScreen({ navigation }: any) {
               </Text>
               <Text style={s.meta}>{g.signer_name || ''}{g.licence_no ? ` · ${g.licence_no}` : ''}</Text>
               {g.defects_summary ? <Text style={s.defs}>{isCheck(g) ? g.defects_summary : `Defects: ${g.defects_summary}`}</Text> : null}
+              {(g.kind === 'di' || g.kind === 'double_inspection') ? <Text style={[s.defs, { color: theme.sub }]}>Interim independent check — not a release; the defect stays open until rectified or deferred.</Text> : null}
               {(g as any).action_summary ? <Text style={[s.defs, { color: theme.green }]}>✔ {(g as any).action_summary}</Text> : null}
               {openable(g) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginTop: 6 }}>

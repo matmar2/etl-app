@@ -59,7 +59,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const isMech = can('defects', 'rectify');     // rectification / CRS action — maintenance
   // Chain-closure: after a CRS, offer to close ANOTHER item on the same ground TL # until 'no more'.
   const [chain, setChain] = useState<{ logId: string; tl: string; items: any[] } | null>(null);
-  const canDefer = can('defects', 'defer');     // defer against MEL / CDL — maintenance
+  // Defer is a next ACTION — only offered while the item is still workable (open / troubleshooting),
+  // never when reviewing a rectified/closed/deferred record (e.g. opened from Flight Sign Off).
+  // Cabin defects are commander-dispatch items (Cabin Defect Log) — never MEL/HIL-deferrable.
+  const canDefer = can('defects', 'defer') && ['open', 'troubleshooting'].includes(d?.status) && d?.area !== 'cabin';
   const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
   const isCommander = role() === 'admin' ||
     (['captain', 'pilot'].includes(role() ?? '') && clearanceAuthorized());
