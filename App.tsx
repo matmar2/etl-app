@@ -151,8 +151,10 @@ export default function App() {
     headerRight: () => (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         {userName() ? (
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', maxWidth: 180 }} numberOfLines={1}>
-            {userName()}{roleLabel() ? ` · ${roleLabel()}` : ''}
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', maxWidth: 260 }} numberOfLines={1}>
+            {(() => { const n = userName() || ''; const r = roleLabel() || '';
+              // Long name + role clips at the header width — drop the role rather than truncate.
+              return (n.length + r.length > 34 || !r) ? n : `${n} · ${r}`; })()}
           </Text>
         ) : null}
         {svc != null ? <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>{svc ? '● SERVICEABLE' : '▲ UNSERVICEABLE'}</Text> : null}

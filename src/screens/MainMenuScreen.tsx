@@ -474,7 +474,7 @@ export default function MainMenuScreen({ navigation }: any) {
                       <Text style={styles.cardTitle}>{t.title}</Text>
                       <Text style={[styles.cardSub, (t.key !== 'induction' && counts[t.key]) ? { color: theme.text, fontWeight: '700' } : null]} numberOfLines={1}>
                         {t.key === 'induction'
-                          ? (['Administrator', 'CAMO'].includes(roleLabel()) ? 'Preview any role’s Quick Ref' : `${roleLabel()} · Quick Reference`)
+                          ? (['Administrator', 'CAMO'].includes(roleLabel()) ? 'Preview any role’s Quick Ref' : `${roleLabel()} · Quick Ref`)
                           : (counts[t.key] ?? t.sub ?? '')}
                       </Text>
                     </View>
