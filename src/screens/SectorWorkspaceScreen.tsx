@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import { getSector, pullSector } from '../db/sectors';
-import { printHtml } from '../print';
+import { printHtml, printServerPdf } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
@@ -48,7 +48,10 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   }, [s?.aircraft_id, s?.page_kind]);
 
   async function previewTl() {
-    try { const { html } = await sectorTlHtmlCached(sectorId); await printHtml(html); }   // cached VAW-ETL-01 offline; fresh online
+    try {
+      if (await printServerPdf(`/sectors/${sectorId}/pdf`)) return;                     // server PDF: header + Page N of X
+      const { html } = await sectorTlHtmlCached(sectorId); await printHtml(html);       // offline → cached VAW-ETL-01
+    }
     catch (e: any) { Alert.alert('Tech Log', `Could not load the Tech Log${e?.message ? ` — ${e.message}` : ''}.\nOpen "Release & Print" for offline print options.`); }
   }
 

@@ -7,7 +7,7 @@ import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
 import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
 import { getSectorDefects } from '../db/defects';
-import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, shareHtml, sharePdf } from '../print';
+import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
 import { theme } from '../theme';
 
@@ -76,7 +76,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // Preview the Tech Log / CRS page for this sector before signing (writes nothing).
   async function previewCRS() {
     setPreviewing(true); setMsg('');
-    try { const { html } = await sectorTlHtmlCached(sectorId); if (html) await printHtml(html); }   // cached VAW-ETL-01 offline; fresh online
+    try {
+      if (await printServerPdf(`/sectors/${sectorId}/pdf`)) { setMsg(''); return; }     // server PDF: header + Page N of X
+      const { html } = await sectorTlHtmlCached(sectorId); if (html) await printHtml(html);
+    }
     catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the preview.')); }
     finally { setPreviewing(false); }
   }
@@ -126,7 +129,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
       if (doc === 'tl' && kind !== 'bt') {
         try {
           const { html } = await sectorTlHtmlCached(sectorId);   // server VAW-ETL-01, cached for offline
-          if (kind === 'air') return await printHtml(html);
+          if (kind === 'air') { if (await printServerPdf(`/sectors/${sectorId}/pdf`)) return; return await printHtml(html); }
           return await shareHtml(html);
         } catch { /* not cached (e.g. released offline, never synced) → local render below */ }
       }

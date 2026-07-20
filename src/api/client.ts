@@ -993,6 +993,22 @@ export async function openDocument(id: string) {
   }
 }
 
+// Fetch a server-rendered PDF (repeating header + Page N of X) for printing.
+// Web → object URL for a new tab; iPad → downloaded to cache for Print.printAsync.
+export async function fetchPdfLocal(path: string): Promise<string | null> {
+  const t = await SecureStore.getItem('token');
+  const { Platform } = require('react-native');
+  if (Platform.OS === 'web') {
+    const res = await fetch(`${BASE}${path}`, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('pdf')) return null;
+    return URL.createObjectURL(await res.blob());
+  }
+  const FileSystem = require('expo-file-system/legacy');
+  const dest = `${FileSystem.cacheDirectory}tl-print.pdf`;
+  const r = await FileSystem.downloadAsync(`${BASE}${path}`, dest, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+  return r.status === 200 ? r.uri : null;
+}
+
 export const createMaintenance = (body: { aircraft_id: string; station: string; wo_ref?: string; note?: string }): Promise<{ id: string; page_no: number; station: string }> =>
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
 

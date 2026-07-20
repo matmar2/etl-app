@@ -17,6 +17,24 @@ function openInBrowser(html: string) {
 }
 
 let _printing = false;   // iOS UIPrintInteractionController allows only one at a time
+
+// Print a SERVER-rendered PDF (exact pagination: repeating header + Page N of X on every
+// device — iPad print preview cannot paginate HTML like desktop browsers). Returns false
+// when offline / the endpoint failed, so callers fall back to the HTML path.
+export async function printServerPdf(path: string): Promise<boolean> {
+  try {
+    const { fetchPdfLocal } = require('../api/client');
+    const uri = await fetchPdfLocal(path);
+    if (!uri) return false;
+    if (Platform.OS === 'web') { window.open(uri, '_blank'); return true; }
+    if (_printing) return true;
+    _printing = true;
+    try { await Print.printAsync({ uri }); }
+    catch (e: any) { if (!/cancel|dismiss/i.test(String(e?.message))) throw e; }
+    finally { _printing = false; }
+    return true;
+  } catch { return false; }
+}
 export async function printHtml(html: string) {
   if (Platform.OS === 'web') { openInBrowser(html); return; }
   if (_printing) return;                                    // ignore a double-tap while a sheet is open

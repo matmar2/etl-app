@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
 import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
-import { printHtml } from '../print';
+import { printHtml, printServerPdf } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
@@ -139,7 +139,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   // Preview the Tech Log / CRS page this rectification will be recorded on, before signing.
   async function previewCRS() {
     setPreviewing(true); setMsg('');
-    try { const { html } = await defectCrsPreview(defectId); if (html) await printHtml(html); }
+    try {
+      if (!(await printServerPdf(`/defects/${defectId}/crs-preview.pdf`)))
+        { const { html } = await defectCrsPreview(defectId); if (html) await printHtml(html); }
+    }
     catch (e: any) { setMsg(e?.message?.includes('Network') ? 'Preview needs a connection.' : (e?.message || 'Could not open the preview.')); }
     finally { setPreviewing(false); }
   }
