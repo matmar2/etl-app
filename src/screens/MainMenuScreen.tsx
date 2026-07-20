@@ -193,7 +193,7 @@ export default function MainMenuScreen({ navigation }: any) {
           // never read as an ACTIVE (technical) defect on the tile.
           const cab = a.filter((d: any) => d.area === 'cabin').length;
           const tech = a.length - cab;
-          setCounts((c) => ({ ...c, defects: `${tech} active${cab ? ` · ${cab} cabin` : ''}${h.length ? ` · ${h.length} HIL` : ''}` }));
+          setCounts((c) => ({ ...c, defects: `${tech} act/${cab} cab/${h.length} HIL` }));
         }),
       leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {}),
       documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {}),
