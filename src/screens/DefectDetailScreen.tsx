@@ -62,7 +62,9 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   // Defer is a next ACTION — only offered while the item is still workable (open / troubleshooting),
   // never when reviewing a rectified/closed/deferred record (e.g. opened from Flight Sign Off).
   // Cabin defects are commander-dispatch items (Cabin Defect Log) — never MEL/HIL-deferrable.
-  const canDefer = can('defects', 'defer') && ['open', 'troubleshooting'].includes(d?.status) && d?.area !== 'cabin';
+  // Open/troubleshooting → defer; deferred (HIL) → amend the deferral. Never cabin, never rectified/closed.
+  const canDefer = can('defects', 'defer') && ['open', 'troubleshooting', 'deferred'].includes(d?.status) && d?.area !== 'cabin';
+  const amending = d?.status === 'deferred';
   const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
   const isCommander = role() === 'admin' ||
     (['captain', 'pilot'].includes(role() ?? '') && clearanceAuthorized());
@@ -99,6 +101,19 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     }
   }
   useEffect(() => { load(); }, [defectId]);
+  // HIL item → prefill the amend-deferral form from the record (once, when it loads).
+  const prefilled = React.useRef(false);
+  useEffect(() => {
+    if (!d || d.status !== 'deferred' || prefilled.current) return;
+    prefilled.current = true;
+    // Basis stays at 'Select' — amending requires an explicit authority choice; the existing
+    // doc reference and limits are prefilled for editing.
+    setMel(d.cdl_ref && !d.mel_ref ? d.cdl_ref : d.approved_ref && !d.mel_ref ? d.approved_ref : (d.mel_ref || ''));
+    if (d.rect_interval) setRectIv(d.rect_interval);
+    if (d.due_date) setDue(String(d.due_date).slice(0, 10));
+    if (d.max_fh != null) setMaxFh(fmtFH(d.max_fh));
+    if (d.max_cycles != null) setMaxCyc(String(d.max_cycles));
+  }, [d]);
   useEffect(() => {
     ammRevision().then(setAmmRev).catch(() => {});
   }, []);
@@ -371,7 +386,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           </>)}
 
           {canDefer && (<>
-          <Text style={styles.section}>Defer (Hold Item List)</Text>
+          <Text style={styles.section}>{amending ? 'Deferral — amend (Hold Item List)' : 'Defer (Hold Item List)'}</Text>
           {/* Deferral authority — dropdown. Picking MEL/CDL opens that CAMO picker directly; the
               chosen item lands in Doc reference (manually editable). Approved data = manual entry. */}
           <TouchableOpacity style={[styles.input, { width: 220, minHeight: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
@@ -442,7 +457,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               max_cycles: maxCyc ? Number(maxCyc) : undefined,
               max_fh: maxFh ? (parseFH(maxFh) as number) : undefined,
             }); }}>
-            <Text style={[styles.act2t, { color: '#1a1300' }]}>Defer{basis ? ` per ${basis === 'approved_data' ? 'Approved data' : basis.toUpperCase()}` : ''}{rectIv ? ' ' + rectIv : ''}</Text>
+            <Text style={[styles.act2t, { color: '#1a1300' }]}>{amending ? 'Update deferral' : 'Defer'}{basis ? ` per ${basis === 'approved_data' ? 'Approved data' : basis.toUpperCase()}` : ''}{basis === 'mel' && rectIv ? ' ' + rectIv : ''}</Text>
           </TouchableOpacity>
           </>)}
 
