@@ -6,6 +6,7 @@ import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, onAirc
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalScreen from './src/screens/ArrivalScreen';
 import DefectDetailScreen from './src/screens/DefectDetailScreen';
+import ComponentChangeScreen from './src/screens/ComponentChangeScreen';
 import DefectsScreen from './src/screens/DefectsScreen';
 import DeicingScreen from './src/screens/DeicingScreen';
 import DepartureScreen from './src/screens/DepartureScreen';
@@ -177,6 +178,7 @@ export default function App() {
         <Stack.Screen name="Defects" component={DefectsScreen} options={{ title: 'Defects' }} />
         <Stack.Screen name="DefectDetail" component={DefectDetailScreen} options={{ title: 'Defect' }} />
         <Stack.Screen name="ReportDefect" component={ReportDefectScreen} options={{ title: 'Report defect' }} />
+        <Stack.Screen name="ComponentChange" component={ComponentChangeScreen} options={{ title: 'Component Change (CCR)' }} />
         <Stack.Screen name="Release" component={ReleaseScreen} options={{ title: 'Release & Print' }} />
         <Stack.Screen name="Planned" component={PlannedMaintenanceScreen} options={{ title: 'Planned Maintenance' }} />
         <Stack.Screen name="Maintenance" component={MaintenanceScreen} options={{ title: 'Ground Maintenance' }} />

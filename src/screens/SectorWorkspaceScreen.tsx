@@ -132,6 +132,10 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           ))}
           <Text style={[styles.cardSub, { marginTop: 6 }]}>Cleared items appear on the printed Tech Log page (Preview above). Tap a defect to open it.</Text>
         </View>
+        <TouchableOpacity style={[styles.card, { marginTop: 10 }]} onPress={() => navigation.navigate('ComponentChange', { sectorId })}>
+          <Text style={styles.cardTitle}>🔩 Component Change (CCR) ›</Text>
+          <Text style={styles.cardSub}>Record removed / installed components on this log — P/N & S/N off/on, position, Form 1 certificate + photo. Report emails to the configured recipients.</Text>
+        </TouchableOpacity>
         </>
       ) : null}
 

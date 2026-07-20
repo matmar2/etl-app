@@ -510,6 +510,22 @@ export const signRecord = (payload: {
   kind: string; sector_id?: string; defect_id?: string; signature_image?: string; device_id?: string;
 }) => mutateOrQueue('/signatures', { method: 'POST', body: JSON.stringify(payload) });
 
+// Component Change Report (CCR) — rows tied to a defect rectification or a ground maintenance log.
+export type CcrRow = { id: string; seq?: number; description?: string; position?: string;
+  pn_off?: string; sn_off?: string; pn_on?: string; sn_on?: string; cert_no?: string;
+  has_cert_photo?: boolean; created_by?: string; emailed_at?: string | null; emailed_to?: string | null };
+const _ccrQs = (s: { defectId?: string; sectorId?: string }) =>
+  s.defectId ? `defect_id=${s.defectId}` : `sector_id=${s.sectorId}`;
+export const listCcr = (s: { defectId?: string; sectorId?: string }): Promise<{ items: CcrRow[] }> =>
+  api(`/component-changes?${_ccrQs(s)}`);
+export const createCcr = (body: any) => api('/component-changes', { method: 'POST', body: JSON.stringify(body) });
+export const updateCcr = (id: string, body: any) => api(`/component-changes/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+export const deleteCcr = (id: string) => api(`/component-changes/${id}`, { method: 'DELETE' });
+export const ccrReport = (s: { defectId?: string; sectorId?: string }): Promise<{ html: string }> =>
+  api(`/component-changes/report?${_ccrQs(s)}`);
+export const sendCcrReport = (s: { defectId?: string; sectorId?: string }): Promise<{ ok: boolean; sent_to: string[] }> =>
+  api(`/component-changes/send?${_ccrQs(s)}`, { method: 'POST' });
+
 export const getDefect = (id: string) => api(`/defects/${id}`);
 export const addDefectAction = (id: string, body: any) =>
   mutateOrQueue(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify(body) });

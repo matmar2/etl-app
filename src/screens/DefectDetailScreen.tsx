@@ -13,6 +13,7 @@ import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
 const INTERVALS = ['A', 'B', 'C', 'D'];
+const BASIS_LABEL = { mel: 'MEL', cdl: 'CDL', approved_data: 'Approved data' } as const;
 
 export default function DefectDetailScreen({ route, navigation }: any) {
   const { defectId } = route.params;
@@ -22,6 +23,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [amo, setAmo] = useState('');
   const [mel, setMel] = useState('');                    // doc reference (MEL/CDL item or approved-data doc)
   const [basis, setBasis] = useState<'mel' | 'cdl' | 'approved_data'>('mel');   // deferral authority
+  const [basisOpen, setBasisOpen] = useState(false);     // authority dropdown expanded
   const [maxFh, setMaxFh] = useState('');                // FH-based limit: flight hours allowed from deferral
   const [rectIv, setRectIv] = useState('');
   const [due, setDue] = useState('');
@@ -311,6 +313,12 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setDiOpen((v) => !v)}>
             <Text style={styles.act2t}>👥 Double Inspection (DI){diOpen ? ' ▴' : ' ▾'}</Text>
           </TouchableOpacity>
+
+          {/* Component Change Report — required whenever a component is replaced during rectification. */}
+          <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]}
+            onPress={() => navigation.navigate('ComponentChange', { defectId })}>
+            <Text style={styles.act2t}>🔩 Component Change (CCR) ›</Text>
+          </TouchableOpacity>
           {diOpen ? (
             <View style={{ marginTop: 8, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
               <Text style={styles.sub}>The independent second inspection required for a critical task. The DI signature and its date/time are recorded.</Text>
@@ -349,31 +357,40 @@ export default function DefectDetailScreen({ route, navigation }: any) {
 
           {canDefer && (<>
           <Text style={styles.section}>Defer (Hold Item List)</Text>
-          {/* Deferral authority — one choice: MEL / CDL / other approved data (SB, AMM, DOA letter). */}
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {([['mel', 'MEL'], ['cdl', 'CDL'], ['approved_data', 'Approved data']] as const).map(([b, lbl]) => (
-              <TouchableOpacity key={b} onPress={() => setBasis(b)}
-                style={[styles.iv, { width: 'auto', height: 34, paddingHorizontal: 14 }, basis === b && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
-                <Text numberOfLines={1} style={[styles.ivt, basis === b && { color: '#1a1300' }]}>{lbl}</Text>
-              </TouchableOpacity>
-            ))}
-            {basis !== 'approved_data' ? (
-              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]}
-                onPress={() => (basis === 'mel' ? setMelOpen(true) : setCdlOpen(true))}>
-                <Text style={styles.act2t}>Pick from CAMO {basis.toUpperCase()} ▾</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-          {basis === 'approved_data' ? <Text style={[styles.sub, { marginTop: 4 }]}>Deferral against other approved data (SB / AMM / TC-holder or DOA-approved document) — enter the document reference.</Text> : null}
-          <View style={styles.row}>
-            <TextInput style={[styles.input, { width: 160, minHeight: 0 }]} value={mel} onChangeText={setMel} placeholder="Doc reference" placeholderTextColor={theme.sub} />
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              {INTERVALS.map((iv) => (
-                <TouchableOpacity key={iv} onPress={() => setRectIv(rectIv === iv ? '' : iv)} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
-                  <Text style={[styles.ivt, rectIv === iv && { color: '#1a1300' }]}>{iv}</Text>
+          {/* Deferral authority — dropdown. Picking MEL/CDL opens that CAMO picker directly; the
+              chosen item lands in Doc reference (manually editable). Approved data = manual entry. */}
+          <TouchableOpacity style={[styles.input, { width: 220, minHeight: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+            onPress={() => setBasisOpen((o) => !o)}>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>{BASIS_LABEL[basis]}</Text>
+            <Text style={{ color: theme.sub }}>▾</Text>
+          </TouchableOpacity>
+          {basisOpen ? (
+            <View style={{ borderWidth: 1, borderColor: theme.border, borderRadius: 8, width: 220, backgroundColor: theme.tile }}>
+              {(['mel', 'cdl', 'approved_data'] as const).map((b) => (
+                <TouchableOpacity key={b} style={{ paddingVertical: 10, paddingHorizontal: 12 }}
+                  onPress={() => {
+                    setBasis(b); setBasisOpen(false);
+                    if (b === 'mel') setMelOpen(true);
+                    else if (b === 'cdl') setCdlOpen(true);
+                  }}>
+                  <Text style={[styles.ivt, basis === b && { color: theme.accent }]}>{BASIS_LABEL[b]}</Text>
                 </TouchableOpacity>
               ))}
             </View>
+          ) : null}
+          {basis === 'approved_data' ? <Text style={[styles.sub, { marginTop: 4 }]}>Deferral against other approved data (SB / AMM / TC-holder or DOA-approved document) — enter the document reference.</Text> : null}
+          <View style={styles.row}>
+            <TextInput style={[styles.input, { width: 180, minHeight: 0 }]} value={mel} onChangeText={setMel} placeholder="Doc reference" placeholderTextColor={theme.sub} />
+            {/* Category A–D applies to MEL items only — shown once a MEL item is picked/entered. */}
+            {basis === 'mel' && mel ? (
+              <View style={{ flexDirection: 'row', gap: 6 }}>
+                {INTERVALS.map((iv) => (
+                  <TouchableOpacity key={iv} onPress={() => setRectIv(rectIv === iv ? '' : iv)} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
+                    <Text style={[styles.ivt, rectIv === iv && { color: '#1a1300' }]}>{iv}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
             <TextInput style={[styles.input, { width: 120, minHeight: 0 }]} value={due} onChangeText={setDue} placeholder="due YYYY-MM-DD" placeholderTextColor={theme.sub} />
           </View>
           {/* Calendar-day limit: show the time remaining live as the due date is entered. */}
@@ -392,7 +409,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               mel_ref: basis === 'mel' ? (mel || undefined) : undefined,
               cdl_ref: basis === 'cdl' ? (mel || undefined) : undefined,
               approved_ref: basis === 'approved_data' ? (mel || undefined) : undefined,
-              rect_interval: rectIv, due_date: due || undefined,
+              rect_interval: basis === 'mel' ? rectIv : undefined, due_date: due || undefined,
               max_cycles: maxCyc ? Number(maxCyc) : undefined,
               max_fh: maxFh ? Number(maxFh) : undefined,
             })}>
