@@ -48,13 +48,19 @@ export default function DepartureScreen({ route, navigation }: any) {
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
   const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
-  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); }).catch(() => {}); }, []);
+  const [gradeDef, setGradeDef] = useState('Jet A-1');   // admin-set fuel grade prefill (editable)
+  const gradeDefRef = useRef('Jet A-1');
+  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
       setFuel((f: any) => (f.fuel_density == null || f.fuel_density === '') ? { ...f, fuel_density: String(Number(servMin.fuel_density_ref) || 0.785) } : f);
     }
   }, [servMin]);
+  // Fuel grade defaults from admin Settings (editable per sector).
+  useEffect(() => {
+    setFuel((f: any) => (f && (f.fuel_grade == null || f.fuel_grade === '') ? { ...f, fuel_grade: gradeDef } : f));
+  }, [gradeDef, s?.id]);
   async function checkDepGps() { if (s?.dep) { setDepGps({ state: 'checking' }); setDepGps(await checkAirportGps(s.dep)); } }
   const refreshStatus = useCallback(() => {
     const reg = currentAircraft()?.registration || s?.aircraft_id;
@@ -77,7 +83,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
       fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
-      bowser_uplift_lt: s.bowser_uplift_lt, fuel_grade: s.fuel_grade, nil_oils_fluids: !!s.nil_oils_fluids });
+      bowser_uplift_lt: s.bowser_uplift_lt, fuel_grade: s.fuel_grade || gradeDefRef.current, nil_oils_fluids: !!s.nil_oils_fluids });
     setBowserText(s.bowser_uplift_lt == null || s.bowser_uplift_lt === '' ? '' : String(round1(Number(s.bowser_uplift_lt))));   // L (default unit)
     aircraftConfig(s.aircraft_id).then((c) => {
       setTanks(c.tanks);
