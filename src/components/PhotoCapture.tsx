@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import { ActivityIndicator, Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Attachment, attachmentUrl, deleteAttachment, listAttachments, uploadAttachment } from '../api/client';
 import { queueAttachment } from '../db/attachments';
 import { theme } from '../theme';
@@ -29,6 +29,14 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
   useEffect(() => { load(); }, [defectId, sectorId]);
 
   async function pick(fromCamera: boolean): Promise<string | null> {
+    try {
+      if (Platform.OS === 'web') {
+        // Web: launchCameraAsync silently does nothing — the file dialog is the reliable path
+        // (on an iPad's browser it offers "Take Photo" natively).
+        const res = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+        return res.canceled || !res.assets?.[0]?.base64 ? null : res.assets[0].base64!;
+      }
+    } catch { return null; }
     const perm = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();

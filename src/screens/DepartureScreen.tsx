@@ -29,6 +29,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [upliftText, setUpliftText] = useState('');          // raw text in the box (current unit) — preserves decimals while typing
   const [bowserUnit, setBowserUnit] = useState<'KG' | 'LB' | 'IG' | 'L'>('L');
   const [bowserText, setBowserText] = useState('');
+  const [bowserUnitOpen, setBowserUnitOpen] = useState(false);   // unit dropdown expanded
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [routeEdit, setRouteEdit] = useState<any>({});
   const [minFuel, setMinFuel] = useState<number | null>(null);
@@ -453,13 +454,22 @@ export default function DepartureScreen({ route, navigation }: any) {
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                 <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90 }}
                   keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); }} />
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  {(['KG', 'LB', 'IG', 'L'] as const).map((u) => (
-                    <TouchableOpacity key={u} onPress={() => changeUnit(u)}
-                      style={{ paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: bowserUnit === u ? theme.accent : theme.border, backgroundColor: bowserUnit === u ? theme.accent : theme.tile }}>
-                      <Text style={{ color: bowserUnit === u ? '#1a1300' : theme.text, fontWeight: '800', fontSize: 12 }}>{u}</Text>
-                    </TouchableOpacity>
-                  ))}
+                {/* unit dropdown (default L) — compact so photo buttons share the line */}
+                <View>
+                  <TouchableOpacity onPress={() => setBowserUnitOpen((o) => !o)}
+                    style={{ paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.accent, backgroundColor: theme.tile, flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                    <Text style={{ color: theme.text, fontWeight: '800', fontSize: 12 }}>{bowserUnit}</Text>
+                    <Text style={{ color: theme.sub, fontSize: 10 }}>▾</Text>
+                  </TouchableOpacity>
+                  {bowserUnitOpen ? (
+                    <View style={{ position: 'absolute', top: 42, left: 0, zIndex: 30, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, width: 64 }}>
+                      {(['L', 'KG', 'LB', 'IG'] as const).map((u) => (
+                        <TouchableOpacity key={u} onPress={() => { changeUnit(u); setBowserUnitOpen(false); }} style={{ paddingVertical: 8, paddingHorizontal: 12 }}>
+                          <Text style={{ color: bowserUnit === u ? theme.accent : theme.text, fontWeight: '800', fontSize: 12 }}>{u}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               </View>
               <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>= {fmt(round1(Number(fuel.bowser_uplift_lt) || 0))} L stored{(bowserUnit === 'KG' || bowserUnit === 'LB') ? ` (SG ${dens})` : ''}</Text>
