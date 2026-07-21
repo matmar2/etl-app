@@ -160,7 +160,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
 
       {/* Hidden for roles without release access (permission-matrix driven — e.g. cabin crew). */}
       {access('release') !== 'none' && !isMaint ? (
-        (st && !st.serviceable) ? (
+        (st && !st.serviceable && !(s?.check_override && !st.blocking_defects)) ? (
           <View style={[styles.card, { borderColor: theme.red, opacity: 0.55 }]}>
             <Text style={styles.cardTitle}>Release &amp; Print</Text>
             <Text style={[styles.cardSub, { color: theme.red, fontWeight: '700' }]}>▲ Aircraft UNSERVICEABLE — {st.reasons?.join(' · ') || 'see Main Menu'}</Text>

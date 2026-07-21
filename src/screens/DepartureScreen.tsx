@@ -683,7 +683,12 @@ export default function DepartureScreen({ route, navigation }: any) {
       {s.status !== 'preflight_signed' ? (
         <>
           <Text style={sx.section}>Maintenance release (CRS)</Text>
-          {(acSt && !acSt.serviceable) ? (
+          {s.check_override ? (
+            <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
+              ✓ Commander confirmed for this leg by {s.check_override.by} at {String(s.check_override.at).slice(0, 16)}z — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
+            </Text>
+          ) : null}
+          {(acSt && !acSt.serviceable && !(s.check_override && acSt.blocking_defects === 0)) ? (
             <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
               {/* State the REAL grounding reasons — open defects AND/OR overdue / not-recorded checks. */}
               <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.reasons?.length ? acSt.reasons.join(' · ') : `${acSt.blocking_defects} open defect(s)`}</Text>
@@ -729,11 +734,6 @@ export default function DepartureScreen({ route, navigation }: any) {
                   )}
                 </View>
               ) : null}
-              {s.check_override ? (
-                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginTop: 8 }}>
-                  ✓ Commander confirmed for this leg by {s.check_override.by} at {String(s.check_override.at).slice(0, 16)}z — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
-                </Text>
-              ) : null}
               {/* CRS button stays visible while unserviceable but is NOT clickable — clear defects first. */}
               {can('release', 'crs') ? (
                 <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
@@ -774,7 +774,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           ) : null}
           {s.takeoff ? <Text style={[sx.sub, { color: theme.sub, marginTop: 8 }]}>Aircraft airborne — acceptance can no longer be undone.</Text> : null}
         </>
-      ) : (acSt && !acSt.serviceable) ? (
+      ) : (acSt && !acSt.serviceable && !(s.check_override && acSt.blocking_defects === 0)) ? (
         <Text style={sx.sub}>Available once the aircraft is serviceable and maintenance has signed the CRS above.</Text>
       ) : (
         <>
