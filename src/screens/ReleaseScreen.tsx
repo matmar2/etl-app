@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName } from '../api/client';
+import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
@@ -9,6 +9,7 @@ import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors'
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
+import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
 // Assemble the TL from the server, or fall back to the local cache when offline.
@@ -169,6 +170,28 @@ export default function ReleaseScreen({ route, navigation }: any) {
         </View>
       ) : null}
 
+      {(st as any).check_blockers?.length && (st as any).check_override?.by && !(st as any).check_override?.mechanic_by ? (
+        <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 8, padding: 12, marginBottom: 10 }}>
+          <Text style={{ color: theme.text, fontWeight: '800' }}>Certifying staff confirmation required — delayed OASES update</Text>
+          <Text style={[s.sub, { marginTop: 4 }]}>The commander ({(st as any).check_override.by}) confirmed these conditions for this leg. As certifying staff you must ALSO confirm them before signing the CRS:</Text>
+          {((st as any).check_override.conditions || []).map((r: string) => (
+            <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
+          ))}
+          <TouchableOpacity style={{ backgroundColor: theme.accent, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 }} onPress={async () => {
+            const list = (((st as any).check_override.conditions || []) as string[]).join('\n• ');
+            if (!(await confirmAction(`As certifying staff, confirm the following are RESOLVED despite the delayed OASES update?\n\n• ${list}\n\nThis leg only — printed on the Tech Log.`, 'Certifying staff confirmation'))) return;
+            if (!(await confirmAction('Please confirm once more: the listed conditions are resolved. This is recorded with your name.', 'Confirm again'))) return;
+            try { await sectorCheckOverrideMechanic(sectorId); await load(); } catch (e: any) { setNote(String(e?.message || e)); }
+          }}>
+            <Text style={{ color: '#1a1300', fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {(st as any).check_override?.mechanic_by ? (
+        <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginBottom: 8 }}>
+          ✓ Delayed-OASES conditions confirmed: commander {(st as any).check_override.by} · certifying staff {(st as any).check_override.mechanic_by}
+        </Text>
+      ) : null}
       {(st as any).check_blockers?.length ? (
         <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12, marginTop: 10 }}>
           <Text style={{ color: theme.red, fontWeight: '800' }}>▲ {(st as any).check_blockers.join(' · ')}</Text>

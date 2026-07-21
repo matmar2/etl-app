@@ -1022,6 +1022,9 @@ export async function fetchPdfLocal(path: string): Promise<string | null> {
   return r.status === 200 ? r.uri : null;
 }
 
+export const sectorCheckOverrideMechanic = (sectorId: string): Promise<{ ok: boolean; mechanic_by: string; mechanic_at: string }> =>
+  api(`/sectors/${sectorId}/check-override/mechanic`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+
 export const sectorCheckOverride = (sectorId: string): Promise<{ ok: boolean; conditions: string[]; by: string; at: string }> =>
   api(`/sectors/${sectorId}/check-override`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
 
