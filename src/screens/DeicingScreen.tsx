@@ -56,6 +56,7 @@ export default function DeicingScreen({ route, navigation }: any) {
 
       <F label="Fluid brand / name" k="fluid" placeholder="e.g. Kilfrost ABC-S" />
       <F label="Mixture (fluid/water %)" k="mix" placeholder="e.g. 75/25 or 100" />
+      <F label="Fluid quantity used (L)" k="qty_l" placeholder="e.g. 120" kb="numeric" />
       <F label="OAT (°C)" k="oat" placeholder="e.g. -4" kb="numbers-and-punctuation" />
       <F label="Time of final application (UTC, HH:MM)" k="start_time" placeholder="e.g. 14:32" />
       <F label="Holdover time / lower limit (min)" k="hot" placeholder="e.g. 35" kb="numeric" />
