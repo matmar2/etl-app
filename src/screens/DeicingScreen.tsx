@@ -58,7 +58,11 @@ export default function DeicingScreen({ route, navigation }: any) {
       <F label="Mixture (fluid/water %)" k="mix" placeholder="e.g. 75/25 or 100" />
       <F label="Fluid quantity used (L)" k="qty_l" placeholder="e.g. 120" kb="numeric" />
       <F label="OAT (°C)" k="oat" placeholder="e.g. -4" kb="numbers-and-punctuation" />
-      <F label="Time of final application (UTC, HH:MM)" k="start_time" placeholder="e.g. 14:32" />
+      {/* Holdover time runs from the START of the final application; end time completes the record. */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}><F label="Start time (UTC, HH:MM)" k="start_time" placeholder="e.g. 14:28" /></View>
+        <View style={{ flex: 1 }}><F label="End time (UTC, HH:MM)" k="end_time" placeholder="e.g. 14:32" /></View>
+      </View>
       <F label="Holdover time / lower limit (min)" k="hot" placeholder="e.g. 35" kb="numeric" />
       <F label="Areas treated" k="areas" placeholder="e.g. wings, stab, fuselage" />
       <F label="Performed by / agent" k="by" placeholder="e.g. station de-icing crew" />
