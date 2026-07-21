@@ -667,6 +667,13 @@ export const listAttachments = (q: { defect_id?: string; sector_id?: string }): 
 let _tokCache = '';
 SecureStore.getItem('token').then((t) => { if (t) _tokCache = t; }).catch(() => {});
 export const _cacheToken = (t: string) => { _tokCache = t; };
+// Login time from the JWT iat claim — drives the LM oil-on-arrival rule (null on old tokens).
+export function tokenIssuedAt(): number | null {
+  try {
+    const payload = JSON.parse(globalThis.atob(_tokCache.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.iat ? payload.iat * 1000 : null;
+  } catch { return null; }
+}
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}?t=${encodeURIComponent(_tokCache)}`;
 export const deleteAttachment = (id: string): Promise<{ deleted: boolean }> =>
   api(`/attachments/${id}`, { method: 'DELETE' });

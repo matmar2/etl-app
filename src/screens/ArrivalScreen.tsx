@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, tokenIssuedAt, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -106,9 +106,14 @@ export default function ArrivalScreen({ route, navigation }: any) {
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
     // Oil quantity on arrival (read 5–30 min after shutdown per AMM) — admin-toggleable
     // (Settings → Mandatory fields → Arrival → "Oil on arrival"); mandatory by default.
-    if (m.oil_arrival && role() === 'mechanic') {
-      // Oil on arrival is MANDATORY for Line Maintenance (mechanic signed in at the arrival
-      // station) but OPTIONAL for flight crew — the captain may close the flight without it.
+    const lmAttended = role() === 'mechanic' && (() => {
+      const ia = tokenIssuedAt(); const sd = s.on_block || s.landing;
+      return !!(ia && sd && ia > new Date(sd).getTime());
+    })();
+    if (m.oil_arrival && lmAttended) {
+      // Oil on arrival binds LINE MAINTENANCE only when the mechanic signed IN to the iPad
+      // AFTER engine shutdown (LM attended this arrival). Crew — and a mechanic whose session
+      // predates the arrival — may close the flight without it.
       add('oil_eng1', 'Eng 1 oil on arrival', 'oil', hasV(oilArr.eng1), true);
       add('oil_eng2', 'Eng 2 oil on arrival', 'oil', hasV(oilArr.eng2), true);
     }
@@ -242,7 +247,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
           mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
-      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? (role() === 'mechanic' ? ' *' : ' — optional for crew, required for LM') : ''}</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? (role() === 'mechanic' ? ' *' : ' — optional for crew; required when LM attends the arrival') : ''}</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
         {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}
