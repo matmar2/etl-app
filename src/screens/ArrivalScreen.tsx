@@ -110,7 +110,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
       const ia = tokenIssuedAt(); const sd = s.on_block || s.landing;
       return !!(ia && sd && ia > new Date(sd).getTime());
     })();
-    if (m.oil_arrival && lmAttended) {
+    const oilLm = (m.oil_arrival_lm ?? m.oil_arrival) && lmAttended;      // legacy key → LM knob
+    const oilCrew = m.oil_arrival_crew && (role() === 'captain' || role() === 'pilot');
+    if (oilLm || oilCrew) {
       // Oil on arrival binds LINE MAINTENANCE only when the mechanic signed IN to the iPad
       // AFTER engine shutdown (LM attended this arrival). Crew — and a mechanic whose session
       // predates the arrival — may close the flight without it.
@@ -247,18 +249,18 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
           mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
-      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? (role() === 'mechanic' ? ' *' : ' — optional for crew; required when LM attends the arrival') : ''}</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){(mand?.oil_arrival_lm ?? mand?.oil_arrival) && role() === 'mechanic' ? ' *' : mand?.oil_arrival_crew && role() !== 'mechanic' ? ' *' : ' — optional for crew; required when LM attends the arrival'}</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
         {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
           <View style={{ width: 160 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt){mand?.oil_arrival ? ' *' : ''}</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 1 oil (qt)</Text>
             <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('oil_eng1') ? 2 : 1, borderColor: badSet.has('oil_eng1') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng1} onChangeText={(v) => setOilArr({ ...oilArr, eng1: numericOnly(v) })} />
           </View>
           <View style={{ width: 160 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt){mand?.oil_arrival ? ' *' : ''}</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Eng 2 oil (qt)</Text>
             <TextInput editable={canOilA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('oil_eng2') ? 2 : 1, borderColor: badSet.has('oil_eng2') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canOilA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={oilArr.eng2} onChangeText={(v) => setOilArr({ ...oilArr, eng2: numericOnly(v) })} />
           </View>
