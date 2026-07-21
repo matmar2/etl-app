@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -49,8 +49,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   const secY = useRef<Record<string, number>>({});
   const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
   const [gradeDef, setGradeDef] = useState('Jet A-1');   // admin-set fuel grade prefill (editable)
+  const [ovEnabled, setOvEnabled] = useState(false);     // admin toggle: per-leg commander check-confirmation
+  const [ovOpen, setOvOpen] = useState(false);           // conditions list expanded
   const gradeDefRef = useRef('Jet A-1');
-  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } }).catch(() => {}); }, []);
+  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
@@ -697,6 +699,41 @@ export default function DepartureScreen({ route, navigation }: any) {
                   <Text style={sx.saveText}>Open {c.label} {c.baseline ? '(overdue)' : '(not recorded)'} ›</Text>
                 </TouchableOpacity>
               ))}
+              {/* TEMPORARY trial bridge: when ONLY check-currency conditions block (delayed OASES
+                  posting) the commander may confirm — per LEG — that they are actually resolved. */}
+              {ovEnabled && canCabinDec && !s.check_override && acSt.blocking_defects === 0
+                && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check')) ? (
+                <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 10, paddingTop: 10 }}>
+                  {!ovOpen ? (
+                    <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, marginTop: 0 }]} onPress={() => setOvOpen(true)}>
+                      <Text style={[sx.saveText, { color: theme.accent }]}>⚠ Delayed OASES update — review conditions ›</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <>
+                      <Text style={{ color: theme.text, fontWeight: '800' }}>Delayed OASES update — commander confirmation (this leg only)</Text>
+                      <Text style={[sx.sub, { marginTop: 4 }]}>The following show UNSERVICEABLE only because the OASES posting is behind. Confirm ONLY if each has actually been performed / resolved:</Text>
+                      {(acSt.reasons || []).map((r: string) => (
+                        <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
+                      ))}
+                      <TouchableOpacity style={[sx.save, { backgroundColor: theme.accent, marginTop: 10 }]} onPress={async () => {
+                        const list = (acSt.reasons || []).join('\n• ');
+                        if (!(await confirmAction(`Confirm the following are RESOLVED despite the delayed OASES update?\n\n• ${list}\n\nApplies to THIS leg only and is printed on the Tech Log.`, 'Commander confirmation'))) return;
+                        if (!(await confirmAction('Please confirm once more: the listed conditions are resolved and the aircraft is fit for this flight. This is recorded with your name.', 'Confirm again'))) return;
+                        try { await sectorCheckOverride(sectorId); refresh(); aircraftStatus(currentAircraft()?.registration || s.aircraft_id).then(setAcSt).catch(() => {}); }
+                        catch (e: any) { setSignMsg(String(e?.message || e)); }
+                      }}>
+                        <Text style={[sx.saveText, { color: '#1a1300' }]}>Confirm — conditions resolved (this leg)</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setOvOpen(false)}><Text style={sx.sub}>Cancel</Text></TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              ) : null}
+              {s.check_override ? (
+                <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginTop: 8 }}>
+                  ✓ Commander confirmed for this leg by {s.check_override.by} at {String(s.check_override.at).slice(0, 16)}z — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
+                </Text>
+              ) : null}
               {/* CRS button stays visible while unserviceable but is NOT clickable — clear defects first. */}
               {can('release', 'crs') ? (
                 <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>

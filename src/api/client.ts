@@ -1015,6 +1015,9 @@ export async function fetchPdfLocal(path: string): Promise<string | null> {
   return r.status === 200 ? r.uri : null;
 }
 
+export const sectorCheckOverride = (sectorId: string): Promise<{ ok: boolean; conditions: string[]; by: string; at: string }> =>
+  api(`/sectors/${sectorId}/check-override`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
+
 export const createMaintenance = (body: { aircraft_id: string; station: string; wo_ref?: string; note?: string }): Promise<{ id: string; page_no: number; station: string }> =>
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
 
