@@ -60,10 +60,19 @@ export default function DeicingScreen({ route, navigation }: any) {
       <F label="OAT (°C)" k="oat" placeholder="e.g. -4" kb="numbers-and-punctuation" />
       {/* Holdover time runs from the START of the final application; end time completes the record. */}
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}><F label="Start time (UTC, HH:MM)" k="start_time" placeholder="e.g. 14:28" /></View>
+        <View style={{ flex: 1 }}><F label="Start of application (UTC, HH:MM) — holdover starts HERE" k="start_time" placeholder="e.g. 14:28" /></View>
         <View style={{ flex: 1 }}><F label="End time (UTC, HH:MM)" k="end_time" placeholder="e.g. 14:32" /></View>
       </View>
       <F label="Holdover time / lower limit (min)" k="hot" placeholder="e.g. 35" kb="numeric" />
+      {/* HOT runs from the START of the final application (not the end) — show the expiry live. */}
+      {(() => {
+        const m = String(d.start_time || '').match(/^(\d{1,2}):(\d{2})$/);
+        const hot = Number(d.hot);
+        if (!m || !hot) return null;
+        const t = (Number(m[1]) * 60 + Number(m[2]) + hot) % 1440;
+        const hh = String(Math.floor(t / 60)).padStart(2, '0'), mm = String(t % 60).padStart(2, '0');
+        return <Text style={[sx.sub, { color: theme.accent, marginTop: 4 }]}>Holdover runs from the START of application: protection until ≈ {hh}:{mm}z</Text>;
+      })()}
       <F label="Areas treated" k="areas" placeholder="e.g. wings, stab, fuselage" />
       <F label="Performed by / agent" k="by" placeholder="e.g. station de-icing crew" />
 
