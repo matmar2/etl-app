@@ -177,13 +177,16 @@ export default function ReleaseScreen({ route, navigation }: any) {
           {((st as any).check_override.conditions || []).map((r: string) => (
             <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
           ))}
-          <TouchableOpacity style={{ backgroundColor: theme.accent, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 }} onPress={async () => {
+          {!(st as any).preflight_signed ? (
+            <Text style={[s.sub, { marginTop: 8, color: theme.accent }]}>Opens after the commander has SIGNED the acceptance for this leg.</Text>
+          ) : null}
+          <TouchableOpacity disabled={!(st as any).preflight_signed} style={{ backgroundColor: (st as any).preflight_signed ? theme.accent : theme.tile, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10, borderWidth: (st as any).preflight_signed ? 0 : 1, borderColor: theme.border }} onPress={async () => {
             const list = (((st as any).check_override.conditions || []) as string[]).join('\n• ');
             if (!(await confirmAction(`As certifying staff, confirm the following are RESOLVED despite the delayed OASES update?\n\n• ${list}\n\nThis leg only — printed on the Tech Log.`, 'Certifying staff confirmation'))) return;
             if (!(await confirmAction('Please confirm once more: the listed conditions are resolved. This is recorded with your name.', 'Confirm again'))) return;
             try { await sectorCheckOverrideMechanic(sectorId); await load(); } catch (e: any) { setNote(String(e?.message || e)); }
           }}>
-            <Text style={{ color: '#1a1300', fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
+            <Text style={{ color: (st as any).preflight_signed ? '#1a1300' : theme.sub, fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
           </TouchableOpacity>
         </View>
       ) : null}
