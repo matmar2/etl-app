@@ -106,7 +106,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
     // Oil quantity on arrival (read 5–30 min after shutdown per AMM) — admin-toggleable
     // (Settings → Mandatory fields → Arrival → "Oil on arrival"); mandatory by default.
-    if (m.oil_arrival) {
+    if (m.oil_arrival && role() === 'mechanic') {
+      // Oil on arrival is MANDATORY for Line Maintenance (mechanic signed in at the arrival
+      // station) but OPTIONAL for flight crew — the captain may close the flight without it.
       add('oil_eng1', 'Eng 1 oil on arrival', 'oil', hasV(oilArr.eng1), true);
       add('oil_eng2', 'Eng 2 oil on arrival', 'oil', hasV(oilArr.eng2), true);
     }
@@ -240,7 +242,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
           mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
-      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? ' *' : ''}</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){mand?.oil_arrival ? (role() === 'mechanic' ? ' *' : ' — optional for crew, required for LM') : ''}</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
         {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}
