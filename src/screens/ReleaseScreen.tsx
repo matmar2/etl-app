@@ -170,25 +170,20 @@ export default function ReleaseScreen({ route, navigation }: any) {
         </View>
       ) : null}
 
-      {(st as any).check_blockers?.length && ((st as any).maintenance_only || (st as any).check_override?.by) && !(st as any).check_override?.mechanic_by ? (
+      {(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by ? (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 8, padding: 12, marginBottom: 10 }}>
           <Text style={{ color: theme.text, fontWeight: '800' }}>Certifying staff confirmation required — delayed OASES update</Text>
-          <Text style={[s.sub, { marginTop: 4 }]}>{(st as any).maintenance_only
-            ? 'The following show unserviceable due to the delayed OASES update. As certifying staff, confirm they are resolved before signing the ground CRS:'
-            : `The commander (${(st as any).check_override?.by}) confirmed these conditions for this leg. As certifying staff you must ALSO confirm them before signing the CRS:`}</Text>
+          <Text style={[s.sub, { marginTop: 4 }]}>The following show unserviceable due to the delayed OASES update. As certifying staff, confirm they are resolved before signing the CRS — the commander then signs the acceptance on the strength of your CRS:</Text>
           {(((st as any).check_override?.conditions || (st as any).check_blockers) || []).map((r: string) => (
             <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
           ))}
-          {!(st as any).preflight_signed && !(st as any).maintenance_only ? (
-            <Text style={[s.sub, { marginTop: 8, color: theme.accent }]}>Opens after the commander has SIGNED the acceptance for this leg.</Text>
-          ) : null}
-          <TouchableOpacity disabled={!(st as any).preflight_signed && !(st as any).maintenance_only} style={{ backgroundColor: ((st as any).preflight_signed || (st as any).maintenance_only) ? theme.accent : theme.tile, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10, borderWidth: ((st as any).preflight_signed || (st as any).maintenance_only) ? 0 : 1, borderColor: theme.border }} onPress={async () => {
+          <TouchableOpacity style={{ backgroundColor: theme.accent, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 }} onPress={async () => {
             const list = ((((st as any).check_override?.conditions || (st as any).check_blockers) || []) as string[]).join('\n• ');
             if (!(await confirmAction(`As certifying staff, confirm the following are RESOLVED despite the delayed OASES update?\n\n• ${list}\n\nThis leg only — printed on the Tech Log.`, 'Certifying staff confirmation'))) return;
             if (!(await confirmAction('Please confirm once more: the listed conditions are resolved. This is recorded with your name.', 'Confirm again'))) return;
             try { await sectorCheckOverrideMechanic(sectorId); await load(); } catch (e: any) { setNote(String(e?.message || e)); }
           }}>
-            <Text style={{ color: ((st as any).preflight_signed || (st as any).maintenance_only) ? '#1a1300' : theme.sub, fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
+            <Text style={{ color: '#1a1300', fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
           </TouchableOpacity>
         </View>
       ) : null}

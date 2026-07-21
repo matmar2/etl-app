@@ -704,33 +704,21 @@ export default function DepartureScreen({ route, navigation }: any) {
                   <Text style={sx.saveText}>Open {c.label} {c.baseline ? '(overdue)' : '(not recorded)'} ›</Text>
                 </TouchableOpacity>
               ))}
-              {/* TEMPORARY trial bridge: when ONLY check-currency conditions block (delayed OASES
-                  posting) the commander may confirm — per LEG — that they are actually resolved. */}
-              {ovEnabled && canCabinDec && !s.check_override && acSt.blocking_defects === 0
+              {/* TEMPORARY trial bridge (mechanic-led): certifying staff confirm the delayed-OASES
+                  conditions and issue the CRS on the Release page; the commander then signs the
+                  acceptance on the strength of that CRS. This card only informs the crew. */}
+              {ovEnabled && acSt.blocking_defects === 0
                 && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check')) ? (
                 <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 10, paddingTop: 10 }}>
-                  {!ovOpen ? (
-                    <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, marginTop: 0 }]} onPress={() => setOvOpen(true)}>
-                      <Text style={[sx.saveText, { color: theme.accent }]}>⚠ Delayed OASES update — review conditions ›</Text>
-                    </TouchableOpacity>
+                  <Text style={{ color: theme.text, fontWeight: '800' }}>Delayed OASES update</Text>
+                  <Text style={[sx.sub, { marginTop: 4 }]}>The following show UNSERVICEABLE only because the OASES posting is behind:</Text>
+                  {(acSt.reasons || []).map((r: string) => (
+                    <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
+                  ))}
+                  {s.check_override?.mechanic_by ? (
+                    <Text style={{ color: theme.accent, fontSize: 13, fontWeight: '700', marginTop: 8 }}>✓ Certifying staff ({s.check_override.mechanic_by}) confirmed the conditions and the CRS — you may sign the acceptance below.</Text>
                   ) : (
-                    <>
-                      <Text style={{ color: theme.text, fontWeight: '800' }}>Delayed OASES update — commander confirmation (this leg only)</Text>
-                      <Text style={[sx.sub, { marginTop: 4 }]}>The following show UNSERVICEABLE only because the OASES posting is behind. Confirm ONLY if each has actually been performed / resolved:</Text>
-                      {(acSt.reasons || []).map((r: string) => (
-                        <Text key={r} style={{ color: theme.red, fontSize: 13, fontWeight: '700', marginTop: 4 }}>  • {r}</Text>
-                      ))}
-                      <TouchableOpacity style={[sx.save, { backgroundColor: theme.accent, marginTop: 10 }]} onPress={async () => {
-                        const list = (acSt.reasons || []).join('\n• ');
-                        if (!(await confirmAction(`Confirm the following are RESOLVED despite the delayed OASES update?\n\n• ${list}\n\nApplies to THIS leg only and is printed on the Tech Log.`, 'Commander confirmation'))) return;
-                        if (!(await confirmAction('Please confirm once more: the listed conditions are resolved and the aircraft is fit for this flight. This is recorded with your name.', 'Confirm again'))) return;
-                        try { await sectorCheckOverride(sectorId); refresh(); aircraftStatus(currentAircraft()?.registration || s.aircraft_id).then(setAcSt).catch(() => {}); }
-                        catch (e: any) { setSignMsg(String(e?.message || e)); }
-                      }}>
-                        <Text style={[sx.saveText, { color: '#1a1300' }]}>Confirm — conditions resolved (this leg)</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setOvOpen(false)}><Text style={sx.sub}>Cancel</Text></TouchableOpacity>
-                    </>
+                    <Text style={[sx.sub, { marginTop: 8 }]}>Ask Line Maintenance to confirm the conditions and issue the CRS (Release page) — the acceptance opens once the CRS is signed.</Text>
                   )}
                 </View>
               ) : null}
