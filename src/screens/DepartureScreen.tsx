@@ -37,6 +37,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [receiptN, setReceiptN] = useState<number | null>(null);   // fuel-receipt photos on this sector (null = unknown/offline)
   const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
   const [servMin, setServMin] = useState<any>(null);
+  const [tankEntry, setTankEntry] = useState(false);   // admin: per-tank boxes on the iPad (crew default = total only)
   const [pfiName, setPfiName] = useState('');
   const [pfiSigning, setPfiSigning] = useState(false);
   const [walkOpen, setWalkOpen] = useState(false);   // FCOM walkaround page shown before signing the PFI
@@ -52,7 +53,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [ovEnabled, setOvEnabled] = useState(false);     // admin toggle: per-leg commander check-confirmation
   const [ovOpen, setOvOpen] = useState(false);           // conditions list expanded
   const gradeDefRef = useRef('Jet A-1');
-  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
+  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
@@ -141,6 +142,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const refDens = Number(servMin?.fuel_density_ref) || 0.785;
   const actualSG = num(fuel.fuel_density) || refDens;
   const sgFactor = actualSG / refDens;
+  const maxFuelKg = servMin?.fuel_capacity_kg != null ? Math.round(Number(servMin.fuel_capacity_kg) * sgFactor) : null;
   const sgAdj = Math.abs(actualSG - refDens) > 0.0005;
   const effMin = minFuel != null ? Math.round(minFuel * sgFactor) : null;
   // Per-field authorisation (admin-configurable in back office → Permissions).
@@ -164,18 +166,16 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('dep', 'Departure airport', 'route', !!s.dep);
     add('arr', 'Arrival airport', 'route', !!s.arr);
     add('flight_type', 'Flight type', 'route', !!s.flight_type);
-    add('off_block', 'OUT (off-block)', 'oooi', !!s.off_block);
     add('fuel_density', 'Specific gravity', 'fuel', num(fuel.fuel_density) > 0);
     add('fuel_planned_kg', 'Planned fuel', 'fuel', hasV(fuel.fuel_planned_kg));
     add('dep_fuel_kg', 'Departure fuel', 'fuel', depEff != null);
     add('taxi_fuel_kg', 'Taxi fuel', 'fuel', hasV(fuel.taxi_fuel_kg));
     add('tanks', 'Tank entries (all)', 'fuel', tanks.length > 0 && tanks.every((t) => hasV(fuel[t.field])));
-    add('bowser_uplift_lt', 'Bowser uplift', 'fuel', hasV(fuel.bowser_uplift_lt));
+    add('bowser_uplift_lt', 'Fuel Uplifted', 'fuel', hasV(fuel.bowser_uplift_lt));
     add('fuel_grade', 'Fuel grade', 'fuel', !!fuel.fuel_grade);
     add('fuel_uplift_kg', 'Actual total uplift', 'fuel', upliftKg > 0);
     add('fuel_found_kg', 'Fuel remaining before refuelling', 'fuel', hasV(fuel.fuel_found_kg));
     add('fuel_receipt', 'Fuel receipt photo', 'fuel', receiptN == null ? true : receiptN > 0);   // lenient when offline/unknown
-    add('ice', 'Ice protection (de-icing details when used)', 'ice', !s.ice_protect || !!(s.deice && (s.deice as any).code));
     add('pfi', 'PFI', 'pfi', !!(s.pfi_signature || s.pfi_at));
     add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
     return out;
@@ -325,7 +325,6 @@ export default function DepartureScreen({ route, navigation }: any) {
       })()}
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Off-block (OUT)</Text>
-      <OOOISection s={s} fields={['off_block']} stamp={stamp} setManual={setManual} clear={canOooi ? clearTime : undefined} disabled={!canOooi} />
 
       {!canDep ? <RoBanner text="fuel, off-block and acceptance are entered by flight crew" /> : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['fuel'] = e.nativeEvent.layout.y; }}>Departure fuel</Text>
@@ -414,6 +413,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       <View style={sx.grid}>
         <NumField label="Planned (kg)" bad={badSet.has('fuel_planned_kg')} value={fuel.fuel_planned_kg} onChange={(v: string) => setFuel({ ...fuel, fuel_planned_kg: v })} />
       </View>
+      {tankEntry ? (<>
       <Text style={sx.subhead}>Tanks (kg)</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
           {tanks.length === 0 ? <Text style={sx.sub}>— no tank configuration</Text> : null}
@@ -431,6 +431,9 @@ export default function DepartureScreen({ route, navigation }: any) {
             );
           })}
       </View>
+      </>) : (
+        maxFuelKg != null ? <Text style={[sx.sub, { marginTop: 4 }]}>Max fuel (usable, this aircraft): {fmt(maxFuelKg)} kg at SG {num(fuel.fuel_density) || 0.785}</Text> : null
+      )}
 
       <View style={[sx.grid, { alignItems: 'flex-start' }]}>
       {(() => {
@@ -473,7 +476,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         );
       })()}
       </View>
-      <Text style={sx.subhead}>Bowser uplift, fuel grade &amp; receipt</Text>
+      <Text style={sx.subhead}>Fuel uplifted, grade &amp; receipt</Text>
       <View style={[sx.grid, { alignItems: 'flex-start' }]}>
         {(() => {
           const IG_L = 4.54609, LB_KG = 0.453592;
@@ -488,7 +491,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           };
           return (
             <View style={{ marginBottom: 10 }}>
-              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Bowser uplift ({bowserUnit})</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel Uplifted ({bowserUnit})</Text>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                 <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90 }}
                   keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); }} />
@@ -537,7 +540,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         if (!(gauge > 0 && bowserKg > 0)) return null;
         const diff = ((gauge - bowserKg) / bowserKg) * 100;
         const off = Math.abs(diff) > fuelTol;
-        return <Text style={{ color: off ? theme.red : theme.green, fontSize: 11, marginTop: 2, fontWeight: off ? '800' : '600' }}>Bowser {fmt(round1(bowserKg))} kg (SG {sg}) vs total uplift {fmt(round1(gauge))} kg — diff {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%{off ? ' ⚠ check' : ' ✓'}</Text>;
+        return <Text style={{ color: off ? theme.red : theme.green, fontSize: 11, marginTop: 2, fontWeight: off ? '800' : '600' }}>Fuel uplifted {fmt(round1(bowserKg))} kg (SG {sg}) vs total uplift {fmt(round1(gauge))} kg — diff {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%{off ? ' ⚠ check' : ' ✓'}</Text>;
       })()}
 
       <Text style={sx.subhead}>Departure &amp; taxi fuel</Text>
@@ -659,21 +662,6 @@ export default function DepartureScreen({ route, navigation }: any) {
         setServMsg('Servicing saved ✓');
       }}><Text style={sx.saveText}>Save servicing</Text></TouchableOpacity> : null}
       </View>
-
-      <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
-      <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
-        <Switch value={!!s.ice_protect} disabled={!canIce} onValueChange={async (v) => {
-          await save({ ice_protect: v });
-          if (v) navigation.navigate('Deicing', { sectorId });   // open the de-icing data form
-        }} /></View>
-      {s.ice_protect ? (
-        <View style={{ marginTop: 8 }}>
-          {s.deice?.code ? <Text style={{ color: theme.text, fontWeight: '700' }}>Anti-icing code: {s.deice.code}</Text> : <Text style={sx.sub}>No de-icing data entered yet.</Text>}
-          <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => navigation.navigate('Deicing', { sectorId })}>
-            <Text style={sx.saveText}>{s.deice?.code ? 'Edit de-icing data' : 'Enter de-icing data'}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
 
       <Text style={sx.section} onLayout={(e) => { secY.current['pfi'] = e.nativeEvent.layout.y; }}>Pre-Flight Inspection (PFI)</Text>
       {s.pfi_at ? (

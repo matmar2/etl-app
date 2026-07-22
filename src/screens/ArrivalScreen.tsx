@@ -50,7 +50,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (!s) return;
-    setLdg({ full_stop_ldgs: s.full_stop_ldgs, touch_go: s.touch_go, ldgs_before: s.ldgs_before, autoland_attempted: !!s.autoland_attempted, autoland_ok: !!s.autoland_ok });
+    setLdg({ full_stop: String(s.full_stop_ldgs ?? 1), touch_go: s.touch_go, ldgs_before: s.ldgs_before, autoland: s.autoland_ok ? 'ok' : (s.autoland_notes ? 'fail' : ''), autoland_notes: s.autoland_notes ?? '' });
     setRem(s.fuel_remaining_kg);
     setLf(s.landing_fuel_kg);
     setDiv({ on: !!s.diverted, airport: s.diversion_airport || '' });
@@ -87,7 +87,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   }
   const oasesCsn = util?.camo?.csn ?? util?.etl?.csn_fc ?? null;   // total cycles (OASES; ETL fallback)
   const oasesTsn = util?.camo?.tsn ?? util?.etl?.tsn_fh ?? null;   // total hours (OASES; ETL fallback)
-  const thisLdgs = 1 + (Number(ldg.touch_go) || 0);   // one full-stop landing this flight + any touch-and-goes
+  const thisLdgs = (Number(ldg.full_stop) || 1) + (s?.flight_type === 'training' ? (Number(ldg.touch_go) || 0) : 0);   // landings entered + T&G (training only)
   const legFh = s.flight_time_min != null ? Math.round((s.flight_time_min / 60) * 10) / 10 : null;   // this leg flight hours
   const newTsn = oasesTsn != null ? Math.round((oasesTsn + (legFh || 0)) * 10) / 10 : null;   // baseline shows at once; leg FH folds in once takeoff+landing are stamped
   const newCsn = oasesCsn != null ? oasesCsn + thisLdgs : null;
@@ -99,10 +99,10 @@ export default function ArrivalScreen({ route, navigation }: any) {
     // you cannot close on arrival without recording that you landed and are on blocks.
     const add = (key: string, label: string, sec: string, ok: boolean, force = false) => { if ((force || m[key]) && !ok) out.push({ key, label, sec }); };
     add('arr', 'Arrival airport', 'top', !!s.arr);
+    add('off_block', 'OUT (off-block)', 'oooi', !!s.off_block);
     add('takeoff', 'OFF (take-off)', 'oooi', !!s.takeoff);
     add('landing', 'ON (landing)', 'oooi', !!s.landing, true);
     add('on_block', 'IN (on-block)', 'oooi', !!s.on_block, true);
-    add('landing_fuel_kg', 'Fuel at touch-down', 'fuel', hasV(lf));
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
     // Oil quantity on arrival (read 5–30 min after shutdown per AMM) — admin-toggleable
     // (Settings → Mandatory fields → Arrival → "Oil on arrival"); mandatory by default.
@@ -120,6 +120,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       add('oil_eng2', 'Eng 2 oil on arrival', 'oil', hasV(oilArr.eng2), true);
     }
     add('landings', 'Landings', 'ldg', true);   // one full-stop landing is implicit per flight
+    add('ice', 'Ice protection (de-icing details when used)', 'ice', !s.ice_protect || !!(s.deice && (s.deice as any).code));
     add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport, div.on);   // required when diverted
     return out;
   }
@@ -204,7 +205,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OFF / ON / IN)</Text>
       <Text style={[sx.sub, { marginTop: 0 }]}>Take-off (OFF): stamp at brake release — the start of the take-off roll, not at rotation.</Text>
-      <OOOISection s={s} fields={['takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
+      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
       <Text style={sx.sub}>Block {hm(s.block_time_min)} · Flight {hm(s.flight_time_min)} (h:mm)</Text>
 
       <Text style={sx.section}>Landing airport check (GPS){div.on ? ' — diverted' : ''}</Text>
@@ -234,17 +235,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <View style={sx.card}>
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
           <View style={{ width: 200 }}>
-            <Text numberOfLines={1} style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel at touch-down (kg)</Text>
-            <TextInput editable={canFuelA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuelA ? 1 : 0.5 }}
-              keyboardType="decimal-pad" value={lf == null ? '' : String(lf)} onChangeText={(v) => setLf(numericOnly(v))} />
-          </View>
-          <View style={{ width: 200 }}>
             <Text numberOfLines={1} style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Remaining — Chocks ON (kg)</Text>
             <TextInput editable={canFuelA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_remaining_kg') ? 2 : 1, borderColor: badSet.has('fuel_remaining_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuelA ? 1 : 0.5 }}
               keyboardType="decimal-pad" value={rem == null ? '' : String(rem)} onChangeText={(v) => setRem(numericOnly(v))} />
           </View>
         </View>
-        <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) save({ landing_fuel_kg: num(lf), fuel_remaining_kg: num(rem) }); }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>
+        <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) save({ fuel_remaining_kg: num(rem) }); }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>
       </View>
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
@@ -279,10 +275,34 @@ export default function ArrivalScreen({ route, navigation }: any) {
         {oilMsg ? <Text style={{ color: /saved/.test(oilMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{oilMsg}</Text> : null}
       </View>
 
+      <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
+      <View style={sx.card}>
+        <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
+          <Switch value={!!s.ice_protect} disabled={!effDep} onValueChange={async (v) => {
+            await save({ ice_protect: v });
+            if (v) navigation.navigate('Deicing', { sectorId });
+          }} /></View>
+        {s.ice_protect ? (
+          <View style={{ marginTop: 8 }}>
+            {s.deice?.code ? <Text style={{ color: theme.text, fontWeight: '700' }}>Anti-icing code: {s.deice.code}</Text> : <Text style={sx.sub}>No de-icing data entered yet.</Text>}
+            <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => navigation.navigate('Deicing', { sectorId })}>
+              <Text style={sx.saveText}>{s.deice?.code ? 'Edit de-icing data' : 'Enter de-icing data'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+
       <Text style={sx.section} onLayout={(e) => { secY.current['ldg'] = e.nativeEvent.layout.y; }}>Landings (cycles)</Text>
       <View style={sx.card}>
-        <Text style={[sx.sub, { marginTop: 0, marginBottom: 10 }]}>One landing per flight. Switch Touch &amp; go on to add training landings; the totals update CSN / TSN from the OASES baseline.</Text>
+        <Text style={[sx.sub, { marginTop: 0, marginBottom: 10 }]}>One landing per flight — after a go-around with touchdown, enter the actual number of landings. Touch &amp; go applies to TRAINING flights only. Totals update CSN / TSN from the OASES baseline.</Text>
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
+          <View style={{ width: 130 }}>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Landings (No.)</Text>
+            <TextInput editable={canLdgA} keyboardType="numeric"
+              style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canLdgA ? 1 : 0.5 }}
+              value={String(ldg.full_stop ?? '1')} onChangeText={(v) => setLdg({ ...ldg, full_stop: numericOnly(v, false) })} />
+          </View>
+          {s.flight_type === 'training' ? (<>
           <View style={{ minWidth: 110 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Touch &amp; go</Text>
             <View style={{ minHeight: 44, justifyContent: 'center' }}>
@@ -296,6 +316,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
               value={Number(ldg.touch_go) > 0 ? String(ldg.touch_go) : ''} placeholder="—" placeholderTextColor={theme.sub}
               onChangeText={(v) => setLdg({ ...ldg, touch_go: numericOnly(v, false) })} />
           </View>
+          </>) : null}
           <View style={{ width: 130 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Total CSN (FC)</Text>
             <View style={{ backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
@@ -314,14 +335,30 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       <Text style={sx.section}>Autoland</Text>
       <View style={sx.card}>
-        <View style={sx.switchRow}><Text style={{ color: theme.sub }}>Autoland attempted</Text><Switch value={ldg.autoland_attempted} disabled={!canLdgA} onValueChange={(v) => setLdg({ ...ldg, autoland_attempted: v })} /></View>
-        <View style={sx.switchRow}><Text style={{ color: theme.sub }}>Autoland successful</Text><Switch value={ldg.autoland_ok} disabled={!canLdgA} onValueChange={(v) => setLdg({ ...ldg, autoland_ok: v })} /></View>
+        <Text style={sx.sub}>Record only when an autoland was flown to touchdown. A manual take-over (aborted autoland) is NOT recorded.</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          {([['ok', 'Successful'], ['fail', 'Unsuccessful']] as const).map(([k, lbl]) => (
+            <TouchableOpacity key={k} disabled={!canLdgA} onPress={() => setLdg({ ...ldg, autoland: ldg.autoland === k ? '' : k })}
+              style={{ borderWidth: 2, borderColor: ldg.autoland === k ? (k === 'ok' ? theme.green : theme.red) : theme.border, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: theme.tile }}>
+              <Text style={{ color: ldg.autoland === k ? (k === 'ok' ? theme.green : theme.red) : theme.sub, fontWeight: '800' }}>{ldg.autoland === k ? '✓ ' : ''}{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {ldg.autoland === 'fail' ? (
+          <View style={{ marginTop: 10 }}>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Pilot notes — why unsuccessful *</Text>
+            <TextInput editable={canLdgA} multiline style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, minHeight: 60 }}
+              value={ldg.autoland_notes ?? ''} onChangeText={(v) => setLdg({ ...ldg, autoland_notes: v })} placeholder="e.g. AP disconnect at 200 ft — crosswind gust" placeholderTextColor={theme.sub} />
+          </View>
+        ) : null}
       </View>
 
-      <TouchableOpacity style={[sx.save, { marginTop: 10 }, (!effDep || !canLdgA) && { opacity: 0.4 }]} disabled={!effDep || !canLdgA} onPress={async () => { if (!(await confirmAction('Save landings?'))) return; save({
-        full_stop_ldgs: 1, touch_go: num(ldg.touch_go) || 0, ldgs_before: oasesCsn,
+      <TouchableOpacity style={[sx.save, { marginTop: 10 }, (!effDep || !canLdgA) && { opacity: 0.4 }]} disabled={!effDep || !canLdgA} onPress={async () => {
+        if (ldg.autoland === 'fail' && !(ldg.autoland_notes || '').trim()) { Alert.alert('Autoland', 'Enter the pilot notes explaining the unsuccessful autoland.'); return; }
+        if (!(await confirmAction('Save landings?'))) return; save({
+        full_stop_ldgs: Number(ldg.full_stop) || 1, touch_go: s.flight_type === 'training' ? (num(ldg.touch_go) || 0) : 0, ldgs_before: oasesCsn,
         this_flight_ldgs: thisLdgs, ldgs_fwd: (oasesCsn || 0) + thisLdgs,
-        autoland_attempted: ldg.autoland_attempted, autoland_ok: ldg.autoland_ok,
+        autoland_ok: ldg.autoland === 'ok', autoland_notes: ldg.autoland === 'fail' ? (ldg.autoland_notes || '').trim() : null,
       }); }}><Text style={sx.saveText}>Save landings</Text></TouchableOpacity>
 
       <Text style={sx.section}>Defects on arrival ({role() === 'mechanic' ? 'MAREP' : 'PIREP'})</Text>
