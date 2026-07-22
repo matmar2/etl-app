@@ -26,6 +26,8 @@ export default function ReportDefectScreen({ route, navigation }: any) {
   const [cdlOpen, setCdlOpen] = useState(false);
   const [ammOpen, setAmmOpen] = useState(false);
   const [lic, setLic] = useState(userLicence() ?? '');   // pre-filled from the user's profile, editable
+  const { userName } = require('../api/client');
+  const [repName, setRepName] = useState<string>(userName?.() ?? '');   // crew reporter — name only
   const [signing, setSigning] = useState(false);
   const [required, setRequired] = useState<string[]>(['title', 'description', 'ata_chapter']);
   const [ammRev, setAmmRev] = useState('');
@@ -90,7 +92,8 @@ export default function ReportDefectScreen({ route, navigation }: any) {
         // captain_clearable is decided server-side from the admin list
         title: title.trim() || undefined, description: desc.trim(),
         ata_chapter: ata.trim() || undefined, blocks_serviceability: blocks,
-        reporter_signature: signature, reporter_licence: lic.trim() || undefined,
+        reporter_signature: signature, reporter_licence: licRequired ? (lic.trim() || undefined) : undefined,
+        reported_by_name: licRequired ? undefined : (repName.trim() || undefined),
         mel_ref: melRef, rect_interval: rectInterval, due_date: dueDate,
       });
       syncPush().catch(() => {});
@@ -163,8 +166,13 @@ export default function ReportDefectScreen({ route, navigation }: any) {
         <Text style={styles.lbl}>Blocks serviceability (AOG)</Text>
         <Switch value={blocks} onValueChange={setBlocks} />
       </View>
-      <Text style={styles.lbl}>Reporter licence / auth no.{licRequired ? ' *' : ' (optional)'}</Text>
-      <TextInput style={styles.input} value={lic} onChangeText={setLic} placeholder="Your licence / authorisation number" placeholderTextColor={theme.sub} />
+      {licRequired ? (<>
+        <Text style={styles.lbl}>Reporter licence / auth no. *</Text>
+        <TextInput style={styles.input} value={lic} onChangeText={setLic} placeholder="Your licence / authorisation number" placeholderTextColor={theme.sub} />
+      </>) : (<>
+        <Text style={styles.lbl}>Name</Text>
+        <TextInput style={styles.input} value={repName} onChangeText={setRepName} placeholder="Reported by (name)" placeholderTextColor={theme.sub} />
+      </>)}
       {missing.length ? <Text style={styles.req}>Required: {missing.map((f) => REQ_LABEL[f] || f).join(', ')}</Text> : null}
       {!canReport ? <Text style={styles.req}>You do not have permission to raise defects.</Text> : null}
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 10 }}>You will confirm and sign to raise the defect{blocks ? '. This makes the aircraft unserviceable.' : '.'}</Text>
