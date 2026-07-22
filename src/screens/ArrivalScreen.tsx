@@ -87,7 +87,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   }
   const oasesCsn = util?.camo?.csn ?? util?.etl?.csn_fc ?? null;   // total cycles (OASES; ETL fallback)
   const oasesTsn = util?.camo?.tsn ?? util?.etl?.tsn_fh ?? null;   // total hours (OASES; ETL fallback)
-  const thisLdgs = (Number(ldg.full_stop) || 1) + (s?.flight_type === 'training' ? (Number(ldg.touch_go) || 0) : 0);   // landings entered + T&G (training only)
+  const thisLdgs = (Number(ldg.full_stop) || 1) + ((s?.flight_type || '').toLowerCase() === 'training' ? (Number(ldg.touch_go) || 0) : 0);   // landings entered + T&G (training only)
   const legFh = s.flight_time_min != null ? Math.round((s.flight_time_min / 60) * 10) / 10 : null;   // this leg flight hours
   const newTsn = oasesTsn != null ? Math.round((oasesTsn + (legFh || 0)) * 10) / 10 : null;   // baseline shows at once; leg FH folds in once takeoff+landing are stamped
   const newCsn = oasesCsn != null ? oasesCsn + thisLdgs : null;
@@ -306,7 +306,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
               style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canLdgA ? 1 : 0.5 }}
               value={String(ldg.full_stop ?? '1')} onChangeText={(v) => setLdg({ ...ldg, full_stop: numericOnly(v, false) })} />
           </View>
-          {s.flight_type === 'training' ? (<>
+          {(s.flight_type || '').toLowerCase() === 'training' ? (<>
           <View style={{ minWidth: 110 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Touch &amp; go</Text>
             <View style={{ minHeight: 44, justifyContent: 'center' }}>
@@ -362,7 +362,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <TouchableOpacity style={[sx.save, { marginTop: 10 }, (!effDep || !canLdgA) && { opacity: 0.4 }]} disabled={!effDep || !canLdgA} onPress={async () => {
         if (ldg.autoland === 'fail' && !(ldg.autoland_notes || '').trim()) { Alert.alert('Autoland', 'Enter the pilot notes explaining the unsuccessful autoland.'); return; }
         if (!(await confirmAction('Save landings?'))) return; save({
-        full_stop_ldgs: Number(ldg.full_stop) || 1, touch_go: s.flight_type === 'training' ? (num(ldg.touch_go) || 0) : 0, ldgs_before: oasesCsn,
+        full_stop_ldgs: Number(ldg.full_stop) || 1, touch_go: (s.flight_type || '').toLowerCase() === 'training' ? (num(ldg.touch_go) || 0) : 0, ldgs_before: oasesCsn,
         this_flight_ldgs: thisLdgs, ldgs_fwd: (oasesCsn || 0) + thisLdgs,
         autoland_ok: ldg.autoland === 'ok', autoland_notes: ldg.autoland === 'fail' ? (ldg.autoland_notes || '').trim() : null,
       }); }}><Text style={sx.saveText}>Save landings</Text></TouchableOpacity>
