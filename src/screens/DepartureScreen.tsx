@@ -204,14 +204,15 @@ export default function DepartureScreen({ route, navigation }: any) {
     if (testing && !s.released_at && !lagOnly) {
       if (!(await confirmAction('TESTING PHASE — no maintenance CRS on this Tech Log page.\n\nOnce live, maintenance signs the CRS first and the commander accepts on it. During the testing phase your acceptance is allowed without it.', 'Testing phase — acceptance allowed'))) return;
     }
-    if (!(await confirmAction('Confirm commander acceptance — fuel and oil as required, aircraft acceptable for service?', 'Commander acceptance'))) return;
+    if (!(await confirmAction('Commander acceptance — I confirm the aircraft is SERVICEABLE: all defects are rectified or properly deferred, all due maintenance tasks and checks are completed, and the fuel and oil onboard are as required. Sign to accept the aircraft for this flight.', 'Commander acceptance'))) return;
     try {
       // Committing the departure makes this an active TL page — allocate its number now (works offline)
       // so the completed sector prints its full TL # even before it syncs.
       if (!s.page_no) { const n = await allocateTl(currentAircraft()?.registration || s.aircraft_id); if (n) await save({ page_no: n }); }
-      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted')); refresh();
+      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
     }
-    catch { setSignMsg('Could not accept — try again'); }
+    catch (e: any) { setSignMsg(e?.message || 'Could not accept — try again'); return; }
+    refresh().catch(() => {});   // a refresh hiccup must never read as a failed acceptance
   }
 
   // Delayed-OASES trial path visible in the RENDER too: check-only reasons + no blocking
