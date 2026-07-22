@@ -41,6 +41,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   useEffect(() => { publicConfig().then((c: any) => setTesting(!!c.testing_mode)).catch(() => {}); }, []);
 
   async function checkGps(arr?: string) {
+    if (!s?.landing) return;   // the airport check runs only once ON (landing) is entered
     const eff = (s?.diverted && s?.diversion_airport) ? s.diversion_airport : s?.arr;   // diverted → check the diversion airport
     const code = (arr || eff || '').trim();
     if (!code) return;
@@ -54,7 +55,6 @@ export default function ArrivalScreen({ route, navigation }: any) {
     setRem(s.fuel_remaining_kg);
     setLf(s.landing_fuel_kg);
     setDiv({ on: !!s.diverted, airport: s.diversion_airport || '' });
-    if (s.status !== 'draft') checkGps();   // verify the landing airport (diversion airport if diverted) against device GPS
     loadCabin();
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});   // OASES/CAMO CSN for total cycles
   }, [!!s]);
@@ -244,11 +244,11 @@ export default function ArrivalScreen({ route, navigation }: any) {
           : far ? `⚠ GPS is ${g.km} km from ${landApt} (${g.name}) — landing airport looks incorrect. If diverted, switch on Diversion above and enter the airport.`
           : g.state === 'nogps' ? `ⓘ Optional GPS cross-check skipped — the iPad has no position fix (${g.msg || 'offline or indoors'}). The landing airport is not affected.`
           : g.state === 'error' ? `Cannot verify — ${g.msg}.`
-          : 'Tap to verify the landing airport against device GPS.';
+          : 'Checks automatically against device GPS once ON (landing) is entered.';
         return (
           <View style={{ backgroundColor: bg, borderWidth: 1, borderColor: bc, borderRadius: 8, padding: 10 }}>
             <Text style={{ color: far ? theme.red : ok ? theme.green : theme.text, fontSize: 13, fontWeight: far ? '800' : '600' }}>{txt}</Text>
-            <TouchableOpacity onPress={() => checkGps()} style={{ marginTop: 6 }}><Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12 }}>{g.state === 'checking' ? '…' : 'Re-check GPS'}</Text></TouchableOpacity>
+            {s.landing ? <TouchableOpacity onPress={() => checkGps()} style={{ marginTop: 6 }}><Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12 }}>{g.state === 'checking' ? '…' : 'Re-check GPS'}</Text></TouchableOpacity> : null}
           </View>
         );
       })()}
