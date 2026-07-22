@@ -4,6 +4,26 @@ import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, Ne
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
+  // AUTO-UPDATE at login: aircraft iPads are rarely cold-launched, so the native ON_LOAD check
+  // rarely fires. Here — before sign-in, when a reload costs nothing — we silently download any
+  // published update and relaunch straight into it. The user just sees the login screen refresh.
+  const [updNote, setUpdNote] = useState('');
+  const uRef2 = React.useRef('');
+  useEffect(() => {
+    (async () => {
+      try {
+        const Updates = require('expo-updates');
+        if (!Updates.isEnabled) return;
+        const r = await Updates.checkForUpdateAsync();
+        if (!r.isAvailable) return;
+        setUpdNote('⇩ Updating to the latest version…');
+        await Updates.fetchUpdateAsync();
+        // Only auto-relaunch while the user hasn't started signing in.
+        if (!uRef2.current) { await Updates.reloadAsync(); return; }
+        setUpdNote('Update downloaded — it applies next time the app is fully closed and reopened.');
+      } catch { setUpdNote(''); /* offline or reload unsupported — applies on next launch */ }
+    })();
+  }, []);
   const [u, setU] = useState('');
   const [p, setP] = useState('');
   const [showPwd, setShowPwd] = useState(false);
@@ -11,6 +31,7 @@ export default function LoginScreen({ navigation }: any) {
   const [mfa, setMfa] = useState(false);          // second-factor step
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  useEffect(() => { uRef2.current = u || p; }, [u, p]);
   const [note, setNote] = useState('');
   const [testing, setTesting] = useState(false);
   const [trialNote, setTrialNote] = useState('TESTING PERIOD — use MFA code 123456');
@@ -130,6 +151,7 @@ export default function LoginScreen({ navigation }: any) {
         <Text style={styles.connChk}>● Checking server connection…</Text>
       ) : online ? (
         <Text style={styles.connOk}>● Connected to server</Text>
+        {updNote ? <Text style={{ color: theme.accent, fontSize: 12, textAlign: 'center', marginTop: 4 }}>{updNote}</Text> : null}
       ) : (
         <Text style={styles.connOff}>● No server connection — {offlineReady ? 'offline session ready ✓' : (u.trim() ? 'log in online once to enable offline use' : 'sign in online first')}</Text>
       )}
