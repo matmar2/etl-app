@@ -603,27 +603,36 @@ export default function DepartureScreen({ route, navigation }: any) {
         const badE2 = servBad && need && !hasV(serv.eng2_total);
         const redB = { borderColor: theme.red, borderWidth: 2 };
         return (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start' }}>
-            <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 1 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
-              <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng1)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng1: v === '' ? '' : oilToL(v) }); }} />
-              <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 1 oil (qt) *</Text>
-              <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
+          <View style={{ gap: 12 }}>
+            {/* Row 1 — engine oil UPLIFT */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {([['eng1', 'Eng 1'], ['eng2', 'Eng 2']] as const).map(([key, label]) => (
+                <View key={key} style={{ width: 150 }}>
+                  <View style={topWrap}><Text style={oilLbl}>{`${label} oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
+                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+                </View>
+              ))}
             </View>
-            <View style={{ width: 150 }}>
-              <View style={topWrap}><Text style={oilLbl}>{`Eng 2 oil (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
-              <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv.eng2)} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, eng2: v === '' ? '' : oilToL(v) }); }} />
-              <Text style={[oilLbl, { marginTop: 8 }]}>Total Eng 2 oil (qt) *</Text>
-              <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
+            {/* Row 2 — hydraulic uplift G/B/Y together (quarts like the oil; FCOM minimum shown) */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              {([['hyd_green', 'G', servMin?.hyd_min_green_l], ['hyd_blue', 'B', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Y', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
+                <View key={key} style={{ width: 150 }}>
+                  <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} uplift (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text></View>
+                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+                </View>
+              ))}
             </View>
-            {/* Hydraulic uplift — three separate systems (Green / Blue / Yellow) in QUARTS like the oil;
-                the per-system FCOM minimum is held in litres and shown as qt. Stored canonically in litres. */}
-            {([['hyd_green', 'G', servMin?.hyd_min_green_l], ['hyd_blue', 'B', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Y', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
-              <View key={key} style={{ width: 150 }}>
-                <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text></View>
-                <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+            {/* Row 3 — TOTAL engine oil (mandatory) */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ width: 150 }}>
+                <Text style={oilLbl}>Total Eng 1 oil (qt) *</Text>
+                <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
               </View>
-            ))}
+              <View style={{ width: 150 }}>
+                <Text style={oilLbl}>Total Eng 2 oil (qt) *</Text>
+                <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
+              </View>
+            </View>
           </View>
         );
       })()}
