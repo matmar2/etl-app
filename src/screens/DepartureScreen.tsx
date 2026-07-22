@@ -752,11 +752,19 @@ export default function DepartureScreen({ route, navigation }: any) {
                   )}
                 </View>
               ) : null}
-              {/* CRS button stays visible while unserviceable but is NOT clickable — clear defects first. */}
+              {/* CRS while unserviceable: open defects → locked. Check-lag only (delayed OASES) →
+                  clickable: the Release page shows the conditions and takes the certifying staff's
+                  DOUBLE confirmation before the CRS (mirror of the captain's note). */}
               {can('release', 'crs') ? (
-                <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
-                  <Text style={sx.saveText}>🔧 Maintenance — sign CRS (clear defects first)</Text>
-                </TouchableOpacity>
+                (acSt.blocking_defects === 0 && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))) ? (
+                  <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => navigation.navigate('Release', { sectorId })}>
+                    <Text style={sx.saveText}>🔧 Maintenance — sign CRS (confirm delayed OASES conditions) ›</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.green, marginTop: 8, opacity: 0.4 }]}>
+                    <Text style={sx.saveText}>🔧 Maintenance — sign CRS (clear defects first)</Text>
+                  </TouchableOpacity>
+                )
               ) : null}
             </View>
           ) : !s.released_at ? (
