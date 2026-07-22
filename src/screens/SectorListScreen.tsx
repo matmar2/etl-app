@@ -42,7 +42,7 @@ export default function SectorListScreen({ route, navigation }: any) {
   async function refresh() {                       // instant local view
     await dedupeSectors().catch(() => {});
     setHidden(await hiddenSectorIds().catch(() => new Set<string>()));
-    setSectors(await listSectors());
+    setSectors(await listSectors(reg));
   }
   const pull = useCallback(async () => {           // converge with the server (web ↔ iPad)
     setSectors(await pullSectorList(reg));

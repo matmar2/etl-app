@@ -195,7 +195,11 @@ export default function SignOffScreen({ navigation }: any) {
                 </View>
               ) : null}
             </View>
-            <Text style={s.when}>{g.signed_at?.slice(0, 16).replace('T', ' ')}z</Text>
+            <Text style={s.when}>{(() => {
+              const t = g.signed_at || '';
+              // OASES imports carry a date only (midnight placeholder) — don't show a fake 00:00z time
+              return t.slice(11, 16) === '00:00' ? t.slice(0, 10) : `${t.slice(0, 16).replace('T', ' ')}z`;
+            })()}</Text>
           </TouchableOpacity>
         ))}
       </>)}

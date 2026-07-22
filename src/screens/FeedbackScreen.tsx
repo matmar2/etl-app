@@ -91,7 +91,7 @@ export default function FeedbackScreen() {
         </View>
         <View style={{ flex: 1, minWidth: 200 }}>
           <Text style={s.fieldLbl}>Email address</Text>
-          <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="you@avora.aero" placeholderTextColor={theme.sub}
+          <TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="Your email (any address)" placeholderTextColor={theme.sub}
             autoCapitalize="none" keyboardType="email-address" />
         </View>
       </View>

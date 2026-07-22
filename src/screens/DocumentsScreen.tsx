@@ -33,7 +33,7 @@ export default function DocumentsScreen() {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
-  title: { color: theme.text, fontSize: 20, fontWeight: '800' },
+  title: { color: theme.text, fontSize: 22, fontWeight: '800' },
   sub: { color: theme.sub, marginTop: 6, fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 14, marginTop: 10 },
   name: { color: theme.text, fontWeight: '700', fontSize: 15 },

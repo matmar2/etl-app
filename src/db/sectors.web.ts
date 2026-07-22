@@ -1,7 +1,7 @@
 // Web build: no local SQLite — the sector list/create/read/update talk to the
 // server directly (via the normal sync endpoint + sector GETs). Mirrors the
 // native db/sectors.ts API so the screens are identical across platforms.
-import { deleteServerSector, getServerSector, pushSector, serverSectors } from '../api/client';
+import { currentAircraft, deleteServerSector, getServerSector, pushSector, serverSectors } from '../api/client';
 
 export type Sector = {
   id: string; aircraft_id: string; flight_no?: string; flight_date: string;
@@ -23,8 +23,9 @@ export async function createSector(s: Omit<Sector, 'id' | 'status'>): Promise<Se
   return row;
 }
 
-export async function listSectors(): Promise<Sector[]> {
-  try { return await serverSectors(); } catch { return []; }
+export async function listSectors(reg?: string): Promise<Sector[]> {
+  // Always scope to a tail — an unscoped fetch would flash every aircraft's sectors on first paint.
+  try { return await serverSectors(reg || currentAircraft()?.registration); } catch { return []; }
 }
 
 // Web is already server-live; converging the list is just fetching this tail's sectors.

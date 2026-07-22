@@ -32,6 +32,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
   const [showDone, setShowDone] = useState(false);
   const [viewDays, setViewDays] = useState(15);
   const [badId, setBadId] = useState<string | null>(null);   // incomplete task/field to highlight
+  const [jcOpen, setJcOpen] = useState(false);               // non-mechanics: job-card boilerplate collapsed
   const [amendingId, setAmendingId] = useState<string | null>(null);   // signed check being corrected
   const [amendReason, setAmendReason] = useState('');
   const scrollRef = useRef<ScrollView>(null);
@@ -244,6 +245,12 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
       {!tpl ? <Text style={s.sub}>{msg || 'Loading…'}</Text> : (
         <>
           <Text style={s.sub}>{tpl.title} · {tpl.rev} · validity {tpl.validity_days} days</Text>
+          {!canEdit ? (
+            <TouchableOpacity onPress={() => setJcOpen(!jcOpen)}>
+              <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12, marginTop: 4 }}>{jcOpen ? 'Hide job card details ▾' : 'Job card details (warnings, notes) ›'}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {(canEdit || jcOpen) ? (<>
           {tpl.description ? <Text style={s.descr}>{tpl.description}</Text> : null}
           {tpl.reason ? <Text style={s.descr}>Reason: {tpl.reason}</Text> : null}
           {(tpl.header_notes || []).map((n, i) => (
@@ -251,6 +258,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
               {n.label}: {n.text}
             </Text>
           ))}
+          </>) : null}
           {canEdit && !certified && (<>
           {tpl.sections.map((sec) => (
             <View key={sec.title} style={{ marginTop: 14 }} onLayout={(e) => { secY.current[sec.title] = e.nativeEvent.layout.y; }}>

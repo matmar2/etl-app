@@ -38,7 +38,7 @@ export default function FormsScreen() {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
-  title: { color: theme.text, fontSize: 20, fontWeight: '800' },
+  title: { color: theme.text, fontSize: 22, fontWeight: '800' },
   sub: { color: theme.sub, marginTop: 6, fontSize: 13, lineHeight: 19 },
   empty: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 18, marginTop: 20 },
   emptyTitle: { color: theme.text, fontWeight: '800', fontSize: 16, marginBottom: 6 },

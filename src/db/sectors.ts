@@ -62,9 +62,15 @@ export async function createSector(s: Omit<Sector, 'id' | 'status'>) {
   return row;
 }
 
-export async function listSectors(): Promise<Sector[]> {
+export async function listSectors(reg?: string): Promise<Sector[]> {
   const d = await db();
-  return d.getAllAsync<Sector>('SELECT * FROM sectors ORDER BY flight_date DESC');
+  const rows = await d.getAllAsync<Sector>('SELECT * FROM sectors ORDER BY flight_date DESC');
+  if (!reg) return rows;
+  // Local rows carry the current tail two ways: locally-created sectors store the registration,
+  // server-pulled ones the aircraft UUID (cached per reg at pull time). Anything else belongs to
+  // another tail this device synced before — never show it under this aircraft's list.
+  const { data: uuid } = await getRef<string>(`aircraft_uuid_${reg.toUpperCase()}`);
+  return rows.filter((r: any) => r.aircraft_id === reg || (uuid && r.aircraft_id === uuid));
 }
 
 // Remove one sector. Delete it on the server too so the next pull doesn't re-sync it
@@ -207,6 +213,7 @@ export async function pullSectorList(reg: string): Promise<Sector[]> {
     await syncPush().catch(() => {});                  // flushes the outbox first (incl. queued deletes)
     const server = await serverSectors(reg);
     const d = await db();
+    if ((server as any[]).length) await setRef(`aircraft_uuid_${reg.toUpperCase()}`, (server as any[])[0].aircraft_id);
     const tombs = new Set(await getTombstones());
     const dirty = (await d.getAllAsync<{ payload: string }>('SELECT payload FROM sectors WHERE dirty = 1')).map((r) => JSON.parse(r.payload));
     const dirtyIds = new Set(dirty.map((x: any) => x.id));
@@ -237,7 +244,7 @@ export async function pullSectorList(reg: string): Promise<Sector[]> {
     const localOnly = dirty.filter((x: any) => !serverIds.has(x.id));   // not yet on the server
     return [...(server as any[]).filter((s) => !tombs.has(s.id)), ...localOnly];
   } catch {
-    return listSectors();                              // offline → local view
+    return listSectors(reg);                           // offline → local view (this tail only)
   }
 }
 
