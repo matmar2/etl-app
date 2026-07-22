@@ -190,6 +190,14 @@ export default function DepartureScreen({ route, navigation }: any) {
       return;
     }
     setBadSet(new Set());
+    // TESTING PHASE: delayed-OASES conditions without the mechanic's CRS — tell the commander
+    // the normal order before letting them accept (server allows it only while testing mode is on).
+    const lagOnly = (acSt?.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))
+      && (acSt?.blocking_defects === 0) && !s.check_override?.mechanic_by;
+    if (lagOnly) {
+      const list = (acSt.reasons || []).join('\n• ');
+      if (!(await confirmAction(`Delayed OASES update — TESTING PHASE\n\nUnder normal circumstances the mechanic must confirm these conditions and sign the CRS FIRST:\n\n• ${list}\n\nDuring the testing phase your acceptance is allowed without it. By continuing you sign off accepting the aircraft for this flight.`, 'Testing phase — acceptance allowed'))) return;
+    }
     if (!(await confirmAction('Confirm commander acceptance — fuel and oil as required, aircraft acceptable for service?', 'Commander acceptance'))) return;
     try {
       // Committing the departure makes this an active TL page — allocate its number now (works offline)
@@ -718,7 +726,7 @@ export default function DepartureScreen({ route, navigation }: any) {
                   {s.check_override?.mechanic_by ? (
                     <Text style={{ color: theme.accent, fontSize: 13, fontWeight: '700', marginTop: 8 }}>✓ Certifying staff ({s.check_override.mechanic_by}) confirmed the conditions and the CRS — you may sign the acceptance below.</Text>
                   ) : (
-                    <Text style={[sx.sub, { marginTop: 8 }]}>Ask Line Maintenance to confirm the conditions and issue the CRS (Release page) — the acceptance opens once the CRS is signed.</Text>
+                    <Text style={[sx.sub, { marginTop: 8 }]}>Normally Line Maintenance confirms these and signs the CRS first (Release page). During the TESTING PHASE you may sign the acceptance without it — you will be prompted.</Text>
                   )}
                 </View>
               ) : null}
