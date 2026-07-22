@@ -251,7 +251,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
               {n.label}: {n.text}
             </Text>
           ))}
-          {!certified && (<>
+          {canEdit && !certified && (<>
           {tpl.sections.map((sec) => (
             <View key={sec.title} style={{ marginTop: 14 }} onLayout={(e) => { secY.current[sec.title] = e.nativeEvent.layout.y; }}>
               <Text style={s.section}>{sec.title}</Text>
@@ -289,7 +289,6 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
           ))}
 
           <Text style={s.section}>{hasInsp ? 'Certification — Mechanic' : 'Certification'}</Text>
-          {!canEdit ? <RoBanner text="only certifying staff (mechanic) may complete checks" /> : null}
           <TextInput style={s.input} editable={canEdit} value={signer} onChangeText={setSigner} placeholder="Mechanic name" placeholderTextColor={theme.sub} />
           <TextInput style={s.input} editable={canEdit} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no." placeholderTextColor={theme.sub} />
           {hasInsp ? (
@@ -354,6 +353,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
             <Text style={[s.sub, { marginTop: 10, color: theme.accent }]}>Recorded offline — the certificate becomes printable here once this iPad syncs with the server.</Text>
           ) : null}
 
+          {!canEdit ? <RoBanner text="checks are completed and certified by maintenance — below are the completed records of this aircraft" /> : null}
           <Text style={s.section}>Completed checks · last {viewDays} days</Text>
           {recent.filter((c) => c.kind === kind).length === 0 ? <Text style={s.sub}>None in the last {viewDays} days.</Text>
             : recent.filter((c) => c.kind === kind).map((c) => (

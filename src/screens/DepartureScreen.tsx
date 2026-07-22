@@ -24,6 +24,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [servMsg, setServMsg] = useState('');
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [signMsg, setSignMsg] = useState('');
+  const [pfiMsg, setPfiMsg] = useState('');
   const [upliftUnit, setUpliftUnit] = useState<'KG' | 'LB' | 'IG' | 'L'>('KG');
   const [upliftManual, setUpliftManual] = useState(false);   // total uplift entered by hand → overrides Σ tanks
   const [upliftText, setUpliftText] = useState('');          // raw text in the box (current unit) — preserves decimals while typing
@@ -672,9 +673,10 @@ export default function DepartureScreen({ route, navigation }: any) {
         <View>
           <Text style={sx.sub}>Walkaround / pre-flight inspection — open the FCOM exterior walkaround, then accept &amp; sign (mechanic or crew).</Text>
           <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginTop: 6 }} value={pfiName} onChangeText={setPfiName} placeholder="Name PFI performed by" placeholderTextColor={theme.sub} />
-          <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => { if (!pfiName.trim()) { setSignMsg('Enter the inspector name.'); return; } setWalkOpen(true); }}>
+          <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => { if (!pfiName.trim()) { setPfiMsg('Enter the name of who performs the PFI.'); return; } setPfiMsg(''); setWalkOpen(true); }}>
             <Text style={sx.saveText}>Open walkaround &amp; sign PFI</Text>
           </TouchableOpacity>
+          {pfiMsg ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6 }}>{pfiMsg}</Text> : null}
         </View>
       )}
 

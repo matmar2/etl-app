@@ -206,7 +206,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
       <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
       <Text style={sx.sub}>{(() => {
-        const mm = (a?: string | null, b?: string | null) => (a && b) ? Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : null;
+        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; let m = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000); if (m < 0 && m > -1440) m += 1440; return Math.max(0, m); };
         return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
       })()}</Text>
 
@@ -277,6 +277,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         {oilMsg ? <Text style={{ color: /saved/.test(oilMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{oilMsg}</Text> : null}
       </View>
 
+      {role() !== 'mechanic' ? (<>
       <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
       <View style={sx.card}>
         <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
@@ -294,6 +295,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         ) : null}
       </View>
 
+      </>) : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['ldg'] = e.nativeEvent.layout.y; }}>Landings (cycles)</Text>
       <View style={sx.card}>
         <Text style={[sx.sub, { marginTop: 0, marginBottom: 10 }]}>One landing per flight — after a go-around with touchdown, enter the actual number of landings. Touch &amp; go applies to TRAINING flights only. Totals update CSN / TSN from the OASES baseline.</Text>
@@ -335,6 +337,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         <Text style={{ color: theme.sub, fontSize: 10, marginTop: 6 }}>{util?.camo ? 'Baseline from OASES' : 'OASES pending — ETL baseline'} · this flight {thisLdgs} cycle(s) (1 landing{Number(ldg.touch_go) > 0 ? ` + ${Number(ldg.touch_go)} touch & go` : ''}) · leg {legFh ?? '—'} h. Posted to CAMO on close.</Text>
       </View>
 
+      {role() !== 'mechanic' ? (<>
       <Text style={sx.section}>Autoland</Text>
       <View style={sx.card}>
         <Text style={sx.sub}>Record only when an autoland was flown to touchdown. A manual take-over (aborted autoland) is NOT recorded.</Text>
@@ -355,6 +358,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         ) : null}
       </View>
 
+      </>) : null}
       <TouchableOpacity style={[sx.save, { marginTop: 10 }, (!effDep || !canLdgA) && { opacity: 0.4 }]} disabled={!effDep || !canLdgA} onPress={async () => {
         if (ldg.autoland === 'fail' && !(ldg.autoland_notes || '').trim()) { Alert.alert('Autoland', 'Enter the pilot notes explaining the unsuccessful autoland.'); return; }
         if (!(await confirmAction('Save landings?'))) return; save({
