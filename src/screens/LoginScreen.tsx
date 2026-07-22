@@ -149,10 +149,10 @@ export default function LoginScreen({ navigation }: any) {
       </View>
       {online === null ? (
         <Text style={styles.connChk}>● Checking server connection…</Text>
-      ) : online ? (
+      ) : online ? (<>
         <Text style={styles.connOk}>● Connected to server</Text>
         {updNote ? <Text style={{ color: theme.accent, fontSize: 12, textAlign: 'center', marginTop: 4 }}>{updNote}</Text> : null}
-      ) : (
+      </>) : (
         <Text style={styles.connOff}>● No server connection — {offlineReady ? 'offline session ready ✓' : (u.trim() ? 'log in online once to enable offline use' : 'sign in online first')}</Text>
       )}
       {mfa ? (

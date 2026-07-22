@@ -208,6 +208,11 @@ export default function DepartureScreen({ route, navigation }: any) {
     catch { setSignMsg('Could not accept — try again'); }
   }
 
+  // Delayed-OASES trial path visible in the RENDER too: check-only reasons + no blocking
+  // defects → the acceptance button is offered (the popup + server decide the rest).
+  const lagOnlyR = !!acSt && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))
+    && acSt.blocking_defects === 0 && !s?.check_override?.mechanic_by;
+
   async function undoAccept() {
     if (!(await confirmAction('Undo the commander acceptance for this departure?', 'Undo acceptance'))) return;
     try { await revokeAcceptance(sectorId); setSignMsg('Acceptance undone'); refresh(); }
@@ -348,6 +353,23 @@ export default function DepartureScreen({ route, navigation }: any) {
           {prevChoice == null ? (
             <Text style={{ color: theme.red, fontSize: 11, marginTop: 6, fontWeight: '700' }}>Departure-fuel calculation is paused until you pick a source.</Text>
           ) : null}
+          {/* The actual on-board reading is independent of which source is right — always enterable. */}
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <View style={{ width: 170 }}>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
+              <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+                keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
+                onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+            </View>
+            <View style={{ width: 170 }}>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Difference vs previous leg (kg)</Text>
+              <View style={{ backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
+                <Text style={{ color: fuelFoundDiff == null ? theme.sub : (fuelFoundDiff < 0 ? theme.red : theme.text), fontWeight: '800' }}>
+                  {fuelFoundDiff == null ? '—' : `${fuelFoundDiff > 0 ? '+' : ''}${fmt(fuelFoundDiff)}${fuelFoundDiff < 0 ? '  (used)' : ''}`}
+                </Text>
+              </View>
+            </View>
+          </View>
         </View>
       ) : prevResolved?.fuel_kg != null ? (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: prevResolved.continuity_ok === false ? theme.red : theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
@@ -757,6 +779,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         </>
       ) : null}
 
+      {(() => null)()}
       <Text style={sx.section}>Commander acceptance</Text>
       {s.status === 'preflight_signed' ? (
         <>
@@ -770,13 +793,13 @@ export default function DepartureScreen({ route, navigation }: any) {
           ) : null}
           {s.takeoff ? <Text style={[sx.sub, { color: theme.sub, marginTop: 8 }]}>Aircraft airborne — acceptance can no longer be undone.</Text> : null}
         </>
-      ) : (acSt && !acSt.serviceable && !(s.check_override && acSt.blocking_defects === 0)) ? (
+      ) : (acSt && !acSt.serviceable && !(((s.check_override?.mechanic_by) || lagOnlyR) && acSt.blocking_defects === 0)) ? (
         <Text style={sx.sub}>Available once the aircraft is serviceable and maintenance has signed the CRS above.</Text>
       ) : (
         <>
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
-          <TouchableOpacity disabled={!isCrew || !s.released_at} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && s.released_at) ? 1 : 0.4 }]} onPress={accept}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
+          <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR)) ? 1 : 0.4 }]} onPress={accept}>
+            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at && !lagOnlyR ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
           </TouchableOpacity>
           <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
         </>
