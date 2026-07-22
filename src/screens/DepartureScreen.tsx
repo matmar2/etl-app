@@ -22,6 +22,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [serv, setServ] = useState<any>({});
   const [servBad, setServBad] = useState(false);      // mandatory total-oil validation
   const [servMsg, setServMsg] = useState('');
+  const [servTotMsg, setServTotMsg] = useState('');
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [signMsg, setSignMsg] = useState('');
   const [pfiMsg, setPfiMsg] = useState('');
@@ -158,7 +159,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   const canCabinDec = can('departure', 'cabin_decision');
   const canAccept = can('departure', 'acceptance');
   const canDep = canFuel;                                // fuel section (kept name for existing refs)
-  const canServ = can('departure', 'servicing');         // servicing — mechanic
+  const canServ = can('departure', 'servicing');         // uplifts — mechanic
+  const canServTot = can('departure', 'servicing_totals'); // total Eng 1/2 oil — pilot or mechanic
   const canIce = can('departure', 'ice');
   const isCrew = canAccept;
 
@@ -631,42 +633,55 @@ export default function DepartureScreen({ route, navigation }: any) {
                 </View>
               ))}
             </View>
-            {/* Row 3 — TOTAL engine oil (mandatory) */}
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ width: 190 }}>
-                <Text style={oilLbl} numberOfLines={1}>Total Eng 1 oil (qt) *</Text>
-                <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} editable={canServ} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
-              </View>
-              <View style={{ width: 190 }}>
-                <Text style={oilLbl} numberOfLines={1}>Total Eng 2 oil (qt) *</Text>
-                <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} editable={canServ} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
-              </View>
-            </View>
           </View>
         );
       })()}
       {servMsg ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6 }}>{servMsg}</Text> : null}
       {canServ ? <TouchableOpacity style={sx.save} onPress={async () => {
-        if (!fuel.nil_oils_fluids && (!hasV(serv.eng1_total) || !hasV(serv.eng2_total))) {
-          setServBad(true); setServMsg('Enter Total Eng 1 oil and Total Eng 2 oil — mandatory (or tick “Nil oils / fluids”).'); return;
-        }
-        setServBad(false); setServMsg('');
         if (!(await confirmAction('Save servicing uplifts?'))) return;
-        const rows = [
-          { system: 'eng1', up: serv.eng1, totQt: serv.eng1_total },   // total in quarts (Airbus oil qty)
-          { system: 'eng2', up: serv.eng2, totQt: serv.eng2_total },
-          { system: 'hyd_green', up: serv.hyd_green, totQt: undefined as any },
-          { system: 'hyd_blue', up: serv.hyd_blue, totQt: undefined as any },
-          { system: 'hyd_yellow', up: serv.hyd_yellow, totQt: undefined as any },
-        ];
-        for (const r of rows) {
-          const up = num(r.up);
-          const tqt = r.totQt != null ? num(r.totQt) : null;
-          const totL = tqt != null ? +(tqt * QT_L).toFixed(2) : null;   // store quarts → litres in depart_lt
-          if (up != null || totL != null) try { await addServicing({ sector_id: sectorId, system: r.system, uplift_lt: up ?? undefined, depart_lt: totL ?? undefined }); } catch {}
+        for (const sys of ['eng1', 'eng2', 'hyd_green', 'hyd_blue', 'hyd_yellow'] as const) {
+          const up = num(serv[sys]);
+          if (up != null) try { await addServicing({ sector_id: sectorId, system: sys, uplift_lt: up }); } catch {}
         }
-        setServMsg('Servicing saved ✓');
-      }}><Text style={sx.saveText}>Save servicing</Text></TouchableOpacity> : null}
+        setServMsg('Uplifts saved ✓');
+      }}><Text style={sx.saveText}>Save servicing uplifts</Text></TouchableOpacity> : null}
+      </View>
+
+      <Text style={sx.section}>Total engine oil (qt)</Text>
+      <View style={sx.card}>
+      {!canServTot ? <RoBanner text="the oil quantity is recorded by flight crew or maintenance" /> : null}
+      <Text style={[sx.sub, { marginTop: 0, marginBottom: 8 }]}>Oil quantity on board at departure — Eng 1 / Eng 2, in quarts. Mandatory unless “Nil oils / fluids” is ticked above.</Text>
+      {(() => {
+        const oilLbl = { color: theme.sub, fontSize: 12, marginBottom: 4 } as const;
+        const oilInput = { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canServTot ? 1 : 0.5 } as const;
+        const need = !fuel.nil_oils_fluids;
+        const redB = { borderColor: theme.red, borderWidth: 2 };
+        return (
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ width: 190 }}>
+              <Text style={oilLbl} numberOfLines={1}>Total Eng 1 oil (qt) *</Text>
+              <TextInput style={[oilInput, servBad && need && !hasV(serv.eng1_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
+            </View>
+            <View style={{ width: 190 }}>
+              <Text style={oilLbl} numberOfLines={1}>Total Eng 2 oil (qt) *</Text>
+              <TextInput style={[oilInput, servBad && need && !hasV(serv.eng2_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
+            </View>
+          </View>
+        );
+      })()}
+      {servTotMsg ? <Text style={{ color: /saved/.test(servTotMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{servTotMsg}</Text> : null}
+      {canServTot ? <TouchableOpacity style={sx.save} onPress={async () => {
+        if (!fuel.nil_oils_fluids && (!hasV(serv.eng1_total) || !hasV(serv.eng2_total))) {
+          setServBad(true); setServTotMsg('Enter Total Eng 1 oil and Total Eng 2 oil — mandatory (or tick “Nil oils / fluids”).'); return;
+        }
+        setServBad(false);
+        if (!(await confirmAction('Save total engine oil?'))) return;
+        for (const [sys, tot] of [['eng1', serv.eng1_total], ['eng2', serv.eng2_total]] as const) {
+          const tqt = num(tot);
+          if (tqt != null) try { await addServicing({ sector_id: sectorId, system: sys, depart_lt: +(tqt * QT_L).toFixed(2) }); } catch {}
+        }
+        setServTotMsg('Total oil saved ✓');
+      }}><Text style={sx.saveText}>Save total oil</Text></TouchableOpacity> : null}
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['pfi'] = e.nativeEvent.layout.y; }}>Pre-Flight Inspection (PFI)</Text>
