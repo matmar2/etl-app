@@ -173,6 +173,32 @@ export default function ArrivalScreen({ route, navigation }: any) {
         )
       ) : null}
 
+      <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
+      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
+      <Text style={sx.sub}>{(() => {
+        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; const t = (x: string) => { const d = new Date(x); return d.getUTCHours() * 60 + d.getUTCMinutes(); }; return ((t(b) - t(a)) % 1440 + 1440) % 1440; };
+        return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
+      })()}</Text>
+
+      {role() !== 'mechanic' ? (<>
+      <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
+      <View style={sx.card}>
+        <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
+          <Switch value={!!s.ice_protect} disabled={!effDep} onValueChange={async (v) => {
+            await save({ ice_protect: v });
+            if (v) navigation.navigate('Deicing', { sectorId });
+          }} /></View>
+        {s.ice_protect ? (
+          <View style={{ marginTop: 8 }}>
+            {s.deice?.code ? <Text style={{ color: theme.text, fontWeight: '700' }}>Anti-icing code: {s.deice.code}</Text> : <Text style={sx.sub}>No de-icing data entered yet.</Text>}
+            <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => navigation.navigate('Deicing', { sectorId })}>
+              <Text style={sx.saveText}>{s.deice?.code ? 'Edit de-icing data' : 'Enter de-icing data'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </View>
+      </>) : null}
+
       <Text style={sx.section}>Diversion</Text>
       <View style={sx.card}>
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
@@ -202,13 +228,6 @@ export default function ArrivalScreen({ route, navigation }: any) {
         {div.on ? <Text style={{ color: theme.accent, fontSize: 11, marginTop: 8 }}>Diverted — landing, fuel &amp; times are at {div.airport || 'the diversion airport'} · planned destination {s.arr || '—'} · next leg starts from {div.airport || 'here'}.</Text>
           : (s.alternate_airport ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 8 }}>Planned alternate (Leon): {s.alternate_airport} — switch on Diverted to use it.</Text> : null)}
       </View>
-
-      <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
-      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
-      <Text style={sx.sub}>{(() => {
-        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; const t = (x: string) => { const d = new Date(x); return d.getUTCHours() * 60 + d.getUTCMinutes(); }; return ((t(b) - t(a)) % 1440 + 1440) % 1440; };
-        return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
-      })()}</Text>
 
       <Text style={sx.section}>Landing airport check (GPS){div.on ? ' — diverted' : ''}</Text>
       {(() => {
@@ -277,25 +296,6 @@ export default function ArrivalScreen({ route, navigation }: any) {
         {oilMsg ? <Text style={{ color: /saved/.test(oilMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{oilMsg}</Text> : null}
       </View>
 
-      {role() !== 'mechanic' ? (<>
-      <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
-      <View style={sx.card}>
-        <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
-          <Switch value={!!s.ice_protect} disabled={!effDep} onValueChange={async (v) => {
-            await save({ ice_protect: v });
-            if (v) navigation.navigate('Deicing', { sectorId });
-          }} /></View>
-        {s.ice_protect ? (
-          <View style={{ marginTop: 8 }}>
-            {s.deice?.code ? <Text style={{ color: theme.text, fontWeight: '700' }}>Anti-icing code: {s.deice.code}</Text> : <Text style={sx.sub}>No de-icing data entered yet.</Text>}
-            <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => navigation.navigate('Deicing', { sectorId })}>
-              <Text style={sx.saveText}>{s.deice?.code ? 'Edit de-icing data' : 'Enter de-icing data'}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-
-      </>) : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['ldg'] = e.nativeEvent.layout.y; }}>Landings (cycles)</Text>
       <View style={sx.card}>
         <Text style={[sx.sub, { marginTop: 0, marginBottom: 10 }]}>One landing per flight — after a go-around with touchdown, enter the actual number of landings. Touch &amp; go applies to TRAINING flights only. Totals update CSN / TSN from the OASES baseline.</Text>
