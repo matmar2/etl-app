@@ -206,7 +206,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
       <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
       <Text style={sx.sub}>{(() => {
-        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; let m = Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000); if (m < 0 && m > -1440) m += 1440; return Math.max(0, m); };
+        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; const t = (x: string) => { const d = new Date(x); return d.getUTCHours() * 60 + d.getUTCMinutes(); }; return ((t(b) - t(a)) % 1440 + 1440) % 1440; };
         return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
       })()}</Text>
 
