@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, revokeAcceptance, signRecord, Tank, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -25,6 +25,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [signMsg, setSignMsg] = useState('');
   const [pfiMsg, setPfiMsg] = useState('');
+  const [testing, setTesting] = useState(false);
+  useEffect(() => { publicConfig().then((c: any) => setTesting(!!c.testing_mode)).catch(() => {}); }, []);
   const [upliftUnit, setUpliftUnit] = useState<'KG' | 'LB' | 'IG' | 'L'>('KG');
   const [upliftManual, setUpliftManual] = useState(false);   // total uplift entered by hand → overrides Σ tanks
   const [upliftText, setUpliftText] = useState('');          // raw text in the box (current unit) — preserves decimals while typing
@@ -39,7 +41,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
   const [servMin, setServMin] = useState<any>(null);
   const [tankEntry, setTankEntry] = useState(false);   // admin: per-tank boxes on the iPad (crew default = total only)
-  const [pfiName, setPfiName] = useState('');
+  const [pfiName, setPfiName] = useState(userName() || '');   // pre-filled with the signed-in user, editable
   const [pfiSigning, setPfiSigning] = useState(false);
   const [walkOpen, setWalkOpen] = useState(false);   // FCOM walkaround page shown before signing the PFI
   const [acSt, setAcSt] = useState<AircraftStatus | null>(null);
@@ -198,6 +200,9 @@ export default function DepartureScreen({ route, navigation }: any) {
     if (lagOnly) {
       const list = (acSt.reasons || []).join('\n• ');
       if (!(await confirmAction(`Delayed OASES update — TESTING PHASE\n\nUnder normal circumstances the mechanic must confirm these conditions and sign the CRS FIRST:\n\n• ${list}\n\nDuring the testing phase your acceptance is allowed without it. By continuing you sign off accepting the aircraft for this flight.`, 'Testing phase — acceptance allowed'))) return;
+    }
+    if (testing && !s.released_at && !lagOnly) {
+      if (!(await confirmAction('TESTING PHASE — no maintenance CRS on this Tech Log page.\n\nOnce live, maintenance signs the CRS first and the commander accepts on it. During the testing phase your acceptance is allowed without it.', 'Testing phase — acceptance allowed'))) return;
     }
     if (!(await confirmAction('Confirm commander acceptance — fuel and oil as required, aircraft acceptable for service?', 'Commander acceptance'))) return;
     try {
@@ -804,8 +809,8 @@ export default function DepartureScreen({ route, navigation }: any) {
       ) : (
         <>
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
-          <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR)) ? 1 : 0.4 }]} onPress={accept}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at && !lagOnlyR ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
+          <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR && !testing)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR || testing)) ? 1 : 0.4 }]} onPress={accept}>
+            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
           </TouchableOpacity>
           <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
         </>
@@ -815,7 +820,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         onAccept={() => { setWalkOpen(false); setPfiSigning(true); }} />
       <SignaturePad visible={pfiSigning} title="Sign Pre-Flight Inspection"
         onClose={() => setPfiSigning(false)}
-        onDone={(sig) => { setPfiSigning(false); save({ pfi_at: new Date().toISOString(), pfi_by: pfiName.trim(), pfi_signature: sig }); setSignMsg('PFI recorded ✓'); }} />
+        onDone={(sig) => { setPfiSigning(false); save({ pfi_at: new Date().toISOString(), pfi_by: pfiName.trim(), pfi_signature: sig }); }} />
     </ScrollView>
   );
 }
