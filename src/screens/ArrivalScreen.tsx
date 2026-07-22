@@ -58,6 +58,8 @@ export default function ArrivalScreen({ route, navigation }: any) {
     loadCabin();
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});   // OASES/CAMO CSN for total cycles
   }, [!!s]);
+  // Run the landing-airport GPS check automatically the moment ON (landing) is entered
+  useEffect(() => { if (s?.landing) checkGps(); }, [s?.landing]);
   function loadCabin() {
     const reg = s?.aircraft_id; if (!reg) return;
     listActiveDefects(reg).then((ds: any[]) => setCabinPending(ds.filter((d) => d.area === 'cabin' && d.dispatch_accepted == null && d.status !== 'closed'))).catch(() => {});
