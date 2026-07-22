@@ -607,8 +607,8 @@ export default function DepartureScreen({ route, navigation }: any) {
             {/* Row 1 — engine oil UPLIFT */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               {([['eng1', 'Eng 1'], ['eng2', 'Eng 2']] as const).map(([key, label]) => (
-                <View key={key} style={{ width: 150 }}>
-                  <View style={topWrap}><Text style={oilLbl}>{`${label} oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text></View>
+                <View key={key} style={{ width: 190 }}>
+                  <Text style={oilLbl} numberOfLines={1}>{`${label} oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text>
                   <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
                 </View>
               ))}
@@ -616,20 +616,20 @@ export default function DepartureScreen({ route, navigation }: any) {
             {/* Row 2 — hydraulic uplift G/B/Y together (quarts like the oil; FCOM minimum shown) */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
               {([['hyd_green', 'G', servMin?.hyd_min_green_l], ['hyd_blue', 'B', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Y', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
-                <View key={key} style={{ width: 150 }}>
-                  <View style={topWrap}><Text style={oilLbl}>{`Hyd ${label} uplift (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text></View>
+                <View key={key} style={{ width: 190 }}>
+                  <Text style={oilLbl} numberOfLines={1}>{`Hyd ${label} uplift (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text>
                   <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
                 </View>
               ))}
             </View>
             {/* Row 3 — TOTAL engine oil (mandatory) */}
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              <View style={{ width: 150 }}>
-                <Text style={oilLbl}>Total Eng 1 oil (qt) *</Text>
+              <View style={{ width: 190 }}>
+                <Text style={oilLbl} numberOfLines={1}>Total Eng 1 oil (qt) *</Text>
                 <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
               </View>
-              <View style={{ width: 150 }}>
-                <Text style={oilLbl}>Total Eng 2 oil (qt) *</Text>
+              <View style={{ width: 190 }}>
+                <Text style={oilLbl} numberOfLines={1}>Total Eng 2 oil (qt) *</Text>
                 <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
               </View>
             </View>
