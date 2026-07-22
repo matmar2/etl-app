@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Updates from 'expo-updates';
 import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
 import { theme } from '../theme';
 
@@ -10,14 +11,29 @@ export default function LoginScreen({ navigation }: any) {
   const [updNote, setUpdNote] = useState('');
   const uRef2 = React.useRef('');
   const updReadyRef = React.useRef(false);
+  const updPromiseRef = React.useRef<Promise<void> | null>(null);   // in-flight check+download
   const applyUpdate = async () => {
+    // Sign-in may win the race against the download — give it a moment to finish so a fresh
+    // login always lands on the latest version (cap the wait; a slow link must not block entry).
+    if (!updReadyRef.current && updPromiseRef.current) {
+      await Promise.race([updPromiseRef.current, new Promise((res) => setTimeout(res, 4000))]);
+    }
     if (!updReadyRef.current) return false;
-    try { const Updates = require('expo-updates'); await Updates.reloadAsync(); return true; } catch { return false; }
+    try { await Updates.reloadAsync(); return true; } catch { return false; }
   };
+  // An OTA that finished downloading DURING the previous session sits "pending": the update check
+  // below reports nothing new, so without this the star would survive a fresh login. The login
+  // screen is the one place reloadAsync is proven safe — apply the pending bundle here.
+  const updState = Updates.useUpdates();
   useEffect(() => {
-    (async () => {
+    if (!Updates.isEnabled || !updState.isUpdatePending) return;
+    if (!uRef2.current) { Updates.reloadAsync().catch(() => {}); return; }
+    updReadyRef.current = true;
+    setUpdNote('⇩ Latest version downloaded — applied automatically after sign-in.');
+  }, [updState.isUpdatePending]);
+  useEffect(() => {
+    updPromiseRef.current = (async () => {
       try {
-        const Updates = require('expo-updates');
         if (!Updates.isEnabled) return;
         const r = await Updates.checkForUpdateAsync();
         if (!r.isAvailable) return;
