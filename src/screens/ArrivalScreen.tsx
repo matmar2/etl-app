@@ -152,7 +152,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <SyncBlock visible={syncing} />
-      <Text style={sx.title}>After Departure closed / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={sx.title}>After Captain Sign off / Departure / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}
