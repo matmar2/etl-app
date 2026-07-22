@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -23,6 +23,21 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [servBad, setServBad] = useState(false);      // mandatory total-oil validation
   const [servMsg, setServMsg] = useState('');
   const [servTotMsg, setServTotMsg] = useState('');
+  const [oilCarry, setOilCarry] = useState('');       // note: totals carried over from the previous arrival
+  const oilCarryDone = useRef(false);
+  useEffect(() => {   // carry the previous leg's ARRIVAL oil quantity into the totals (editable)
+    if (oilCarryDone.current || !s) return;
+    oilCarryDone.current = true;
+    lastArrivalOil(currentAircraft()?.registration || s.aircraft_id).then((r: any) => {
+      if (!r || (r.eng1_lt == null && r.eng2_lt == null)) return;
+      const qt = (lv: any) => (lv == null ? '' : String(Math.round((Number(lv) / 0.946353) * 10) / 10));
+      setServ((prev: any) => {
+        if (prev.eng1_total || prev.eng2_total) return prev;   // never overwrite an entry
+        setOilCarry(`Carried over from ${r.flight_no} arrival (${r.flight_date}) — check and adjust if needed.`);
+        return { ...prev, eng1_total: qt(r.eng1_lt), eng2_total: qt(r.eng2_lt) };
+      });
+    }).catch(() => {});
+  }, [!!s]);
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [signMsg, setSignMsg] = useState('');
   const [pfiMsg, setPfiMsg] = useState('');
@@ -104,6 +119,23 @@ export default function DepartureScreen({ route, navigation }: any) {
       }
     }).catch(() => {});
   }, [!!s]);
+
+  // Opening an ALREADY-ACCEPTED departure: offer to reset the sign off (edit + sign again) or
+  // view only. Only while the flight is still open — never once airborne or closed.
+  const acceptPrompted = useRef(false);
+  useEffect(() => {
+    if (acceptPrompted.current || !s) return;
+    if (s.status !== 'preflight_signed' || s.takeoff || !can('departure', 'acceptance')) return;
+    acceptPrompted.current = true;
+    (async () => {
+      const reset = await confirmAction(
+        'This departure is already signed (Commander acceptance).\n\nReset the sign off to make changes — you must sign again before flight — or keep it view-only?\n\nOK = Reset sign off · Cancel = View only',
+        'Flight already accepted');
+      if (!reset) return;
+      try { await revokeAcceptance(sectorId); setSignMsg('Sign off reset — make your changes, then sign again.'); refresh(); }
+      catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot reset — flight is airborne' : (e?.message || 'Could not reset')); }
+    })();
+  }, [s?.status]);
 
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
   const QT_L = 0.946353;                                  // US quart -> litre; oil stored canonically in L
@@ -650,11 +682,12 @@ export default function DepartureScreen({ route, navigation }: any) {
       <Text style={sx.section}>Total engine oil (qt)</Text>
       <View style={sx.card}>
       {!canServTot ? <RoBanner text="the oil quantity is recorded by flight crew or maintenance" /> : null}
-      <Text style={[sx.sub, { marginTop: 0, marginBottom: 8 }]}>Oil quantity on board at departure — Eng 1 / Eng 2, in quarts. Mandatory unless “Nil oils / fluids” is ticked above.</Text>
+      <Text style={[sx.sub, { marginTop: 0, marginBottom: 8 }]}>Oil quantity on board at departure — Eng 1 / Eng 2, in quarts. Recorded every leg, independent of servicing — the quantity can be low with no uplift (e.g. a leak).</Text>
+      {oilCarry ? <Text style={{ color: theme.accent, fontSize: 11, marginBottom: 8 }}>{oilCarry}</Text> : null}
       {(() => {
         const oilLbl = { color: theme.sub, fontSize: 12, marginBottom: 4 } as const;
         const oilInput = { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canServTot ? 1 : 0.5 } as const;
-        const need = !fuel.nil_oils_fluids;
+        const need = true;   // totals are independent of the servicing Nil switch (a leak shows with no uplift)
         const redB = { borderColor: theme.red, borderWidth: 2 };
         return (
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -671,8 +704,8 @@ export default function DepartureScreen({ route, navigation }: any) {
       })()}
       {servTotMsg ? <Text style={{ color: /saved/.test(servTotMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{servTotMsg}</Text> : null}
       {canServTot ? <TouchableOpacity style={sx.save} onPress={async () => {
-        if (!fuel.nil_oils_fluids && (!hasV(serv.eng1_total) || !hasV(serv.eng2_total))) {
-          setServBad(true); setServTotMsg('Enter Total Eng 1 oil and Total Eng 2 oil — mandatory (or tick “Nil oils / fluids”).'); return;
+        if (!hasV(serv.eng1_total) || !hasV(serv.eng2_total)) {
+          setServBad(true); setServTotMsg('Enter Total Eng 1 oil and Total Eng 2 oil — mandatory every leg.'); return;
         }
         setServBad(false);
         if (!(await confirmAction('Save total engine oil?'))) return;
