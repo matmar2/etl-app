@@ -203,8 +203,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
           : (s.alternate_airport ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 8 }}>Planned alternate (Leon): {s.alternate_airport} — switch on Diverted to use it.</Text> : null)}
       </View>
 
-      <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OFF / ON / IN)</Text>
-      <Text style={[sx.sub, { marginTop: 0 }]}>Take-off (OFF): stamp at brake release — the start of the take-off roll, not at rotation.</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
       <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
       <Text style={sx.sub}>Block {hm(s.block_time_min)} · Flight {hm(s.flight_time_min)} (h:mm)</Text>
 

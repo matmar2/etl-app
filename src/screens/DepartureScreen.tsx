@@ -324,9 +324,8 @@ export default function DepartureScreen({ route, navigation }: any) {
         );
       })()}
 
-      <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Off-block (OUT)</Text>
 
-      {!canDep ? <RoBanner text="fuel, off-block and acceptance are entered by flight crew" /> : null}
+      {!canDep ? <RoBanner text="fuel and acceptance are entered by flight crew" /> : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['fuel'] = e.nativeEvent.layout.y; }}>Departure fuel</Text>
       {prevDiverge ? (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 10, marginBottom: 8 }}>
