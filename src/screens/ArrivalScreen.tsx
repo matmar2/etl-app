@@ -58,8 +58,10 @@ export default function ArrivalScreen({ route, navigation }: any) {
     loadCabin();
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});   // OASES/CAMO CSN for total cycles
   }, [!!s]);
-  // Run the landing-airport GPS check automatically the moment ON (landing) is entered
-  useEffect(() => { if (s?.landing) checkGps(); }, [s?.landing]);
+  // Run the landing-airport GPS check automatically the moment ON (landing) is entered,
+  // and re-run it when the diversion state or airport changes — the target is the
+  // destination airport, or the diversion airport when the flight diverted.
+  useEffect(() => { if (s?.landing) checkGps(); }, [s?.landing, s?.diverted, s?.diversion_airport]);
   function loadCabin() {
     const reg = s?.aircraft_id; if (!reg) return;
     listActiveDefects(reg).then((ds: any[]) => setCabinPending(ds.filter((d) => d.area === 'cabin' && d.dispatch_accepted == null && d.status !== 'closed'))).catch(() => {});
@@ -211,7 +213,6 @@ export default function ArrivalScreen({ route, navigation }: any) {
                 const apt = v ? (div.airport || s.alternate_airport || '') : div.airport;   // default to Leon alternate
                 setDiv({ on: v, airport: apt });
                 save({ diverted: v, diversion_airport: v ? (apt || null) : null });
-                checkGps(v && apt ? apt : s.arr);
               }} />
             </View>
           </View>
@@ -222,7 +223,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
                 style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, textAlign: 'center', opacity: div.on ? 1 : 0.4 }}
                 value={div.airport} placeholder={div.on ? 'LMML' : '—'} placeholderTextColor={theme.sub}
                 onChangeText={(v) => setDiv({ ...div, airport: v.toUpperCase() })}
-                onEndEditing={() => { save({ diversion_airport: div.airport || null }); if (div.on && div.airport) checkGps(div.airport); }} />
+                onEndEditing={() => save({ diversion_airport: div.airport || null })} />
               {div.on && div.airport ? <IcaoHint code={div.airport} /> : null}
             </View>
           </View>
