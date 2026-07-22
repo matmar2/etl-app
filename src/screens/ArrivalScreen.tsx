@@ -205,7 +205,10 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
       <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
-      <Text style={sx.sub}>Block {hm(s.block_time_min)} · Flight {hm(s.flight_time_min)} (h:mm)</Text>
+      <Text style={sx.sub}>{(() => {
+        const mm = (a?: string | null, b?: string | null) => (a && b) ? Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : null;
+        return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
+      })()}</Text>
 
       <Text style={sx.section}>Landing airport check (GPS){div.on ? ' — diverted' : ''}</Text>
       {(() => {
