@@ -590,9 +590,9 @@ export default function DepartureScreen({ route, navigation }: any) {
       {!canServ ? <RoBanner text="servicing is recorded by maintenance (mechanic)" /> : null}
       <View style={sx.switchRow}>
         <Text style={{ color: theme.sub }}>Nil oils / fluids uplift</Text>
-        <Switch value={!!fuel.nil_oils_fluids} onValueChange={(v) => setFuel({ ...fuel, nil_oils_fluids: v })} />
+        <Switch value={!!fuel.nil_oils_fluids} disabled={!canServ} onValueChange={(v) => setFuel({ ...fuel, nil_oils_fluids: v })} />
       </View>
-      {!fuel.nil_oils_fluids && !serv.eng1 && !serv.eng2 && !serv.hyd_green && !serv.hyd_blue && !serv.hyd_yellow ? (
+      {canServ && !fuel.nil_oils_fluids && !serv.eng1 && !serv.eng2 && !serv.hyd_green && !serv.hyd_blue && !serv.hyd_yellow ? (
         <Text style={{ color: theme.accent, fontSize: 11, marginTop: -2, marginBottom: 8 }}>
           Record an oil / hydraulic uplift below, or tick &ldquo;Nil oils / fluids&rdquo; — required before release.
         </Text>
@@ -606,7 +606,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         // reserve 2 lines so the boxes align under the wrapping Hyd label, but bottom-align the
         // label text so single-line labels sit right above their box (no gap).
         const topWrap = { minHeight: 32, justifyContent: 'flex-end' as const };
-        const oilInput = { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 } as const;
+        const oilInput = { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canServ ? 1 : 0.5 } as const;
         const need = !fuel.nil_oils_fluids;                          // totals mandatory unless Nil oils / fluids
         const badE1 = servBad && need && !hasV(serv.eng1_total);
         const badE2 = servBad && need && !hasV(serv.eng2_total);
@@ -618,7 +618,7 @@ export default function DepartureScreen({ route, navigation }: any) {
               {([['eng1', 'Eng 1'], ['eng2', 'Eng 2']] as const).map(([key, label]) => (
                 <View key={key} style={{ width: 190 }}>
                   <Text style={oilLbl} numberOfLines={1}>{`${label} oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text>
-                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} editable={canServ} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
                 </View>
               ))}
             </View>
@@ -627,7 +627,7 @@ export default function DepartureScreen({ route, navigation }: any) {
               {([['hyd_green', 'G', servMin?.hyd_min_green_l], ['hyd_blue', 'B', servMin?.hyd_min_blue_l], ['hyd_yellow', 'Y', servMin?.hyd_min_yellow_l]] as const).map(([key, label, minL]) => (
                 <View key={key} style={{ width: 190 }}>
                   <Text style={oilLbl} numberOfLines={1}>{`Hyd ${label} uplift (${oilUnitLbl})${minL != null ? ` · min ${qtOf(minL)}` : ''}`}</Text>
-                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
+                  <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} editable={canServ} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
                 </View>
               ))}
             </View>
@@ -635,11 +635,11 @@ export default function DepartureScreen({ route, navigation }: any) {
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ width: 190 }}>
                 <Text style={oilLbl} numberOfLines={1}>Total Eng 1 oil (qt) *</Text>
-                <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
+                <TextInput style={[oilInput, badE1 ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} editable={canServ} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
               </View>
               <View style={{ width: 190 }}>
                 <Text style={oilLbl} numberOfLines={1}>Total Eng 2 oil (qt) *</Text>
-                <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
+                <TextInput style={[oilInput, badE2 ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} editable={canServ} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
               </View>
             </View>
           </View>
