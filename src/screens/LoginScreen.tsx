@@ -9,6 +9,11 @@ export default function LoginScreen({ navigation }: any) {
   // published update and relaunch straight into it. The user just sees the login screen refresh.
   const [updNote, setUpdNote] = useState('');
   const uRef2 = React.useRef('');
+  const updReadyRef = React.useRef(false);
+  const applyUpdate = async () => {
+    if (!updReadyRef.current) return false;
+    try { const Updates = require('expo-updates'); await Updates.reloadAsync(); return true; } catch { return false; }
+  };
   useEffect(() => {
     (async () => {
       try {
@@ -18,9 +23,10 @@ export default function LoginScreen({ navigation }: any) {
         if (!r.isAvailable) return;
         setUpdNote('⇩ Updating to the latest version…');
         await Updates.fetchUpdateAsync();
-        // Only auto-relaunch while the user hasn't started signing in.
+        // Not typing yet → relaunch now. Mid-entry → mark ready; applied right after sign-in.
         if (!uRef2.current) { await Updates.reloadAsync(); return; }
-        setUpdNote('Update downloaded — it applies next time the app is fully closed and reopened.');
+        updReadyRef.current = true;
+        setUpdNote('⇩ Latest version downloaded — applied automatically after sign-in.');
       } catch { setUpdNote(''); /* offline or reload unsupported — applies on next launch */ }
     })();
   }, []);
@@ -60,12 +66,14 @@ export default function LoginScreen({ navigation }: any) {
     try {
       const r = await login(u.trim(), p, mfa ? otp.trim() : undefined);
       if (r.mfa_enrollment_required) { navigation.replace('MfaSetup'); return; }
+      if (await applyUpdate()) return;   // relaunches into the new version, already signed in
       navigation.replace('Menu');
     } catch (e: any) {
       if (e instanceof MfaRequired) { setMfa(true); setErr(''); setNote('Enter your authenticator code.'); }
       else if (e instanceof NetworkError) {           // no signal — verify against the cached offline session
         try {
           await loginOffline(u.trim(), p, mfa ? otp.trim() : undefined);
+          if (await applyUpdate()) return;
           navigation.replace('Menu');
         } catch (e2: any) {
           if (e2 instanceof MfaRequired) { setMfa(true); setErr(''); setNote('Offline — enter your authenticator code.'); }

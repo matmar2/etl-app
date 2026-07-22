@@ -55,7 +55,6 @@ async function runOfflinePrep(reg?: string) {
   finally { _offlineRunning = false; }
 }
 
-let _loginUpdateNoticeShown = false;       // login "please update" pop-up — once per app session
 
 function fmtLeft(c: CheckStatus): string {
   if (!c.baseline) return 'not recorded';
@@ -168,23 +167,8 @@ export default function MainMenuScreen({ navigation }: any) {
     } finally { setChecking(false); }
   }
 
-  // On login, tell the user which bundle this iPad is running and — if a newer version is
-  // waiting — remind them to update. Once per app session, shortly after the menu appears.
-  useEffect(() => {
-    if (_loginUpdateNoticeShown || !Updates.isEnabled) return;
-    const t = setTimeout(async () => {
-      if (_loginUpdateNoticeShown) return;
-      _loginUpdateNoticeShown = true;
-      let avail = upd.isUpdateAvailable || upd.isUpdatePending;
-      if (!avail) { try { avail = (await Updates.checkForUpdateAsync()).isAvailable; } catch { /* offline */ } }
-      if (!avail) return;                                   // up to date → no interruption
-      const bundle = (Constants.expoConfig as any)?.extra?.commit || '—';
-      const msg = `A newer version of the ETL is available.\n\nThis iPad is running Bundle ${bundle}. To get the latest, tap "⇩ Update" at the top of the menu, then FULLY close and reopen the app — you stay signed in.`;
-      if (await confirmAction(msg, 'Please update the app')) checkForUpdate();
-    }, 2500);
-    return () => clearTimeout(t);
-  }, []);
-
+  // Updates apply automatically at sign-in (LoginScreen). No popup here — the red star on
+  // ⇩ Update stays as the silent indicator for updates published mid-session.
   function loadCounts(reg: string) {
     return Promise.all([
       Promise.all([listActiveDefects(reg).catch(() => []), listHIL(reg).catch(() => [])])
