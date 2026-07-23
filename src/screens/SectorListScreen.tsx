@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, sectorTlHtmlCached, syncPush } from '../api/client';
+import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, role, sectorTlHtmlCached, syncPush } from '../api/client';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
@@ -14,6 +14,7 @@ const REFRESH_MS = 60000;
 
 export default function SectorListScreen({ route, navigation }: any) {
   const reg = route?.params?.aircraftId ?? 'LZ-FSA';
+  const isAdmin = role() === 'admin' || role() === 'camo';   // may force-remove a signed/closed record
   const [flights, setFlights] = useState<LeonFlight[]>([]);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
@@ -250,17 +251,24 @@ export default function SectorListScreen({ route, navigation }: any) {
     if (!(await confirmAction(`Remove ${s.flight_no} (${s.flight_date})?`, 'Remove sector'))) return;
     try { await deleteSector(s.id); setStatus(`Removed ${s.flight_no}`); pull(); return; }
     catch (e: any) {
-      // Released/exported records can never be DELETED (airworthiness/OASES record). Offer to hide
-      // it from this list instead — the record is kept, it just leaves "Your sectors" on this iPad.
-      const undeletable = !e?.message?.includes('409') || !e.message.includes('Force remove');
-      if (undeletable) {
+      const forceable = e?.message?.includes('409') && e.message.includes('Force remove');
+      if (!forceable) {
+        // Released/exported records can never be DELETED (airworthiness/OASES record). Offer to hide
+        // it from this list instead — the record is kept, it just leaves "Your sectors" on this iPad.
         await hideFromList(s, `${s.flight_no} is a released/exported record and can’t be deleted. Remove it from this list only? The Tech Log record is kept.`);
         return;
       }
+      // 409 — closed / signed (a Tech Log record). Admin/CAMO may FORCE-remove it (deletes its
+      // signatures too); crew/mechanics can only hide it (removal needs the CAMO Manager).
+      if (isAdmin) {
+        if (await confirmAction(`${s.flight_no} is signed/closed — a Tech Log record. FORCE-remove it and delete its signatures? This cannot be undone.`, 'Force remove (admin)')) {
+          try { await deleteSector(s.id, true); setStatus(`Force-removed ${s.flight_no}`); pull(); }
+          catch (e2: any) { setStatus(e2?.message || 'Could not force-remove'); }
+        }
+        return;
+      }
+      await hideFromList(s, `${s.flight_no} is closed or signed — a Tech Log record. Removing it requires the CAMO Manager's approval (back office).\n\nRemove it from THIS list only? The record is kept.`);
     }
-    // 409 — closed / signed. A Tech Log record: deleting it requires the CAMO Manager's approval
-    // (done from the back office, like a CRS reset) — never unilaterally from the iPad.
-    await hideFromList(s, `${s.flight_no} is closed or signed — a Tech Log record. Removing it requires the CAMO Manager's approval (back office).\n\nRemove it from THIS list only? The record is kept.`);
   }
   async function clearList() {
     if (!(await confirmAction('Remove all sectors from this list? Released / closed / signed ones are kept; unsynced work on the iPad is kept.', 'Clear list'))) return;
