@@ -142,7 +142,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         </>
       ) : null}
 
-      {!isMaint ? (
+      {/* Hidden for roles without departure/arrival access (permission-matrix — e.g. cabin crew,
+          whose only task on a sector is reporting cabin defects via the button above). */}
+      {!isMaint && access('departure') !== 'none' ? (
       <TouchableOpacity style={[styles.card, { borderColor: depDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Departure', { sectorId })}>
         <Text style={styles.cardTitle}>Departure  ›</Text>
         <Text style={styles.cardSub}>Off-block, fuel, servicing, ice, PIREP defects, commander acceptance</Text>
@@ -150,7 +152,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       </TouchableOpacity>
       ) : null}
 
-      {!isMaint ? (
+      {!isMaint && access('arrival') !== 'none' ? (
       <TouchableOpacity style={[styles.card, { borderColor: arrDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Arrival', { sectorId })}>
         <Text style={styles.cardTitle}>After Captain Sign off / Departure / Arrival  ›</Text>
         <Text style={styles.cardSub}>Take-off (at brake release) / landed / on-block times, fuel, landings, MAREP defects, post-flight acceptance</Text>

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
+import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
@@ -86,6 +86,17 @@ export default function ReleaseScreen({ route, navigation }: any) {
   }
 
   // Sign first, then submit the release with signature (+ MFA code).
+  async function resetReleaseBeforeDep() {
+    if (!(await confirmAction('Reset this CRS to correct the release and sign again?\n\nIf the commander has already accepted, their acceptance is voided — they must approve again before flight. Allowed only before the aircraft departs.', 'Reset CRS'))) return;
+    setBusy(true); setMsg('');
+    try {
+      const r: any = await revokeRelease(sectorId);
+      setMsg(r?.acceptance_voided ? 'CRS reset — commander acceptance voided; they must approve again.' : 'CRS reset — make your changes and sign again.');
+      load();
+    } catch (e: any) {
+      setMsg(e?.message?.includes('409') ? 'Cannot reset — the aircraft has departed. Request a correction via Feedback.' : (e?.message || 'Could not reset the CRS.'));
+    } finally { setBusy(false); }
+  }
   async function submitRelease(signature: string) {
     setBusy(true); setMsg('');
     try {
@@ -213,11 +224,19 @@ export default function ReleaseScreen({ route, navigation }: any) {
             <Text style={[s.sub, { color: theme.accent, marginTop: 8 }]}>⏳ CRS reset requested by {st.reset_request.by} — pending CAMO Manager approval.{'\n'}Reason: {st.reset_request.reason}</Text>
           ) : st.reset_request?.status === 'rejected' ? (
             <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>CRS reset request was rejected by CAMO{st.reset_request.review_note ? ` — ${st.reset_request.review_note}` : ''}. The CRS stands.</Text>
+          ) : isMech && !(st as any).departed ? (
+            <View style={{ marginTop: 10 }}>
+              {/* BEFORE DEPARTURE: certifying staff may reset their own CRS to correct + re-sign.
+                  This voids any commander acceptance — the commander must approve again. */}
+              <Text style={s.sub}>Need to change something? <Text style={{ fontWeight: '800' }}>Reset the CRS</Text> to correct the release and sign again. If the commander has already accepted, their acceptance is voided and they must approve again.</Text>
+              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 8 }]} onPress={resetReleaseBeforeDep}>
+                <Text style={[s.btnTxt, { color: theme.red }]}>↺ Reset CRS (before departure)</Text>
+              </TouchableOpacity>
+            </View>
           ) : isMech ? (
             <View style={{ marginTop: 10 }}>
-              {/* CRS corrections are ADMIN-ONLY. Crew request one through the Feedback tile —
-                  no self-service reset from the iPad. */}
-              <Text style={s.sub}>Signed by mistake? A CRS correction is made by the <Text style={{ fontWeight: '800' }}>administrator only</Text>. Send the request — flight, TL # and the full reason — via <Text style={{ fontWeight: '800' }}>Feedback</Text>.</Text>
+              {/* AFTER DEPARTURE: a CRS correction is admin/CAMO-governed — request via Feedback. */}
+              <Text style={s.sub}>The aircraft has departed on this CRS. A correction is now made by the <Text style={{ fontWeight: '800' }}>administrator only</Text> — send the request (flight, TL # and full reason) via <Text style={{ fontWeight: '800' }}>Feedback</Text>.</Text>
               <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Feedback')}>
                 <Text style={s.btnTxt}>Request a correction via Feedback ›</Text>
               </TouchableOpacity>

@@ -125,8 +125,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   const acceptPrompted = useRef(false);
   useEffect(() => {
     if (acceptPrompted.current || !s) return;
-    if (s.status !== 'preflight_signed' || s.takeoff || !can('departure', 'acceptance')) return;
+    // Decide ONCE, on the first load of the sector — so signing during this session (draft →
+    // preflight_signed) can never bounce the crew straight back into the reset prompt.
     acceptPrompted.current = true;
+    if (s.status !== 'preflight_signed' || s.takeoff || !can('departure', 'acceptance')) return;
     (async () => {
       const reset = await confirmAction(
         'This departure is already signed (Commander acceptance).\n\nReset the sign off to make changes — you must sign again before flight — or keep it view-only?\n\nOK = Reset sign off · Cancel = View only',
@@ -135,7 +137,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       try { await revokeAcceptance(sectorId); setSignMsg('Sign off reset — make your changes, then sign again.'); refresh(); }
       catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot reset — flight is airborne' : (e?.message || 'Could not reset')); }
     })();
-  }, [s?.status]);
+  }, [!!s]);
 
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
   const QT_L = 0.946353;                                  // US quart -> litre; oil stored canonically in L

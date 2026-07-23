@@ -550,6 +550,7 @@ export type ReleaseStatus = {
   serviceable: boolean; blockers: DefectBrief[]; deferred: DefectBrief[]; cabin_pending: DefectBrief[];
   released: boolean; release: { by?: string; at?: string; kind?: string; serviceable?: boolean; note?: string };
   reset_request?: { status: string; reason?: string; by?: string; at?: string; review_note?: string; reviewed_by?: string } | null;
+  departed?: boolean;
 };
 // Ground maintenance log: which rectified/closed defects THIS TL page claims (mechanic selects).
 export type ClosingItem = { id: string; ref?: string; title?: string; description?: string; area: string; status: string; at?: string; selected: boolean };
@@ -595,6 +596,8 @@ export const revokeAcceptance = (sectorId: string): Promise<{ status: string }> 
   mutateOrQueue(`/sectors/${sectorId}/revoke-acceptance`, { method: 'POST' });
 export const requestCrsReset = (sectorId: string, reason: string): Promise<{ status: string; id: string }> =>
   mutateOrQueue(`/sectors/${sectorId}/crs-reset-request`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const revokeRelease = (sectorId: string): Promise<{ status: string; acceptance_voided: boolean }> =>
+  mutateOrQueue(`/sectors/${sectorId}/revoke-release`, { method: 'POST' });
 
 export type Correction = { id: string; field?: string; old_value?: string; new_value?: string; reason: string; raised_by_name?: string; raised_at: string; status: string };
 export const listCorrections = (sectorId: string): Promise<Correction[]> => api(`/sectors/${sectorId}/corrections`);
