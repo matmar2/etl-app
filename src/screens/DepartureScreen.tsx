@@ -59,6 +59,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [tankEntry, setTankEntry] = useState(false);   // admin: per-tank boxes on the iPad (crew default = total only)
   const [pfiName, setPfiName] = useState(userName() || '');   // pre-filled with the signed-in user, editable
   const [pfiSigning, setPfiSigning] = useState(false);
+  const [acceptSigning, setAcceptSigning] = useState(false);   // commander-acceptance signature pad open
   const [walkOpen, setWalkOpen] = useState(false);   // FCOM walkaround page shown before signing the PFI
   const [acSt, setAcSt] = useState<AircraftStatus | null>(null);
   const [cabinPending, setCabinPending] = useState<any[]>([]);
@@ -243,11 +244,16 @@ export default function DepartureScreen({ route, navigation }: any) {
       if (!(await confirmAction('The maintenance CRS is NOT signed on this Tech Log page.\n\nOnce live, maintenance completes the servicing and signs the CRS first, and the commander accepts on it. During the testing phase you may proceed — by continuing you confirm the CRS is signed and accept the aircraft for this flight.', 'CRS not signed — confirm to proceed'))) return;
     }
     if (!(await confirmAction('Commander acceptance — I confirm the aircraft is SERVICEABLE: all defects are rectified or properly deferred, all due maintenance tasks and checks are completed, and the fuel and oil onboard are as required. Sign to accept the aircraft for this flight.', 'Commander acceptance'))) return;
+    setAcceptSigning(true);   // open the signature pad — the drawn signature completes the acceptance
+  }
+  async function finishAccept(signature: string) {
+    setAcceptSigning(false);
     try {
       // Committing the departure makes this an active TL page — allocate its number now (works offline)
       // so the completed sector prints its full TL # even before it syncs.
       if (!s.page_no) { const n = await allocateTl(currentAircraft()?.registration || s.aircraft_id); if (n) await save({ page_no: n }); }
-      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId }); setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
+      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
+      setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
     }
     catch (e: any) { setSignMsg(e?.message || 'Could not accept — try again'); return; }
     refresh().catch(() => {});   // a refresh hiccup must never read as a failed acceptance
@@ -863,8 +869,11 @@ export default function DepartureScreen({ route, navigation }: any) {
         <>
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
           <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR && !testing)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR || testing)) ? 1 : 0.4 }]} onPress={accept}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>{signMsg || (!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)')}</Text>
+            <Text style={[sx.saveText, { color: '#1a1300' }]}>{!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)'}</Text>
           </TouchableOpacity>
+          {/* Transient feedback (errors, "undone", offline) — kept OUT of the button label so it
+              never masks the real action the button performs. */}
+          {signMsg ? <Text style={{ color: /Could not|Complete before/.test(signMsg) ? theme.red : theme.sub, fontSize: 12, marginTop: 6 }}>{signMsg}</Text> : null}
           <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
         </>
       )}
@@ -874,6 +883,9 @@ export default function DepartureScreen({ route, navigation }: any) {
       <SignaturePad visible={pfiSigning} title="Sign Pre-Flight Inspection"
         onClose={() => setPfiSigning(false)}
         onDone={(sig) => { setPfiSigning(false); save({ pfi_at: new Date().toISOString(), pfi_by: pfiName.trim(), pfi_signature: sig }); }} />
+      <SignaturePad visible={acceptSigning} title="Sign — Commander acceptance"
+        onClose={() => setAcceptSigning(false)}
+        onDone={(sig) => finishAccept(sig)} />
     </ScrollView>
   );
 }

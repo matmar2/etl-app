@@ -6,6 +6,7 @@ import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
 import RoBanner from '../components/RoBanner';
 import TechLogPageModal from '../components/TechLogPageModal';
+import SignaturePad from '../components/SignaturePad';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
@@ -19,6 +20,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const [rem, setRem] = useState<any>('');
   const [lf, setLf] = useState<any>('');
   const [signMsg, setSignMsg] = useState('');
+  const [acceptSigning, setAcceptSigning] = useState(false);   // post-flight acceptance signature pad
   const [showTlp, setShowTlp] = useState(false);
   const [gps, setGps] = useState<{ state: 'idle' | 'checking' | 'ok' | 'far' | 'nogps' | 'error'; km?: number; name?: string; msg?: string }>({ state: 'idle' });
   const [mand, setMand] = useState<any>({});
@@ -138,13 +140,17 @@ export default function ArrivalScreen({ route, navigation }: any) {
     }
     setBadSet(new Set());
     if (!(await confirmAction('Confirm post-flight acceptance and close this sector?', 'Post-flight acceptance'))) return;
+    setAcceptSigning(true);   // open the signature pad — the drawn signature closes the sector
+  }
+  async function finishAccept(signature: string) {
+    setAcceptSigning(false);
     try {
       // Persist the (mandatory) arrival oil with the closure so a typed-but-unsaved value is never lost.
       const at = new Date().toISOString();
       for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
         if (val) await addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at }).catch(() => {});
       }
-      const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId });
+      const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId, signature_image: signature });
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
       setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
     } catch (e: any) {
@@ -403,10 +409,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
         return (
           <>
             <TouchableOpacity disabled={!canSign} style={[sx.save, { backgroundColor: theme.accent, opacity: canSign ? 1 : 0.4 }]} onPress={accept}>
-              <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : (signMsg || 'Sign — close sector (arrival)')}</Text>
+              <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : 'Sign — close sector (arrival)'}</Text>
             </TouchableOpacity>
             {canAct && missing.length ? (
               <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Complete before signing: {missing.map((x) => x.label).join(', ')}</Text>
+            ) : signMsg ? (
+              <Text style={{ color: /Complete|Could not/.test(signMsg) ? theme.red : theme.sub, fontSize: 12, marginTop: 6 }}>{signMsg}</Text>
             ) : null}
           </>
         );
@@ -418,6 +426,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
         </TouchableOpacity>
       ) : null}
       {showTlp ? <TechLogPageModal sectorId={sectorId} onClose={() => setShowTlp(false)} /> : null}
+      <SignaturePad visible={acceptSigning} title="Sign — Post-flight acceptance"
+        onClose={() => setAcceptSigning(false)}
+        onDone={(sig) => finishAccept(sig)} />
     </ScrollView>
   );
 }
