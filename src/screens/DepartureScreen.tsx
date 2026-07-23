@@ -216,7 +216,9 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('fuel_found_kg', 'Fuel remaining before refuelling', 'fuel', hasV(fuel.fuel_found_kg));
     add('fuel_receipt', 'Fuel receipt photo', 'fuel', receiptN == null ? true : receiptN > 0);   // lenient when offline/unknown
     add('pfi', 'PFI', 'pfi', !!(s.pfi_signature || s.pfi_at));
-    add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
+    // Servicing (oil / Nil) is a MAINTENANCE task — it is enforced on the mechanic's CRS, not on
+    // the commander's acceptance. Only gate the acceptance on it for a role that can do servicing.
+    if (canServ) add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
     return out;
   }
   async function accept() {
@@ -238,7 +240,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       if (!(await confirmAction(`Delayed OASES update — TESTING PHASE\n\nUnder normal circumstances the mechanic must confirm these conditions and sign the CRS FIRST:\n\n• ${list}\n\nDuring the testing phase your acceptance is allowed without it. By continuing you sign off accepting the aircraft for this flight.`, 'Testing phase — acceptance allowed'))) return;
     }
     if (testing && !s.released_at && !lagOnly) {
-      if (!(await confirmAction('TESTING PHASE — no maintenance CRS on this Tech Log page.\n\nOnce live, maintenance signs the CRS first and the commander accepts on it. During the testing phase your acceptance is allowed without it.', 'Testing phase — acceptance allowed'))) return;
+      if (!(await confirmAction('The maintenance CRS is NOT signed on this Tech Log page.\n\nOnce live, maintenance completes the servicing and signs the CRS first, and the commander accepts on it. During the testing phase you may proceed — by continuing you confirm the CRS is signed and accept the aircraft for this flight.', 'CRS not signed — confirm to proceed'))) return;
     }
     if (!(await confirmAction('Commander acceptance — I confirm the aircraft is SERVICEABLE: all defects are rectified or properly deferred, all due maintenance tasks and checks are completed, and the fuel and oil onboard are as required. Sign to accept the aircraft for this flight.', 'Commander acceptance'))) return;
     try {
