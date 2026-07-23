@@ -51,6 +51,8 @@ export default function LoginScreen({ navigation }: any) {
   const [showPwd, setShowPwd] = useState(false);
   const [otp, setOtp] = useState('');
   const [mfa, setMfa] = useState(false);          // second-factor step
+  const otpRef = useRef<TextInput>(null);
+  useEffect(() => { if (mfa) setTimeout(() => otpRef.current?.focus(), 100); }, [mfa]);   // jump the cursor to the code field
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   useEffect(() => { uRef2.current = u || p; }, [u, p]);
@@ -181,7 +183,7 @@ export default function LoginScreen({ navigation }: any) {
       )}
       {mfa ? (
         <>
-          <TextInput style={styles.input} value={otp} onChangeText={setOtp} keyboardType="number-pad"
+          <TextInput ref={otpRef} style={styles.input} value={otp} onChangeText={setOtp} keyboardType="number-pad"
             placeholder="6-digit code (authenticator or email/SMS)" placeholderTextColor={theme.sub}
             returnKeyType="go" onSubmitEditing={() => { if (!busy) submit(); }} />
           <TouchableOpacity onPress={sendOtp}><Text style={styles.link}>Send code by email/SMS instead</Text></TouchableOpacity>
