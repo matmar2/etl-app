@@ -492,7 +492,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         };
         return (
           <View style={{ marginTop: 4 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Actual Total uplift ({upliftUnit})</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Actual Total uplift ({upliftUnit}) in tanks</Text>
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
               <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 150 }}
                 keyboardType="decimal-pad" value={shown}
