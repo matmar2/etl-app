@@ -35,6 +35,26 @@ export async function printServerPdf(path: string): Promise<boolean> {
     return true;
   } catch { return false; }
 }
+// Safari (iPad web app) blocks window.open() once it is called AFTER an await — the user-gesture
+// context from the tap is gone. So callers that must fetch the HTML first open the window
+// SYNCHRONOUSLY at tap time with beginPrint(), then hand the fetched HTML to finishPrint().
+export function beginPrint(): any {
+  if (Platform.OS !== 'web') return null;
+  const w = window.open('', '_blank');
+  if (w) { w.document.write('<!doctype html><meta charset=utf-8><title>Preparing…</title><body style="font:14px sans-serif;padding:24px;color:#333">Preparing document…</body>'); }
+  return w || null;
+}
+export async function finishPrint(handle: any, html: string) {
+  if (Platform.OS === 'web') {
+    const w = handle || window.open('', '_blank');
+    if (!w) return;                                          // popup blocked and no pre-opened handle
+    w.document.open(); w.document.write(html); w.document.close(); w.focus();
+    setTimeout(() => { try { w.print(); } catch {} }, 400);
+    return;
+  }
+  await printHtml(html);                                     // native: expo-print (no popup issue)
+}
+
 export async function printHtml(html: string) {
   if (Platform.OS === 'web') { openInBrowser(html); return; }
   if (_printing) return;                                    // ignore a double-tap while a sheet is open

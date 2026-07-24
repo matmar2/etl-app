@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { access, can, cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listClearedCabin, listHIL, syncPush } from '../api/client';
-import { printHtml } from '../print';
+import { printHtml, beginPrint, finishPrint } from '../print';
 import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
 import { theme } from '../theme';
 
@@ -64,25 +64,27 @@ export default function DefectsScreen({ route, navigation }: any) {
   }
 
   async function printForm(kind: 'hil' | 'cabin') {
+    const win = beginPrint();                                // open the window on the TAP (Safari-safe)
     setNote('Preparing form…');
     try {
       const { html } = kind === 'hil' ? await hilHtml(aircraftId) : await cabinLogHtml(aircraftId);
       setNote('');
-      await printHtml(html);
+      await finishPrint(win, html);
     } catch (e: any) {
-      try { const html = await localForm(kind); setNote(''); await printHtml(html); }   // offline → cached render
-      catch { setNote(e.message || 'Could not load the form'); }
+      try { const html = await localForm(kind); setNote(''); await finishPrint(win, html); }   // offline → cached render
+      catch { if (win) win.close?.(); setNote(e.message || 'Could not load the form'); }
     }
   }
   async function printOne(kind: 'hil' | 'cabin', item: any) {
+    const win = beginPrint();
     setNote('Preparing form…');
     try {
       const { html } = kind === 'hil' ? await hilHtmlOne(item.id) : await cabinLogHtmlOne(item.id);
       setNote('');
-      await printHtml(html);
+      await finishPrint(win, html);
     } catch (e: any) {
-      try { const html = await localForm(kind, [item]); setNote(''); await printHtml(html); }   // offline → single-item render
-      catch { setNote(e.message || 'Could not load the form'); }
+      try { const html = await localForm(kind, [item]); setNote(''); await finishPrint(win, html); }   // offline → single-item render
+      catch { if (win) win.close?.(); setNote(e.message || 'Could not load the form'); }
     }
   }
 
