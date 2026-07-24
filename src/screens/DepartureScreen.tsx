@@ -15,6 +15,11 @@ import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
 
+// A serviceability reason the delayed-OASES bridge can cover (mirrors backend is_oases_lag_reason):
+// 2/10-day check currency OR an overdue hold item. Never open technical / cabin defects.
+const isOasesLagReason = (r: string) => { const rl = (r || '').toLowerCase(); return rl.includes('check') || rl.includes('hold item'); };
+const allLagReasons = (reasons?: string[]) => (reasons || []).length > 0 && (reasons || []).every(isOasesLagReason);
+
 export default function DepartureScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
   const { s, msg, syncing, save, stamp, setManual, clearTime, refresh } = useSector(sectorId);
@@ -234,7 +239,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     setBadSet(new Set());
     // TESTING PHASE: delayed-OASES conditions without the mechanic's CRS — tell the commander
     // the normal order before letting them accept (server allows it only while testing mode is on).
-    const lagOnly = (acSt?.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))
+    const lagOnly = allLagReasons(acSt?.reasons)
       && (acSt?.blocking_defects === 0) && !s.check_override?.mechanic_by;
     if (lagOnly) {
       const list = (acSt.reasons || []).join('\n• ');
@@ -261,7 +266,7 @@ export default function DepartureScreen({ route, navigation }: any) {
 
   // Delayed-OASES trial path visible in the RENDER too: check-only reasons + no blocking
   // defects → the acceptance button is offered (the popup + server decide the rest).
-  const lagOnlyR = !!acSt && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))
+  const lagOnlyR = !!acSt && allLagReasons(acSt.reasons)
     && acSt.blocking_defects === 0 && !s?.check_override?.mechanic_by;
 
   async function undoAccept() {
@@ -784,7 +789,7 @@ export default function DepartureScreen({ route, navigation }: any) {
             <View style={{ backgroundColor: '#3a1111', borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
               {/* State the REAL grounding reasons — open defects AND/OR overdue / not-recorded checks. */}
               <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.reasons?.length ? acSt.reasons.join(' · ') : `${acSt.blocking_defects} open defect(s)`}</Text>
-              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL, and complete any overdue / not-recorded 2/10-day check, before the release. The Tech Log keeps the entered information.</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL, complete any overdue / not-recorded 2/10-day check, and extend or clear any overdue hold item — or, when it is only a delayed OASES update, confirm the conditions below — before the release. The Tech Log keeps the entered information.</Text>
               {acSt.blocking_defects > 0 ? (
                 <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration || s.aircraft_id })}>
                   <Text style={sx.saveText}>View / clear defects</Text>
@@ -799,8 +804,7 @@ export default function DepartureScreen({ route, navigation }: any) {
               {/* TEMPORARY trial bridge (mechanic-led): certifying staff confirm the delayed-OASES
                   conditions and issue the CRS on the Release page; the commander then signs the
                   acceptance on the strength of that CRS. This card only informs the crew. */}
-              {ovEnabled && acSt.blocking_defects === 0
-                && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check')) ? (
+              {ovEnabled && acSt.blocking_defects === 0 && allLagReasons(acSt.reasons) ? (
                 <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 10, paddingTop: 10 }}>
                   <Text style={{ color: theme.text, fontWeight: '800' }}>Delayed OASES update</Text>
                   <Text style={[sx.sub, { marginTop: 4 }]}>The following show UNSERVICEABLE only because the OASES posting is behind:</Text>
@@ -818,7 +822,7 @@ export default function DepartureScreen({ route, navigation }: any) {
                   clickable: the Release page shows the conditions and takes the certifying staff's
                   DOUBLE confirmation before the CRS (mirror of the captain's note). */}
               {can('release', 'crs') ? (
-                (acSt.blocking_defects === 0 && (acSt.reasons || []).length > 0 && (acSt.reasons || []).every((r: string) => r.includes('Check'))) ? (
+                (acSt.blocking_defects === 0 && allLagReasons(acSt.reasons)) ? (
                   <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => navigation.navigate('Release', { sectorId })}>
                     <Text style={sx.saveText}>🔧 Maintenance — sign CRS (confirm delayed OASES conditions) ›</Text>
                   </TouchableOpacity>
