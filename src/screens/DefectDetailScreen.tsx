@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence, userName, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
 import { printHtml, printServerPdf } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -49,6 +49,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [diName, setDiName] = useState('');
   const [diLic, setDiLic] = useState('');
   const [diTask, setDiTask] = useState('');           // what was inspected — required
+  const [ata, setAta] = useState('');                 // maintenance ATA classification (crew raise without it)
   const [diSigning, setDiSigning] = useState(false);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
@@ -116,6 +117,18 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   useEffect(() => {
     ammRevision().then(setAmmRev).catch(() => {});
   }, []);
+  // Reflect the current ATA into the maintenance-classification field when the defect loads.
+  const ataInit = React.useRef(false);
+  useEffect(() => { if (d && !ataInit.current) { ataInit.current = true; setAta(d.ata_chapter || ''); } }, [d]);
+
+  async function saveAta() {
+    setMsg('Saving ATA…');
+    try {
+      const r = await classifyDefect(defectId, ata.trim());
+      setMsg(r?.queued ? 'ATA saved offline — will sync ✓' : 'ATA saved ✓');
+      load();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
+  }
 
   async function act(kind: string, body: any = {}) {
     setMsg('Saving…');
@@ -326,6 +339,21 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         <Text style={[styles.sub, { marginTop: 14 }]}>ℹ︎ Mirrored from OASES. You can rectify or defer it here — the CRS is recorded on a VAW-ETL-01 Tech Log page (preview below).</Text>
       )}
 
+      {isMech && d.status !== 'closed' && d.area !== 'cabin' && (
+        <>
+          <Text style={styles.section}>ATA classification</Text>
+          <Text style={styles.sub}>Crew report the symptom without an ATA — assign or correct it here (maintenance classification).</Text>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 }}>
+            <TextInput style={[styles.input, { flex: 1, marginTop: 0 }]} value={ata} onChangeText={setAta} autoCapitalize="characters"
+              placeholder="ATA ref — e.g. 21‑21‑01" placeholderTextColor={theme.sub} />
+            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, opacity: ata.trim() === (d.ata_chapter || '') ? 0.4 : 1 }]}
+              disabled={ata.trim() === (d.ata_chapter || '')} onPress={saveAta}>
+              <Text style={[styles.act2t, { color: '#1a1300' }]}>Save ATA</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
       {(isMech || canDefer) && d.status !== 'closed' && (
         <>
           <Text style={styles.section}>Maintenance action</Text>
@@ -356,10 +384,16 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               <Text style={styles.sub}>The independent second inspection required for a critical task. The DI signature and its date/time are recorded.</Text>
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                 <TextInput style={[styles.input, { width: 200, minHeight: 0 }]} value={diName} onChangeText={setDiName} placeholder="DI — inspector name *" placeholderTextColor={theme.sub} />
-                <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={diLic} onChangeText={setDiLic} placeholder="DI — licence / auth no" placeholderTextColor={theme.sub} />
+                <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={diLic} onChangeText={setDiLic} placeholder="DI — licence / auth no *" placeholderTextColor={theme.sub} />
                 <TextInput style={[styles.input, { width: 260, minHeight: 0 }]} value={diTask} onChangeText={setDiTask} placeholder="DI — inspected item / task *" placeholderTextColor={theme.sub} />
               </View>
-              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => { if (!diName.trim() || !diTask.trim()) { setMsg('Enter the DI inspector name and the inspected item / task.'); return; } setDiSigning(true); }}>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => {
+                if (!diName.trim() || !diLic.trim() || !diTask.trim()) { setMsg('Enter the DI inspector name, their licence, and the inspected item / task.'); return; }
+                if (diName.trim().toLowerCase() === (userName() || '').trim().toLowerCase() || (userLicence() && diLic.trim().toUpperCase() === (userLicence() || '').trim().toUpperCase())) {
+                  setMsg('The double inspection must be a DIFFERENT qualified person than the one rectifying.'); return;
+                }
+                setDiSigning(true);
+              }}>
                 <Text style={[styles.act2t, { color: '#1a1300' }]}>Sign double inspection</Text>
               </TouchableOpacity>
             </View>

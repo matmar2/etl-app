@@ -536,6 +536,9 @@ export const addDefectAction = (id: string, body: any) =>
 export const extendDefect = (id: string, body: { due_date: string; rect_interval?: string; mel_ref?: string; narrative?: string }) =>
   mutateOrQueue(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify({ kind: 'extension', ...body }) });
 export const closeDefect = (id: string) => mutateOrQueue(`/defects/${id}/close`, { method: 'POST' });
+// Maintenance sets/corrects the ATA chapter (crew report the symptom without it).
+export const classifyDefect = (id: string, ata_chapter: string) =>
+  mutateOrQueue(`/defects/${id}/classify`, { method: 'POST', body: JSON.stringify({ ata_chapter }) });
 export const reverseRectification = (id: string): Promise<{ status: string }> =>
   mutateOrQueue(`/defects/${id}/reverse-rectification`, { method: 'POST' });
 export const acceptDispatch = (id: string, dispatchable: boolean) =>

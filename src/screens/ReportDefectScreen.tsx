@@ -91,7 +91,8 @@ export default function ReportDefectScreen({ route, navigation }: any) {
         area: cabin ? 'cabin' : 'technical',
         // captain_clearable is decided server-side from the admin list
         title: title.trim() || undefined, description: desc.trim(),
-        ata_chapter: ata.trim() || undefined, blocks_serviceability: blocks,
+        // A cabin defect never auto-grounds the aircraft — it is the commander's dispatch decision.
+        ata_chapter: ata.trim() || undefined, blocks_serviceability: cabin ? false : blocks,
         reporter_signature: signature, reporter_licence: licRequired ? (lic.trim() || undefined) : undefined,
         reported_by_name: licRequired ? undefined : (repName.trim() || undefined),
         mel_ref: melRef, rect_interval: rectInterval, due_date: dueDate,
@@ -159,19 +160,27 @@ export default function ReportDefectScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
-      <View style={styles.switchRow}>
-        <Text style={styles.lbl}>Cabin defect</Text>
-        <Switch value={cabin} onValueChange={setCabin} />
-      </View>
+      {/* Cabin crew only ever raise a cabin defect — the toggle is locked on for them. Flight crew /
+          maintenance may mark any defect as a cabin item. */}
       {role() !== 'cabin' ? (
+        <>
+        <View style={styles.switchRow}>
+          <Text style={styles.lbl}>Cabin defect</Text>
+          <Switch value={cabin} onValueChange={setCabin} />
+        </View>
         <Text style={{ color: theme.sub, fontSize: 11, marginTop: -4, marginBottom: 6 }}>
           Use for an airworthiness / safety-related cabin item raised by flight crew or maintenance.
         </Text>
+        </>
       ) : null}
-      <View style={styles.switchRow}>
-        <Text style={styles.lbl}>Blocks serviceability (AOG)</Text>
-        <Switch value={blocks} onValueChange={setBlocks} />
-      </View>
+      {/* AOG applies to technical defects only — a cabin defect is the commander's dispatch decision,
+          so it does not auto-ground the aircraft and the AOG toggle is not shown. */}
+      {!cabin ? (
+        <View style={styles.switchRow}>
+          <Text style={styles.lbl}>Blocks serviceability (AOG)</Text>
+          <Switch value={blocks} onValueChange={setBlocks} />
+        </View>
+      ) : null}
       {licRequired ? (<>
         <Text style={styles.lbl}>Reporter licence / auth no. *</Text>
         <TextInput style={styles.input} value={lic} onChangeText={setLic} placeholder="Your licence / authorisation number" placeholderTextColor={theme.sub} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { appSettings, cabinLogHtml, cabinLogHtmlOne, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, hilHtml, hilHtmlOne, oasesCheckHtml, role, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
-import { printHtml } from '../print';
+import { beginPrint, finishPrint } from '../print';
 import { theme } from '../theme';
 
 const KIND: Record<string, string> = {
@@ -54,48 +54,52 @@ export default function SignOffScreen({ navigation }: any) {
   // Cleared HIL / Cabin → render the HIL or Cabin Defect Log FORM (not the CRS): date raised,
   // closed date and signed-by, in the proper logbook format. defectId = one item; omitted = all.
   async function openClearedForm(defectId?: string) {
+    const win = beginPrint();                              // open the window on the TAP (Safari-safe)
     setMsg('');
     setOpeningId(defectId || 'all');
     try {
       const { html } = view === 'hil'
         ? (defectId ? await hilHtmlOne(defectId) : await hilHtml(reg!, days))       // "all" = only items cleared in the window (matches the list)
         : (defectId ? await cabinLogHtmlOne(defectId) : await cabinLogHtml(reg!, days));
-      await printHtml(html);
+      await finishPrint(win, html);
     } catch (e: any) {
+      if (win) win.close?.();
       setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the form.'));
     } finally { setOpeningId(null); }
   }
 
   async function open(g: SignOff) {
+    const win = beginPrint();                            // open the window on the TAP (Safari-safe)
     setMsg('');
     if (g.sector_id) {                                   // sector-linked (flight / maintenance-log CRS) → the Tech Log page
       setOpeningId(g.id);
-      try { const { html } = await sectorTlHtmlCached(g.sector_id); await printHtml(html); }
-      catch (e: any) { setMsg(e?.message?.includes('cached') || e?.message?.includes('Offline') ? 'Offline — open this Tech Log once online to make it available offline.' : (e?.message || 'Could not open the document.')); }
+      try { const { html } = await sectorTlHtmlCached(g.sector_id); await finishPrint(win, html); }
+      catch (e: any) { if (win) win.close?.(); setMsg(e?.message?.includes('cached') || e?.message?.includes('Offline') ? 'Offline — open this Tech Log once online to make it available offline.' : (e?.message || 'Could not open the document.')); }
       finally { setOpeningId(null); }
       return;
     }
     if (g.oases_check && g.defect_id) {                  // OASES-accomplished 2/10-day check → the check task list
       setOpeningId(g.id);
-      try { const { html } = await oasesCheckHtml(g.defect_id); await printHtml(html); }
-      catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the check.')); }
+      try { const { html } = await oasesCheckHtml(g.defect_id); await finishPrint(win, html); }
+      catch (e: any) { if (win) win.close?.(); setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this once online to view it offline.' : (e?.message || 'Could not open the check.')); }
       finally { setOpeningId(null); }
       return;
     }
     if (g.defect_id) {                                   // defect-rectification CRS → render the signed CRS in standard Tech Log format
       setOpeningId(g.id);
-      try { const { html } = await defectCrsPreview(g.defect_id); await printHtml(html); }
-      catch (e: any) { setMsg(e?.message || 'Could not open the CRS.'); }
+      try { const { html } = await defectCrsPreview(g.defect_id); await finishPrint(win, html); }
+      catch (e: any) { if (win) win.close?.(); setMsg(e?.message || 'Could not open the CRS.'); }
       finally { setOpeningId(null); }
       return;
     }
     if (g.check_id) {                                    // 2/10-day check → the signed check record
       setOpeningId(g.id);
-      try { const { html } = await checkHtml(g.check_id); await printHtml(html); }
-      catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this check once online to view it offline.' : (e?.message || 'Could not open the check.')); }
+      try { const { html } = await checkHtml(g.check_id); await finishPrint(win, html); }
+      catch (e: any) { if (win) win.close?.(); setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this check once online to view it offline.' : (e?.message || 'Could not open the check.')); }
       finally { setOpeningId(null); }
       return;
     }
+    if (win) win.close?.();
     setMsg('This sign-off has no printable Tech Log.');
   }
   const openable = (g: SignOff) => !!(g.sector_id || g.defect_id || g.check_id);
