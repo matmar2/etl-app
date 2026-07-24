@@ -114,9 +114,17 @@ export default function MaintenanceScreen({ route, navigation }: any) {
           <TextInput style={[s.input, { marginTop: 8 }]} value={wo} onChangeText={setWo} placeholder="Work order / task card ref (optional)" placeholderTextColor={theme.sub} />
           <TextInput style={[s.input, { marginTop: 8, minHeight: Math.max(60, note.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
             value={note} onChangeText={setNote} placeholder="Scope of maintenance (optional)… add task cards below" placeholderTextColor={theme.sub} multiline />
+          {/* Reference pickers for the work order — Task Card (AMM), MEL and CDL — sit together just
+              above the open button; each selection is appended to the Scope of maintenance above. */}
           <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setAmmOpen(true)}>
               <Text style={s.btnTxt}>＋ Task Card (AMM)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setMelPick(true)}>
+              <Text style={s.btnTxt}>Pick from CAMO MEL ▾</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setCdlPick(true)}>
+              <Text style={s.btnTxt}>Pick from CAMO CDL ▾</Text>
             </TouchableOpacity>
           </View>
           <AmmPicker visible={ammOpen} reg={reg} onClose={() => setAmmOpen(false)}
@@ -128,6 +136,18 @@ export default function MaintenanceScreen({ route, navigation }: any) {
                 return nums.join(', ');
               });
               setAmmOpen(false);
+            }} />
+          <MelPicker visible={melPick} onClose={() => setMelPick(false)}
+            onPick={(m) => {
+              const ref = `MEL ${m.ata || ''} · ${m.item}${m.category ? ` (Cat ${m.category}${m.rectification_interval ? `, ${m.rectification_interval}` : ''})` : ''}`.replace(/\s+/g, ' ').trim();
+              setNote((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + ref);
+              setMelPick(false);
+            }} />
+          <CdlPicker visible={cdlPick} onClose={() => setCdlPick(false)}
+            onPick={(c) => {
+              const ref = `CDL ${c.ata || ''}${c.code ? ` (${c.code})` : ''} · ${c.item || c.system}${c.dispatch ? ` — ${c.dispatch}` : ''}`.replace(/\s+/g, ' ').trim();
+              setNote((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + ref);
+              setCdlPick(false);
             }} />
           <TouchableOpacity style={[s.btn, { backgroundColor: theme.accent, opacity: busy ? 0.5 : 1 }]} disabled={busy} onPress={start}>
             <Text style={[s.btnTxt, { color: '#1a1300' }]}>{busy ? 'Opening…' : 'Open maintenance log & go to CRS'}</Text>
@@ -194,29 +214,6 @@ export default function MaintenanceScreen({ route, navigation }: any) {
         </View>
       ))}
 
-      <Text style={s.section}>MEL reference</Text>
-      <Text style={s.sub}>Browse / search the MEL, view an item's full page (category, interval, M/O procedures, placard), then select it.</Text>
-      <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setMelPick(true)}>
-        <Text style={s.btnTxt}>Pick from CAMO MEL ▾</Text>
-      </TouchableOpacity>
-      <MelPicker visible={melPick} onClose={() => setMelPick(false)}
-        onPick={(m) => {
-          const ref = `MEL ${m.ata || ''} · ${m.item}${m.category ? ` (Cat ${m.category}${m.rectification_interval ? `, ${m.rectification_interval}` : ''})` : ''}`.replace(/\s+/g, ' ').trim();
-          setNote((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + ref);
-          setMelPick(false);
-        }} />
-
-      <Text style={s.section}>CDL reference</Text>
-      <Text style={s.sub}>Browse / search the CDL (applicable registrations &amp; dispatch conditions), then select an item.</Text>
-      <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setCdlPick(true)}>
-        <Text style={s.btnTxt}>Pick from CAMO CDL ▾</Text>
-      </TouchableOpacity>
-      <CdlPicker visible={cdlPick} onClose={() => setCdlPick(false)}
-        onPick={(c) => {
-          const ref = `CDL ${c.ata || ''}${c.code ? ` (${c.code})` : ''} · ${c.item || c.system}${c.dispatch ? ` — ${c.dispatch}` : ''}`.replace(/\s+/g, ' ').trim();
-          setNote((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + ref);
-          setCdlPick(false);
-        }} />
     </ScrollView>
   );
 }
