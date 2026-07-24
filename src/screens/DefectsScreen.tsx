@@ -4,6 +4,7 @@ import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { access, can, cabinLogHtml, cabinLogHtmlOne, currentAircraft, hilHtml, hilHtmlOne, listActiveDefects, listClearedCabin, listHIL, syncPush } from '../api/client';
 import { printHtml, beginPrint, finishPrint } from '../print';
 import { cabinDefectHtml as localCabinHtml, hilHtml as localHilHtml } from '../print/techlog';
+import HilRemaining from '../components/HilRemaining';
 import { theme } from '../theme';
 
 type Tab = 'defects' | 'cabin' | 'hil';
@@ -139,6 +140,7 @@ export default function DefectsScreen({ route, navigation }: any) {
                 Opened {fmtD(item.raised_at)}{item.closed_at ? `   ·   Closed ${fmtD(item.closed_at)}` : ''}
               </Text>
             </View>
+            {tab === 'hil' ? <HilRemaining item={item} style={styles.remain} /> : null}
             {tab === 'hil' || tab === 'cabin' ? (
               <TouchableOpacity style={styles.rowPrint} onPress={() => printOne(tab === 'hil' ? 'hil' : 'cabin', item)}>
                 <Text style={styles.rowPrintTxt}>🖨 View/Print</Text>
@@ -171,6 +173,7 @@ const styles = StyleSheet.create({
   dNo: { color: theme.accent, fontWeight: '800' },
   dSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
   dDates: { color: theme.sub, fontSize: 11, marginTop: 3, fontWeight: '600' },
+  remain: { minWidth: 116, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border },
   rowPrint: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, marginHorizontal: 8 },
   rowPrintTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
   status: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },

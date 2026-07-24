@@ -421,7 +421,14 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             {basis === 'mel' && mel ? (
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {INTERVALS.map((iv) => (
-                  <TouchableOpacity key={iv} onPress={() => setRectIv(rectIv === iv ? '' : iv)} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
+                  <TouchableOpacity key={iv} onPress={() => {
+                    const sel = rectIv === iv ? '' : iv;
+                    setRectIv(sel);
+                    // MEL Cat B/C/D carry a standard rectification interval — auto-fill the due date
+                    // (editable). Cat A is "as per remarks", so the mechanic enters a limit manually.
+                    const days: any = { B: 3, C: 10, D: 120 };
+                    if (days[sel]) { const t = new Date(); t.setUTCDate(t.getUTCDate() + days[sel]); setDue(t.toISOString().slice(0, 10)); }
+                  }} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
                     <Text style={[styles.ivt, rectIv === iv && { color: '#1a1300' }]}>{iv}</Text>
                   </TouchableOpacity>
                 ))}
@@ -443,6 +450,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             onPress={() => {
               if (!basis) { setMsg('Select the deferral authority first (MEL / CDL / Approved data).'); return; }
               if (maxFh && parseFH(maxFh) == null) { setMsg('Max FH must be hh:mm — e.g. 50:00 or 50:30.'); return; }
+              // A deferral must carry at least one limit — a due date, an FH limit, or a cycle limit.
+              if (!due.trim() && !maxFh.trim() && !maxCyc.trim()) {
+                setMsg('Enter at least one limit — due date, FH, or cycles. (MEL Cat B/C/D fill the due date automatically.)'); return;
+              }
               act('deferral', {
               defer_basis: basis,
               mel_ref: basis === 'mel' ? (mel || undefined) : undefined,

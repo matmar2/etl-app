@@ -108,7 +108,9 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="e.g. VHF SYSTEM" placeholderTextColor={theme.sub} />
       <Text style={styles.lbl}>Defect description{required.includes('description') ? ' *' : ''}</Text>
       <TextInput style={[styles.input, { minHeight: Math.max(120, desc.split('\n').length * 22 + 40), textAlignVertical: 'top' }]} multiline value={desc} onChangeText={setDesc}
-        placeholder="State the defect (or NIL)… MEL / task-card refs can be added below" placeholderTextColor={theme.sub} />
+        placeholder={role() === 'cabin' ? 'State the defect (or NIL)…' : 'State the defect (or NIL)… MEL / task-card refs can be added below'} placeholderTextColor={theme.sub} />
+      {/* Cabin crew do not classify defects by ATA — maintenance does. Hide it for them entirely. */}
+      {role() !== 'cabin' ? (<>
       <Text style={styles.lbl}>ATA chapter{required.includes('ata_chapter') ? ' *' : ''}</Text>
       <TouchableOpacity style={[styles.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]} onPress={() => setAtaOpen(true)}>
         <Text style={{ color: ataLabel ? theme.text : theme.sub }}>{ataLabel ? `${ataLabel.code} — ${ataLabel.label}` : 'Select ATA chapter…'}</Text>
@@ -117,7 +119,10 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       <TextInput style={[styles.input, { marginTop: 8 }]} value={ata} onChangeText={setAta} autoCapitalize="characters"
         placeholder="Full ATA ref — chapter‑section‑subject, e.g. 21‑21‑01" placeholderTextColor={theme.sub} />
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>Pick the chapter above, then add the sub‑chapter / subject (e.g. 21 → 21‑21 → 21‑21‑01).</Text>
+      </>) : null}
 
+      {/* MEL / CDL / task-card refs are a maintenance-classification tool — hidden for cabin crew. */}
+      {role() !== 'cabin' ? (<>
       <Text style={styles.lbl}>MEL / CDL / task-card references (optional)</Text>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
         <TouchableOpacity style={styles.refBtn} onPress={() => setMelOpen(true)}><Text style={styles.refBtnTxt}>Pick from CAMO MEL ▾</Text></TouchableOpacity>
@@ -135,6 +140,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
         if (m.ata && !ata.trim()) setAta(m.ata.slice(0, 2));
         setAmmOpen(false);
       }} />
+      </>) : null}
 
       <Modal visible={ataOpen} animationType="slide" transparent onRequestClose={() => setAtaOpen(false)}>
         <View style={styles.modalWrap}>

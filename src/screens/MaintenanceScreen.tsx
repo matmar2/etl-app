@@ -8,6 +8,7 @@ import CdlPicker from '../components/CdlPicker';
 import MelPicker from '../components/MelPicker';
 import RoBanner from '../components/RoBanner';
 import AmmPicker from '../components/AmmPicker';
+import HilRemaining from '../components/HilRemaining';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -43,6 +44,19 @@ export default function MaintenanceScreen({ route, navigation }: any) {
   }, [reg]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { load(); }, [load]);
+
+  // Default the parking station to the aircraft's LAST KNOWN LOCATION — the arrival airport of the
+  // most recent sector that has one (its diversion airport if it diverted). OOOI times may not be
+  // recorded, so we rank by whatever timestamp exists. Editable; never overwrites operator input.
+  useEffect(() => {
+    serverSectors(reg).then((secs: any[]) => {
+      const ts = (x: any) => String(x.on_block || x.landing || x.sta || x.std || x.created_at || x.flight_date || '');
+      const located = (secs || []).filter((x) => x.arr).sort((a, b) => ts(b).localeCompare(ts(a)));
+      const last = located[0];
+      const loc = last ? ((last.diverted && last.diversion_airport) ? last.diversion_airport : last.arr) : null;
+      if (loc) setStation((cur) => (cur ? cur : String(loc).toUpperCase()));
+    }).catch(() => {});
+  }, [reg]);
 
   async function start() {
     const st = station.trim().toUpperCase();
@@ -143,6 +157,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
               <Text style={s.rowTitle}>{d.hil_no ? `HIL ${d.hil_no} · ` : ''}{d.title || d.description}</Text>
               <Text style={s.sub}>{d.mel_ref ? `MEL ${d.mel_ref} · ` : ''}{d.rect_interval ? `Cat ${d.rect_interval} · ` : ''}due {d.due_date || '—'}</Text>
             </View>
+            <HilRemaining item={d} style={{ minWidth: 116, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border }} />
             <TouchableOpacity onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}><Text style={s.rectify}>rectify ›</Text></TouchableOpacity>
           </View>
           {canDo ? (extId === d.id ? (
