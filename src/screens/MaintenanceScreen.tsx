@@ -29,6 +29,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
   }, []);
   const [active, setActive] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);
+  const [openLogs, setOpenLogs] = useState<any[]>([]);   // open (not-closed) maintenance Tech Logs to resume
   // inline "extend deferral"
   const [extId, setExtId] = useState<string | null>(null);
   const [extDate, setExtDate] = useState('');
@@ -41,6 +42,9 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     await syncPush().catch(() => {});                 // push locally-created defects up first
     listActiveDefects(reg).then((d: any[]) => setActive(d || [])).catch(() => setActive([]));
     listHIL(reg).then((d: any[]) => setHil(d || [])).catch(() => setHil([]));
+    serverSectors(reg).then((secs: any[]) => setOpenLogs((secs || [])
+      .filter((x) => x.page_kind === 'maintenance_only' && !['closed', 'exported'].includes(x.status))
+      .sort((a, b) => String(b.flight_date || '').localeCompare(String(a.flight_date || ''))))).catch(() => setOpenLogs([]));
   }, [reg]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => { load(); }, [load]);
@@ -63,22 +67,19 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     if (st.length < 3) { setStationBad(true); setMsg('Enter the parking station (ICAO, 3–4 letters) to open the maintenance log.'); return; }
     setStationBad(false); setMsg(''); setBusy(true);
     try {
-      // One open maintenance log per tail: if one is already open, RESUME it (don't open a duplicate).
-      // The same not-closed Tech Log page reopens so the mechanic continues the work order on it.
-      const all = await serverSectors(reg).catch(() => [] as any[]);
-      const today = new Date().toISOString().slice(0, 10);
-      const open = (all || []).find((x: any) => x.page_kind === 'maintenance_only' && !['closed', 'exported'].includes(x.status) && String(x.flight_date || '').slice(0, 10) === today);
-      if (open) { setMsg(`Resuming today's open maintenance log (TL #${open.page_no != null ? fmtTl(open.page_no) : '—'}).`); navigation.navigate('Release', { sectorId: open.id }); return; }
-      let id: string;
+      // One open maintenance log per tail: the server RESUMES today's open page (no duplicate TL) and
+      // applies the station / work-order details entered here onto it — so we always call it (never
+      // bypass, or the WO ref / scope typed above would be dropped).
+      let id: string; let resumed = false;
       try {
         const r = await createMaintenance({ aircraft_id: reg, station: st, wo_ref: wo.trim() || undefined, note: note.trim() || undefined });
-        id = r.id;
+        id = r.id; resumed = !!(r as any).resumed;
       } catch (e: any) {
         if (!(e instanceof NetworkError)) throw e;
         const r = await createLocalMaintenance(reg, st, wo.trim() || undefined, note.trim() || undefined, userName() ?? undefined);   // offline → local log, TL# assigned on sync
         id = r.id;
       }
-      navigation.navigate('Release', { sectorId: id });     // work defects + issue CRS
+      navigation.navigate('Release', { sectorId: id, resumed });     // work defects + issue CRS
     } catch (e: any) { setMsg(e.message || 'Could not open the maintenance log.'); }
     finally { setBusy(false); }
   }
@@ -134,6 +135,24 @@ export default function MaintenanceScreen({ route, navigation }: any) {
           {msg ? <Text style={s.err}>{msg}</Text> : null}
         </>
       )}
+
+      {/* Open maintenance Tech Logs — resume a not-closed page instead of opening a new one. */}
+      {openLogs.length > 0 ? (
+        <>
+          <Text style={s.section}>Open maintenance Tech Logs — resume ({openLogs.length})</Text>
+          {openLogs.map((l) => (
+            <TouchableOpacity key={l.id} style={s.row2} onPress={() => navigation.navigate('Release', { sectorId: l.id, resumed: true })}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rowTitle}>TL #{l.page_no != null ? fmtTl(l.page_no) : '—'}{l.dep ? ` · ${l.dep}` : ''}{l.flight_date ? ` · ${String(l.flight_date).slice(0, 10)}` : ''}</Text>
+                  <Text style={s.sub} numberOfLines={2}>{l.wo_ref || 'No work-order reference recorded yet'}</Text>
+                </View>
+                <Text style={s.rectify}>resume ›</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </>
+      ) : null}
 
       <Text style={s.section}>Open defects — to rectify ({active.length})</Text>
       {active.length === 0 ? <Text style={s.sub}>No open defects.</Text> : active.map((d) => (

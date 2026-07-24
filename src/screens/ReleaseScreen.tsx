@@ -169,6 +169,17 @@ export default function ReleaseScreen({ route, navigation }: any) {
         <Text style={s.sub}>{svc ? 'No defect holds dispatch.' : 'Open technical defect(s) hold the aircraft.'}</Text>
       </View>
 
+      {(st as any).maintenance_only ? (
+        <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginBottom: 4 }}>
+          <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance work order{(st as any).station ? ` · ${(st as any).station}` : ''}</Text>
+          {route?.params?.resumed ? <Text style={{ color: theme.accent, fontSize: 12, marginTop: 2, fontWeight: '700' }}>✓ Resumed today's open Tech Log page — continue the work order here.</Text> : null}
+          <Text style={{ color: (st as any).wo_ref ? theme.sub : theme.red, fontSize: 12, marginTop: 4 }}>
+            {(st as any).wo_ref || 'No work-order reference / scope recorded — go back and add it before the CRS.'}
+          </Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Rectify or defer the items below (or record NIL), then issue the CRS to complete and release the work order.</Text>
+        </View>
+      ) : null}
+
       {checks.length ? (
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
           {checks.map((c) => {
