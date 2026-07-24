@@ -124,6 +124,7 @@ export default function DefectsScreen({ route, navigation }: any) {
         ) : null}
         renderItem={({ item }) => (
           <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('DefectDetail', { defectId: item.id })}>
+            {tab === 'hil' ? <HilRemaining item={item} style={styles.remain} /> : null}
             <View style={{ flex: 1 }}>
               <Text style={styles.dTitle}>{(item.hil_no || (item.cabin_log_seq != null ? `CABIN${String(item.cabin_log_seq).padStart(3, '0')}` : '')) ? <Text style={styles.dNo}>{item.hil_no || `${acLabel}-CABIN${String(item.cabin_log_seq).padStart(3, '0')}`}  </Text> : null}{item.title || item.description}</Text>
               <Text style={styles.dSub}>
@@ -137,10 +138,9 @@ export default function DefectsScreen({ route, navigation }: any) {
                 {item.max_cycles != null ? ` · ${item.max_cycles} FC` : ''}
               </Text>
               <Text style={styles.dDates}>
-                Opened {fmtD(item.raised_at)}{item.closed_at ? `   ·   Closed ${fmtD(item.closed_at)}` : ''}
+                {tab === 'hil' ? 'Raised' : 'Opened'} {fmtD(item.raised_at)}{item.closed_at ? `   ·   Closed ${fmtD(item.closed_at)}` : ''}
               </Text>
             </View>
-            {tab === 'hil' ? <HilRemaining item={item} style={styles.remain} /> : null}
             {tab === 'hil' || tab === 'cabin' ? (
               <TouchableOpacity style={styles.rowPrint} onPress={() => printOne(tab === 'hil' ? 'hil' : 'cabin', item)}>
                 <Text style={styles.rowPrintTxt}>🖨 View/Print</Text>
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   dNo: { color: theme.accent, fontWeight: '800' },
   dSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
   dDates: { color: theme.sub, fontSize: 11, marginTop: 3, fontWeight: '600' },
-  remain: { minWidth: 116, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border },
+  remain: { minWidth: 214, marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: theme.border },
   rowPrint: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, marginHorizontal: 8 },
   rowPrintTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
   status: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },

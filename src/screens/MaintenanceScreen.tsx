@@ -153,11 +153,11 @@ export default function MaintenanceScreen({ route, navigation }: any) {
       {hil.length === 0 ? <Text style={s.sub}>No hold items.</Text> : hil.map((d) => (
         <View key={d.id} style={s.row2}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1 }}>
+            <HilRemaining item={d} style={{ minWidth: 214, marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: theme.border }} />
+            <TouchableOpacity style={{ flex: 1 }} onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}>
               <Text style={s.rowTitle}>{d.hil_no ? `HIL ${d.hil_no} · ` : ''}{d.title || d.description}</Text>
-              <Text style={s.sub}>{d.mel_ref ? `MEL ${d.mel_ref} · ` : ''}{d.rect_interval ? `Cat ${d.rect_interval} · ` : ''}due {d.due_date || '—'}</Text>
-            </View>
-            <HilRemaining item={d} style={{ minWidth: 116, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border }} />
+              <Text style={s.sub}>{d.mel_ref ? `MEL ${d.mel_ref} · ` : ''}{d.rect_interval ? `Cat ${d.rect_interval} · ` : ''}due {d.due_date || '—'}{d.raised_at ? ` · raised ${String(d.raised_at).slice(0, 10)}` : ''}</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}><Text style={s.rectify}>rectify ›</Text></TouchableOpacity>
           </View>
           {canDo ? (extId === d.id ? (
