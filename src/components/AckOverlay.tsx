@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { ackDefect, currentAircraft, listIpads, pendingAckDefects, role } from '../api/client';
 import { theme } from '../theme';
@@ -10,6 +10,11 @@ import { theme } from '../theme';
 export default function AckOverlay({ navRef }: { navRef: any }) {
   const [pending, setPending] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
+  // Once the user chooses "Later" or opens Details, do NOT re-pop the overlay on the next poll /
+  // navigation — only re-alert when a genuinely NEW pending defect appears (or on a fresh launch).
+  const dismissedRef = useRef(false);
+  const seenRef = useRef<Set<string>>(new Set());
+  function dismiss() { dismissedRef.current = true; setOpen(false); }
 
   async function poll() {
     try {
@@ -33,8 +38,12 @@ export default function AckOverlay({ navRef }: { navRef: any }) {
         } catch { /* offline — pendingAck below will also fail; keep last state */ }
       }
       const d = await pendingAckDefects(ac.registration);   // server returns the correct side per role
+      // A NEW pending defect (one we have not shown before) re-arms the alert even if the user
+      // previously chose Later/Details; otherwise honour their dismissal and don't re-pop.
+      if (d.some((x: any) => !seenRef.current.has(x.id))) dismissedRef.current = false;
+      seenRef.current = new Set(d.map((x: any) => x.id));
       setPending(d);
-      setOpen(d.length > 0);
+      setOpen(d.length > 0 && !dismissedRef.current);
     } catch { /* offline — keep last state */ }
   }
 
@@ -58,7 +67,7 @@ export default function AckOverlay({ navRef }: { navRef: any }) {
 
   if (!open || !pending.length) return null;
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+    <Modal visible transparent animationType="slide" onRequestClose={dismiss}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 16 }}>
         <View style={{ backgroundColor: theme.panel, borderRadius: 14, borderWidth: 1, borderColor: theme.accent, maxHeight: '88%', overflow: 'hidden' }}>
           <View style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: theme.border }}>
@@ -76,7 +85,7 @@ export default function AckOverlay({ navRef }: { navRef: any }) {
                     <Text style={{ color: '#fff', fontWeight: '800' }}>Read &amp; accept</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={{ minWidth: 100, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 11, alignItems: 'center' }}
-                    onPress={() => { setOpen(false); try { navRef?.navigate?.('DefectDetail', { defectId: d.id }); } catch { /* noop */ } }}>
+                    onPress={() => { dismiss(); try { navRef?.navigate?.('DefectDetail', { defectId: d.id }); } catch { /* noop */ } }}>
                     <Text style={{ color: theme.text, fontWeight: '700' }}>Details</Text>
                   </TouchableOpacity>
                 </View>
@@ -84,7 +93,7 @@ export default function AckOverlay({ navRef }: { navRef: any }) {
             ))}
           </ScrollView>
           <View style={{ flexDirection: 'row', gap: 10, padding: 14, borderTopWidth: 1, borderTopColor: theme.border }}>
-            <TouchableOpacity style={{ flex: 1, alignItems: 'center', padding: 4 }} onPress={() => setOpen(false)}>
+            <TouchableOpacity style={{ flex: 1, alignItems: 'center', padding: 4 }} onPress={dismiss}>
               <Text style={{ color: theme.accent, fontWeight: '700' }}>Later ({pending.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ flex: 2, backgroundColor: theme.green, borderRadius: 8, padding: 12, alignItems: 'center' }}
