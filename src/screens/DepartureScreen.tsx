@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -30,6 +30,29 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [servTotMsg, setServTotMsg] = useState('');
   const [oilCarry, setOilCarry] = useState('');       // note: totals carried over from the previous arrival
   const oilCarryDone = useRef(false);
+  // Load THIS sector's own saved servicings (oil/hyd uplifts + total oil) so an entry made by the
+  // captain (or on another iPad) is reflected here and survives reload — the sector payload doesn't
+  // carry the relationship, so fetch it. Authoritative for this leg; overrides the prev-leg carry-over.
+  const servLoadDone = useRef(false);
+  useEffect(() => {
+    if (servLoadDone.current || !s) return;
+    servLoadDone.current = true;
+    listServicing(sectorId).then((rows: any[]) => {
+      if (!rows?.length) return;
+      const QTL = 0.946353;
+      const upSys = ['eng1', 'eng2', 'hyd_green', 'hyd_blue', 'hyd_yellow'];
+      setServ((prev: any) => {
+        const n = { ...prev };
+        for (const r of rows) {
+          if (r.uplift_lt != null && upSys.includes(r.system)) n[r.system] = r.uplift_lt;                 // litres (oilShown converts)
+          if (r.depart_lt != null && (r.system === 'eng1' || r.system === 'eng2'))
+            n[`${r.system}_total`] = String(Math.round((Number(r.depart_lt) / QTL) * 10) / 10);           // → quarts
+        }
+        return n;
+      });
+    }).catch(() => {});
+  }, [!!s]);
+
   useEffect(() => {   // carry the previous leg's ARRIVAL oil quantity into the totals (editable)
     if (oilCarryDone.current || !s) return;
     oilCarryDone.current = true;
