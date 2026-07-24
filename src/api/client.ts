@@ -1391,8 +1391,14 @@ export async function syncPush() {
   const results = await api('/sync/push', { method: 'POST', body: JSON.stringify(batch) });
   for (const [id, outcome] of Object.entries(results.sectors ?? {}))
     if (outcome !== 'stale') await d.runAsync('UPDATE sectors SET dirty = 0 WHERE id = ?', id);
-  for (const [id, outcome] of Object.entries(results.defects ?? {}))
+  const rejected: string[] = [];
+  for (const [id, outcome] of Object.entries(results.defects ?? {})) {
+    if (String(outcome).startsWith('missing_required')) {   // server rejected it — DO NOT clear
+      rejected.push(String(outcome)); continue;             // keep dirty=1 so the record is never lost
+    }
     if (outcome !== 'stale') await d.runAsync('UPDATE defects SET dirty = 0 WHERE id = ?', id);
+  }
+  if (rejected.length) console.warn('[sync] defect(s) rejected by server, kept pending:', rejected);
   return results;
 }
 
