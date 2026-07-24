@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
+import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, saveMaintWork, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
@@ -30,6 +30,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
   const [st, setSt] = useState<ReleaseStatus | null>(null);
   const [note, setNote] = useState('');
+  const [workDone, setWorkDone] = useState('');       // action taken for a standalone W/O (maintenance log)
+  const [workSaved, setWorkSaved] = useState('');     // last-saved value, to show the Save state
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
@@ -50,7 +52,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
   const load = useCallback(() => {
-    releaseStatus(sectorId).then(setSt)                                    // online → authoritative
+    releaseStatus(sectorId).then((r) => { setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); })   // online → authoritative
       .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
     // Direct server call — the endpoint 404s for flight sectors (card hidden); never depend on the
@@ -60,6 +62,13 @@ export default function ReleaseScreen({ route, navigation }: any) {
     if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
   }, [sectorId]);
 
+  async function saveWork() {
+    try {
+      const r: any = await saveMaintWork(sectorId, { work_performed: workDone });
+      setWorkSaved(workDone);
+      setMsg(r?.queued ? 'Work saved offline — will sync ✓' : 'Work carried out saved ✓');
+    } catch (e: any) { setMsg(`Could not save: ${e.message}`); }
+  }
   async function submitCorrection() {
     if (!corr.reason.trim()) { setMsg('Enter a reason for the correction.'); return; }
     try {
@@ -100,6 +109,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
   async function submitRelease(signature: string) {
     setBusy(true); setMsg('');
     try {
+      if ((st as any)?.maintenance_only && workDone !== workSaved) {   // persist any unsaved W/O work first
+        await saveMaintWork(sectorId, { work_performed: workDone }).then(() => setWorkSaved(workDone)).catch(() => {});
+      }
       const r: any = await releaseSector(sectorId, {
         note: note.trim() || undefined, signer_name: signer.trim() || undefined,
         licence_no: licence.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined,
@@ -176,7 +188,23 @@ export default function ReleaseScreen({ route, navigation }: any) {
           <Text style={{ color: (st as any).wo_ref ? theme.sub : theme.red, fontSize: 12, marginTop: 4 }}>
             {(st as any).wo_ref || 'No work-order reference / scope recorded — go back and add it before the CRS.'}
           </Text>
-          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Rectify or defer the items below (or record NIL), then issue the CRS to complete and release the work order.</Text>
+          {/* Standalone W/O (task-card / scheduled work, no linked defect): record what was carried out
+              here. It prints on the Tech Log and the CRS certifies it even with NIL defects. */}
+          {isMech ? (
+            <>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken</Text>
+              <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
+                value={workDone} onChangeText={setWorkDone} multiline
+                placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Leave blank if this log only clears the defects/HIL below." placeholderTextColor={theme.sub} />
+              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', opacity: workDone === workSaved ? 0.5 : 1 }]}
+                disabled={workDone === workSaved} onPress={saveWork}>
+                <Text style={s.btnTxt}>{workDone === workSaved ? '✓ Work saved' : 'Save work carried out'}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (st as any).work_performed ? (
+            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>Work carried out: {(st as any).work_performed}</Text>
+          ) : null}
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>Rectify or defer any items below (or none, for a standalone W/O), then issue the CRS to complete and release the work order.</Text>
         </View>
       ) : null}
 

@@ -1041,8 +1041,11 @@ export const sectorCheckOverrideMechanic = (sectorId: string): Promise<{ ok: boo
 export const sectorCheckOverride = (sectorId: string): Promise<{ ok: boolean; conditions: string[]; by: string; at: string }> =>
   api(`/sectors/${sectorId}/check-override`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
 
-export const createMaintenance = (body: { aircraft_id: string; station: string; wo_ref?: string; note?: string }): Promise<{ id: string; page_no: number; station: string }> =>
+export const createMaintenance = (body: { aircraft_id: string; station: string; wo_ref?: string; note?: string }): Promise<{ id: string; page_no: number; station: string; resumed?: boolean }> =>
   api('/sectors/maintenance', { method: 'POST', body: JSON.stringify(body) });
+// Record the work carried out on a standalone maintenance W/O (no linked defect).
+export const saveMaintWork = (sectorId: string, body: { work_performed?: string; wo_ref?: string }) =>
+  mutateOrQueue(`/sectors/${sectorId}/maint-work`, { method: 'POST', body: JSON.stringify(body) });
 
 export type SignOff = { id: string; kind: string; signer_name?: string; licence_no?: string; signed_at: string;
   registration?: string; sector_id?: string; defect_id?: string; check_id?: string; oases_check?: boolean; category?: string; defects_summary?: string; action_summary?: string; search_text?: string; flight_no?: string; flight_date?: string; dep?: string; arr?: string };
