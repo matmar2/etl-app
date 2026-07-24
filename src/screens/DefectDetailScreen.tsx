@@ -613,11 +613,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           </TouchableOpacity>
           </>)}
 
-          {isMech && d.status === 'rectified' && (
+          {/* The CRS clears the item straight to the Sign Off page. It can still be REVERSED (CRS done
+              by mistake) until the aircraft next departs — after that, raise a correction. */}
+          {isMech && d.reversible && (
             <View style={{ marginTop: 18, gap: 8 }}>
-              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={close}>
-                <Text style={styles.act2t}>Close defect</Text>
-              </TouchableOpacity>
+              <Text style={styles.sub}>✓ CRS issued — this item is cleared and now on the Sign Off page.</Text>
               <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, alignSelf: 'flex-start' }]} onPress={reverse}>
                 <Text style={[styles.act2t, { color: theme.red }]}>Reverse Rectify + CRS</Text>
               </TouchableOpacity>

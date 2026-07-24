@@ -63,15 +63,12 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     if (st.length < 3) { setStationBad(true); setMsg('Enter the parking station (ICAO, 3–4 letters) to open the maintenance log.'); return; }
     setStationBad(false); setMsg(''); setBusy(true);
     try {
-      // Avoid duplicate maintenance logs: if one is already open for this tail, offer to open it.
+      // One open maintenance log per tail: if one is already open, RESUME it (don't open a duplicate).
+      // The same not-closed Tech Log page reopens so the mechanic continues the work order on it.
       const all = await serverSectors(reg).catch(() => [] as any[]);
-      const open = (all || []).find((x: any) => x.page_kind === 'maintenance_only' && !['closed', 'exported'].includes(x.status));
-      if (open) {
-        const another = await confirmAction(
-          `A maintenance log is already open for ${reg} (TL #${open.page_no != null ? fmtTl(open.page_no) : '—'} · ${open.dep ?? ''}, ${open.flight_date ?? ''}).\n\nOK = create ANOTHER log.  Cancel = open the existing one.`,
-          'Maintenance log exists');
-        if (!another) { navigation.navigate('Release', { sectorId: open.id }); return; }
-      }
+      const today = new Date().toISOString().slice(0, 10);
+      const open = (all || []).find((x: any) => x.page_kind === 'maintenance_only' && !['closed', 'exported'].includes(x.status) && String(x.flight_date || '').slice(0, 10) === today);
+      if (open) { setMsg(`Resuming today's open maintenance log (TL #${open.page_no != null ? fmtTl(open.page_no) : '—'}).`); navigation.navigate('Release', { sectorId: open.id }); return; }
       let id: string;
       try {
         const r = await createMaintenance({ aircraft_id: reg, station: st, wo_ref: wo.trim() || undefined, note: note.trim() || undefined });
