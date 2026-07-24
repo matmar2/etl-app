@@ -118,10 +118,12 @@ export default function DepartureScreen({ route, navigation }: any) {
       setMinFuel(c.min_fuel_kg ?? null);
       setServMin(c);
       setFuel((p: any) => { const n = { ...p }; c.tanks.forEach((t) => (n[t.field] = s[t.field])); return n; });
-      const savedTankSum = c.tanks.reduce((a, t) => a + (Number(s[t.field]) || 0), 0);   // legacy: saved uplift equal to Σ tanks ⇒ auto
-      if (Number(s.fuel_uplift_kg) > 0 && Math.round(Number(s.fuel_uplift_kg)) !== Math.round(savedTankSum)) {
+      // Manual mode = no per-tank split saved, but a total (departure fuel) is on record: show it
+      // in the "total fuel in tanks" box. When per-tank values exist, Σ tanks drives it automatically.
+      const savedTankSum = c.tanks.reduce((a, t) => a + (Number(s[t.field]) || 0), 0);
+      if (savedTankSum <= 0 && Number(s.dep_fuel_kg) > 0) {
         setUpliftManual(true);
-        setUpliftText(String(round1(Number(s.fuel_uplift_kg))));   // KG (default unit)
+        setUpliftText(String(round1(Number(s.dep_fuel_kg))));   // KG (default unit)
       }
     }).catch(() => {});
   }, [!!s]);
@@ -170,14 +172,14 @@ export default function DepartureScreen({ route, navigation }: any) {
   const fuelFoundKg: number | null = (fuel.fuel_found_kg === '' || fuel.fuel_found_kg == null || isNaN(Number(fuel.fuel_found_kg))) ? null : Number(fuel.fuel_found_kg);
   const fuelFoundDiff: number | null = (fuelFoundKg != null && prevKg != null) ? Math.round((fuelFoundKg - prevKg) * 10) / 10 : null;   // – = used by APU/engine run
   const baseKg = fuelFoundKg != null ? fuelFoundKg : prevKg;
-  // auto uplift = Σ tank contents − starting fuel (no base yet → Σ tanks, first record)
-  const autoUpliftKg = tankVals.length ? round1(tankSumKg - (baseKg || 0)) : 0;
-  const upliftKg = upliftManual ? (Number(fuel.fuel_uplift_kg) || 0) : autoUpliftKg;
-  const depCalc: number | null = tankVals.length ? Math.round(tankSumKg)
-    : baseKg != null ? Math.round(baseKg + upliftKg) : null;   // departure fuel = Σ tank contents (else base + uplift)
-  const depCalcSrc = tankVals.length
-    ? `Σ tank contents ${fmt(round1(tankSumKg))} kg (uplift ${fmt(round1(upliftKg))} kg over ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))})`
-    : `${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))} + total uplift ${fmt(round1(upliftKg))} kg`;
+  // The tanks (or the manual box) hold the TOTAL FUEL ON BOARD after refuelling — NOT the uplift.
+  // Departure fuel = total in tanks; the flight's uplift is DERIVED = total − fuel before refuelling
+  // (else previous-leg landing fuel). Manual mode = the total typed by hand (stored as dep_fuel_kg).
+  const manualTotalKg = upliftManual ? (Number(fuel.dep_fuel_kg) || 0) : null;
+  const totalTanksKg: number | null = tankVals.length ? tankSumKg : manualTotalKg;
+  const upliftKg = totalTanksKg != null ? round1(totalTanksKg - (baseKg || 0)) : 0;
+  const depCalc: number | null = totalTanksKg != null ? Math.round(totalTanksKg) : null;   // departure fuel = total in tanks
+  const depCalcSrc = `${tankVals.length ? 'Σ tank contents' : 'total fuel in tanks'} ${fmt(round1(totalTanksKg || 0))} kg (uplift ${fmt(round1(upliftKg))} kg over ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev landing'} ${fmt(round1(baseKg || 0))})`;
   const depEff: number | null = depCalc != null ? depCalc : (fuel.dep_fuel_kg === '' || fuel.dep_fuel_kg == null ? null : Number(fuel.dep_fuel_kg));
   const oilUnitLbl = 'qt';
   const oilMinU = servMin?.oil_min_qt ?? null;
@@ -498,18 +500,18 @@ export default function DepartureScreen({ route, navigation }: any) {
           return upliftUnit === 'LB' ? n * LB_KG : upliftUnit === 'IG' ? n * IG_L * dens : upliftUnit === 'L' ? n * dens : n; };
         const fromKgU = (kg: number, u: typeof upliftUnit) =>
           u === 'LB' ? kg / LB_KG : u === 'IG' ? kg / (IG_L * dens) : u === 'L' ? kg / dens : kg;
-        const shown = upliftManual ? upliftText : (tankVals.length ? String(round1(fromKgU(autoUpliftKg, upliftUnit))) : '');
+        const shown = upliftManual ? upliftText : (tankVals.length ? String(round1(fromKgU(tankSumKg, upliftUnit))) : '');
         const changeUnit = (u: typeof upliftUnit) => {
-          if (upliftManual && fuel.fuel_uplift_kg !== '' && fuel.fuel_uplift_kg != null) setUpliftText(String(round1(fromKgU(Number(fuel.fuel_uplift_kg), u))));
+          if (upliftManual && fuel.dep_fuel_kg !== '' && fuel.dep_fuel_kg != null) setUpliftText(String(round1(fromKgU(Number(fuel.dep_fuel_kg), u))));
           setUpliftUnit(u);
         };
         return (
           <View style={{ marginTop: 4 }}>
-            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Actual Total uplift ({upliftUnit}) in tanks</Text>
+            <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Actual total fuel in tanks ({upliftUnit})</Text>
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
               <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 150 }}
                 keyboardType="decimal-pad" value={shown}
-                onChangeText={(raw) => { const v = numericOnly(raw); setUpliftManual(true); setUpliftText(v); setFuel({ ...fuel, fuel_uplift_kg: v === '' ? '' : toKg(v) }); }} />
+                onChangeText={(raw) => { const v = numericOnly(raw); setUpliftManual(true); setUpliftText(v); setFuel({ ...fuel, dep_fuel_kg: v === '' ? '' : toKg(v) }); }} />
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {(['KG', 'LB', 'IG', 'L'] as const).map((u) => (
                   <TouchableOpacity key={u} onPress={() => changeUnit(u)}
@@ -520,11 +522,13 @@ export default function DepartureScreen({ route, navigation }: any) {
               </View>
             </View>
             <Text style={{ color: theme.sub, fontSize: 11, marginTop: 4 }}>
-              {upliftManual ? `Manual override = ${fmt(round1(Number(fuel.fuel_uplift_kg) || 0))} kg` : `= Σ tanks ${fmt(round1(tankSumKg))} − ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev leg'} ${fmt(round1(baseKg || 0))} kg`}{(upliftUnit === 'IG' || upliftUnit === 'L') ? ` (SG ${dens})` : ''}
+              {upliftManual
+                ? `Total on board ${fmt(round1(Number(fuel.dep_fuel_kg) || 0))} kg → uplift ${fmt(round1(upliftKg))} kg over ${fuelFoundKg != null ? 'fuel before refuelling' : 'prev leg'} ${fmt(round1(baseKg || 0))}`
+                : tankVals.length ? `= Σ tanks ${fmt(round1(tankSumKg))} kg total on board (uplift ${fmt(round1(upliftKg))} kg)` : 'Enter each tank above, or type the total on board here'}{(upliftUnit === 'IG' || upliftUnit === 'L') ? ` (SG ${dens})` : ''}
             </Text>
-            {upliftManual ? (
-              <TouchableOpacity onPress={() => { setUpliftManual(false); setUpliftText(''); setFuel({ ...fuel, fuel_uplift_kg: autoUpliftKg }); }}>
-                <Text style={{ color: theme.accent, fontSize: 11, marginTop: 2, fontWeight: '700' }}>Use calculated (Σ tanks − start fuel = {fmt(round1(autoUpliftKg))} kg)</Text>
+            {upliftManual && tankVals.length ? (
+              <TouchableOpacity onPress={() => { setUpliftManual(false); setUpliftText(''); }}>
+                <Text style={{ color: theme.accent, fontSize: 11, marginTop: 2, fontWeight: '700' }}>Use Σ tanks total ({fmt(round1(tankSumKg))} kg)</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -595,7 +599,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         if (!(gauge > 0 && bowserKg > 0)) return null;
         const diff = ((gauge - bowserKg) / bowserKg) * 100;
         const off = Math.abs(diff) > fuelTol;
-        return <Text style={{ color: off ? theme.red : theme.green, fontSize: 11, marginTop: 2, fontWeight: off ? '800' : '600' }}>Fuel uplifted {fmt(round1(bowserKg))} kg (SG {sg}) vs total uplift {fmt(round1(gauge))} kg — diff {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%{off ? ' ⚠ check' : ' ✓'}</Text>;
+        return <Text style={{ color: off ? theme.red : theme.green, fontSize: 11, marginTop: 2, fontWeight: off ? '800' : '600' }}>Fuel uplifted {fmt(round1(bowserKg))} kg (SG {sg}) vs uplift from gauge {fmt(round1(gauge))} kg (total on board − before) — diff {diff >= 0 ? '+' : ''}{diff.toFixed(1)}%{off ? ' ⚠ check' : ' ✓'}</Text>;
       })()}
 
       <Text style={sx.subhead}>Departure &amp; taxi fuel</Text>
