@@ -536,6 +536,9 @@ export const addDefectAction = (id: string, body: any) =>
 export const extendDefect = (id: string, body: { due_date: string; rect_interval?: string; mel_ref?: string; narrative?: string }) =>
   mutateOrQueue(`/defects/${id}/actions`, { method: 'POST', body: JSON.stringify({ kind: 'extension', ...body }) });
 export const closeDefect = (id: string) => mutateOrQueue(`/defects/${id}/close`, { method: 'POST' });
+// Step 1 of the two-step W/O flow: record the work and sign the Tech Log WITHOUT a CRS (→ work_done).
+export const workSigned = (id: string, body: { narrative?: string; licence_no?: string; signature_image?: string; place?: string; otp?: string }) =>
+  mutateOrQueue(`/defects/${id}/work-signed`, { method: 'POST', body: JSON.stringify(body) });
 // Maintenance sets/corrects the ATA chapter (crew report the symptom without it).
 export const classifyDefect = (id: string, ata_chapter: string) =>
   mutateOrQueue(`/defects/${id}/classify`, { method: 'POST', body: JSON.stringify({ ata_chapter }) });

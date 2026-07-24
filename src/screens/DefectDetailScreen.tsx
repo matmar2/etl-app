@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, setAirworthiness, userLicence, userName, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, setAirworthiness, userLicence, userName, workSigned, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
 import { printHtml, printServerPdf } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -53,6 +53,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   const [diSigning, setDiSigning] = useState(false);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
+  // Two-step W/O: Step 1 signs the Tech Log for the work (no CRS). Its own signature/MFA state.
+  const [workSigning, setWorkSigning] = useState(false);
+  const [workNeedOtp, setWorkNeedOtp] = useState(false);
+  const [workRetrySig, setWorkRetrySig] = useState<string | null>(null);
+  const [workOtp, setWorkOtp] = useState('');
   const [previewing, setPreviewing] = useState(false);
   const [askDel, setAskDel] = useState(false);
   const [approver, setApprover] = useState('');
@@ -168,12 +173,34 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     if (!(await confirmAction('Issue the CRS for this rectification? You will sign and authenticate.', 'Rectify + CRS'))) return;
     setSigning(true);
   }
+  // Step 1 of the two-step W/O: sign the Tech Log for the work, no CRS (aircraft stays unserviceable).
+  async function recordWork() {
+    if (!narr.trim()) { setMsg('Describe the work carried out first.'); return; }
+    if (!lic.trim()) { setMsg('Enter your licence / authorisation number.'); return; }
+    if (!(await confirmAction('Sign the Tech Log for this work now? No CRS is issued yet — the aircraft stays UNSERVICEABLE until the CRS (release) is signed, which needs every other open item cleared.', 'Record work + sign TL'))) return;
+    setWorkSigning(true);
+  }
+  async function submitWork(signature: string) {
+    setMsg('Signing the Tech Log…');
+    try {
+      const r = await workSigned(defectId, { narrative: narr, licence_no: lic.trim() || undefined, signature_image: signature, otp: workOtp.trim() || undefined });
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'work_completed', narrative: narr }, { status: 'work_done' }); setMsg('Work signed offline — will sync ✓'); }
+      else setMsg('Work signed on the Tech Log — CRS pending ✓');
+      setWorkOtp(''); setWorkNeedOtp(false); setWorkRetrySig(null); load();
+    } catch (e: any) {
+      if (e instanceof MfaRequired) { setWorkRetrySig(signature); setWorkNeedOtp(true); setMsg('Enter your authenticator code to sign the Tech Log.'); }
+      else setMsg(`Failed: ${e.message}`);
+    }
+  }
   async function submitCRS(signature: string) {
+    // On a work_done item the work is already signed — this is a standalone CRS ('crs'); otherwise
+    // it is the one-step rectify-and-certify ('rectification'). Both seal the release CRS.
+    const kind = d?.status === 'work_done' ? 'crs' : 'rectification';
     setMsg('Issuing CRS…');
     try {
-      const r = await addDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo,
+      const r = await addDefectAction(defectId, { kind, narrative: narr, amo_approval_no: amo,
         licence_no: lic.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined });
-      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'rectification', narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind, narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
       else setMsg('Rectified + CRS issued ✓');
       setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); load();
       offerChain();   // same-TL# chaining: claim this item on the open ground log + offer the next
@@ -407,7 +434,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           </View>
           <AmmPicker visible={ammOpen} reg={d?.aircraft_id} defaultAta={(d?.ata_chapter || '').split('-')[0] || undefined} onClose={() => setAmmOpen(false)}
             onPick={(m) => { setNarr((n) => { const line = ammIawLine(m); const base = (n || '').trim(); return base ? `${line}\n\n${base}` : line; }); setAmmOpen(false); }} />
-          {isMech && (<>
+          {isMech && d.status !== 'work_done' && (<>
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => act('troubleshooting')}><Text style={styles.act2t}>Troubleshooting</Text></TouchableOpacity>
 
           {/* Double Inspection (DI) — a second qualified person signs an independent inspection (name + licence + signature + date/time). */}
@@ -458,8 +485,52 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={rectifyCRS}><Text style={styles.act2t}>Rectify + CRS · sign</Text></TouchableOpacity>
             </View>
           )}
-          <Text style={styles.sub}>Preview the Tech Log / CRS page before you sign. The CRS requires the work narrative, AMO/licence, a signature and MFA before it goes ahead.</Text>
+          <Text style={styles.sub}>Preview the Tech Log / CRS page before you sign. The CRS requires the work narrative, AMO/licence, a signature and MFA before it goes ahead — and releases only when every other open item is cleared and the checks are current.</Text>
           <SignaturePad visible={signing} title="Sign rectification CRS"
+            onClose={() => setSigning(false)} onDone={(dataUrl) => { setSigning(false); submitCRS(dataUrl); }} />
+
+          {/* Two-step alternative: sign the Tech Log for the work now, issue the CRS separately later
+              (used when other items are still open — you cannot release until the aircraft is clear). */}
+          <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 12, paddingTop: 10 }}>
+            <Text style={styles.sub}>Other items still open? Sign the Tech Log for the work now and issue the CRS once the aircraft is clear.</Text>
+            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, alignSelf: 'flex-start', marginTop: 8 }]} onPress={recordWork}>
+              <Text style={[styles.act2t, { color: theme.accent }]}>🔧 Record work + sign TL (no CRS)</Text>
+            </TouchableOpacity>
+          </View>
+          <SignaturePad visible={workSigning} title="Sign Tech Log — work carried out (no CRS)"
+            onClose={() => setWorkSigning(false)} onDone={(dataUrl) => { setWorkSigning(false); submitWork(dataUrl); }} />
+          {workNeedOtp ? (
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={workOtp} onChangeText={setWorkOtp} keyboardType="number-pad" placeholder="Authenticator code" placeholderTextColor={theme.sub} />
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent }]} onPress={() => workRetrySig && submitWork(workRetrySig)}><Text style={[styles.act2t, { color: '#1a1300' }]}>Sign Tech Log</Text></TouchableOpacity>
+            </View>
+          ) : null}
+          </>)}
+
+          {/* work_done: the work is TL-signed; only the CRS (release) remains — gated on the aircraft
+              being otherwise clear. */}
+          {isMech && d.status === 'work_done' && (<>
+          <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 8, padding: 12, marginTop: 6 }}>
+            <Text style={{ color: theme.accent, fontWeight: '800' }}>Work accomplished — CRS pending</Text>
+            <Text style={[styles.sub, { marginTop: 4 }]}>The work is signed on the Tech Log. Issue the CRS to release the aircraft — this closes every item worked on this reg together, and is allowed only when no other defect is open and the 2/10-day checks are current.</Text>
+          </View>
+          <Text style={styles.lbl}>Issue CRS · release (certification — M.A.801)</Text>
+          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={amo} onChangeText={setAmo} placeholder="AMO / Part-145 no *" placeholderTextColor={theme.sub} />
+            <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={lic} onChangeText={setLic} placeholder="Licence / auth no *" placeholderTextColor={theme.sub} />
+          </View>
+          {needOtp ? (
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 }}>
+              <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={otp} onChangeText={setOtp} keyboardType="number-pad" placeholder="Authenticator code" placeholderTextColor={theme.sub} />
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={() => crsSig && submitCRS(crsSig)}><Text style={styles.act2t}>Submit CRS</Text></TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile }]} onPress={previewCRS} disabled={previewing}><Text style={styles.act2t}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={() => { if (!amo.trim()) { setMsg('Enter the AMO / Part-145 approval number.'); return; } if (!lic.trim()) { setMsg('Enter your licence / authorisation number.'); return; } confirmAction('Issue the CRS and release the aircraft? This certifies the work and closes every item worked on this reg.', 'Issue CRS · release').then((ok) => ok && setSigning(true)); }}><Text style={styles.act2t}>Issue CRS · release</Text></TouchableOpacity>
+            </View>
+          )}
+          <SignaturePad visible={signing} title="Sign release CRS"
             onClose={() => setSigning(false)} onDone={(dataUrl) => { setSigning(false); submitCRS(dataUrl); }} />
           </>)}
 
