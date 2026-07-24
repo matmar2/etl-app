@@ -21,7 +21,10 @@ export default function DefectsScreen({ route, navigation }: any) {
   // technical Defects + HIL follow the 'defects' page; Cabin follows the 'cabin' page.
   const canTech = access('defects') !== 'none';
   const canCabin = access('cabin') !== 'none';
-  const [tab, setTab] = useState<Tab>(canTech ? 'defects' : canCabin ? 'cabin' : 'hil');
+  // Deep-link: the aircraft-status reasons on the menu open the relevant tab for THIS reg.
+  const initialTab: Tab = (['defects', 'cabin', 'hil'] as const).includes(route?.params?.tab) ? route.params.tab
+    : canTech ? 'defects' : canCabin ? 'cabin' : 'hil';
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [active, setActive] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);
   const [clearedCabin, setClearedCabin] = useState<any[]>([]);

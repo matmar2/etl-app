@@ -396,7 +396,27 @@ export default function MainMenuScreen({ navigation }: any) {
             </View>
           </View>
         </View>
-        {st?.reasons?.length ? <Text style={styles.heroReason}>{st.reasons.join('   ·   ')}</Text> : null}
+        {st?.reasons?.length ? (
+          <View style={styles.reasonRow}>
+            {/* Each grounding reason is tappable — it opens the exact items for THIS reg (open defects,
+                cabin defects, overdue hold items, or the due check) so you can see what to clear. */}
+            {st.reasons.map((r: string) => {
+              const rl = r.toLowerCase();
+              const target = rl.includes('cabin') ? { screen: 'Defects', params: { aircraftId: reg, tab: 'cabin' } }
+                : rl.includes('hold item') ? { screen: 'Defects', params: { aircraftId: reg, tab: 'hil' } }
+                : rl.includes('defect') ? { screen: 'Defects', params: { aircraftId: reg, tab: 'defects' } }
+                : rl.includes('check') ? { screen: 'Planned', params: { aircraftId: reg, kind: rl.includes('10') ? '10day' : '2day' } }
+                : null;
+              return (
+                <TouchableOpacity key={r} disabled={!target} activeOpacity={0.7}
+                  style={[styles.reasonChip, !target && { opacity: 0.85 }]}
+                  onPress={() => target && navigation.navigate(target.screen, target.params)}>
+                  <Text style={styles.reasonChipTxt}>▲ {r}{target ? '  ›' : ''}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
         {(st?.checks?.length || util) ? (
           <View style={styles.checks}>
             {/* 2-Day / 10-Day check buttons — mechanics open & sign the check, Captain/FO view the
@@ -511,6 +531,9 @@ const styles = StyleSheet.create({
   acChipTest: { borderColor: theme.accent, borderWidth: 1.5 },
   acChipTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
   heroReason: { color: theme.sub, marginTop: 12, fontSize: 12 },
+  reasonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  reasonChip: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 7, borderWidth: 1, borderColor: 'rgba(217,83,79,0.5)', backgroundColor: 'rgba(217,83,79,0.12)' },
+  reasonChipTxt: { color: theme.red, fontSize: 12, fontWeight: '700' },
   checks: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' },
   checkPill: { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 11, paddingVertical: 8, paddingHorizontal: 13 },
   checkLbl: { color: theme.sub, fontSize: 11, fontWeight: '600' },
