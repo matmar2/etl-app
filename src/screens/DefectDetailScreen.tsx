@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, userLicence, userName, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, setAirworthiness, userLicence, userName, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
 import { printHtml, printServerPdf } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -244,6 +244,18 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         } },
       ]);
   }
+  async function assessAirworthiness(aw: boolean) {
+    if (!(await confirmAction(
+      aw ? 'Assess this cabin defect as AIRWORTHINESS-related? The aircraft becomes UNSERVICEABLE (AOG) until it is rectified or deferred — the captain cannot dispatch it.'
+         : 'Assess this cabin defect as NOT airworthiness-related? The commander then makes the dispatch decision.',
+      'Airworthiness assessment'))) return;
+    try {
+      const r = await setAirworthiness(defectId, aw);
+      if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'airworthiness', airworthiness: aw }); setMsg('Saved offline — will sync ✓'); }
+      else setMsg(aw ? 'Airworthiness-related — aircraft AOG' : 'Not airworthiness — commander to decide');
+      load();
+    } catch (e: any) { setMsg(`Failed: ${e.message}`); }
+  }
   async function del() {
     // Admin only, before dispatch/release, with the CAMO Manager's approval recorded.
     // Double confirmation for a permanent removal (the server enforces the same rules).
@@ -307,22 +319,51 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         )
       ) : null}
 
+      {/* MAINTENANCE decides airworthiness first: airworthiness-related → AOG; otherwise the captain
+          makes the dispatch call. */}
+      {d.area === 'cabin' && isMech && d.status !== 'closed' && (
+        <>
+          <Text style={styles.section}>Cabin defect — airworthiness assessment (maintenance)</Text>
+          <Text style={styles.sub}>
+            {d.airworthiness === true ? 'Assessed AIRWORTHINESS-related — aircraft UNSERVICEABLE (AOG). Rectify or defer it.' :
+             d.airworthiness === false ? 'Assessed NOT airworthiness — the commander makes the dispatch decision.' :
+             'Is this defect airworthiness-related? Your assessment decides whether it grounds the aircraft.'}
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+            <TouchableOpacity style={[styles.act2, { backgroundColor: d.airworthiness === true ? theme.red : theme.tile, borderWidth: 1, borderColor: theme.red }]} onPress={() => assessAirworthiness(true)}>
+              <Text style={[styles.act2t, d.airworthiness === true ? null : { color: theme.red }]}>Airworthiness-related (AOG)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.act2, { backgroundColor: d.airworthiness === false ? theme.green : theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => assessAirworthiness(false)}>
+              <Text style={styles.act2t}>Not airworthiness — captain decides</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
       {d.area === 'cabin' && isCaptain && d.status !== 'closed' && (
         <>
           <Text style={styles.section}>Cabin defect — commander dispatch decision</Text>
-          <Text style={styles.sub}>
-            {d.dispatch_accepted === true ? 'Accepted as dispatchable.' :
-             d.dispatch_accepted === false ? 'Marked NOT dispatchable — aircraft held.' :
-             'Awaiting the commander’s decision (does not auto-ground the aircraft).'}
-          </Text>
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={() => dispatch(true)}>
-              <Text style={styles.act2t}>Accept dispatchable</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.act2, { backgroundColor: theme.red }]} onPress={() => dispatch(false)}>
-              <Text style={styles.act2t}>Not dispatchable</Text>
-            </TouchableOpacity>
-          </View>
+          {d.airworthiness === true ? (
+            <Text style={[styles.sub, { color: theme.red }]}>▲ Airworthiness-related (maintenance) — the aircraft is AOG and NOT dispatchable. It must be rectified or deferred.</Text>
+          ) : d.airworthiness == null ? (
+            <Text style={styles.sub}>Awaiting maintenance's airworthiness assessment before the dispatch decision.</Text>
+          ) : (
+            <>
+              <Text style={styles.sub}>
+                {d.dispatch_accepted === true ? 'Accepted as dispatchable.' :
+                 d.dispatch_accepted === false ? 'Marked NOT dispatchable — aircraft held.' :
+                 'Assessed not airworthiness — your decision (does not auto-ground the aircraft).'}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <TouchableOpacity style={[styles.act2, { backgroundColor: theme.green }]} onPress={() => dispatch(true)}>
+                  <Text style={styles.act2t}>Accept dispatchable</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.act2, { backgroundColor: theme.red }]} onPress={() => dispatch(false)}>
+                  <Text style={styles.act2t}>Not dispatchable</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </>
       )}
 

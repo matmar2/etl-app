@@ -543,6 +543,9 @@ export const reverseRectification = (id: string): Promise<{ status: string }> =>
   mutateOrQueue(`/defects/${id}/reverse-rectification`, { method: 'POST' });
 export const acceptDispatch = (id: string, dispatchable: boolean) =>
   mutateOrQueue(`/defects/${id}/accept-dispatch?dispatchable=${dispatchable}`, { method: 'POST' });
+// Maintenance airworthiness assessment of a cabin defect (True = airworthiness-related → AOG).
+export const setAirworthiness = (id: string, airworthiness: boolean) =>
+  mutateOrQueue(`/defects/${id}/airworthiness?airworthiness=${airworthiness}`, { method: 'POST' });
 
 export type DefectBrief = {
   id: string; title?: string; description: string; ata_chapter?: string;
