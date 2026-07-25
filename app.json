@@ -41,7 +41,8 @@
     "plugins": [
       "expo-asset",
       "expo-secure-store",
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/withPeerSync"
     ],
     "owner": "mathewos"
   }

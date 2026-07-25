@@ -1,0 +1,7 @@
+{
+  "name": "peer-sync",
+  "version": "1.0.0",
+  "description": "On-board iPad-to-iPad MultipeerConnectivity (Bluetooth + Wi-Fi) transport for the ETL peer sync",
+  "main": "index.ts",
+  "license": "UNLICENSED"
+}
