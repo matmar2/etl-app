@@ -74,14 +74,19 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
   const load = useCallback(() => {
-    releaseStatus(sectorId).then((r) => { setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); const o = (r as any).wo_ref || ''; setWoRef(o); setWoSaved(o); })   // online → authoritative
+    releaseStatus(sectorId).then((r) => {
+      setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); const o = (r as any).wo_ref || ''; setWoRef(o); setWoSaved(o);
+      if ((r as any).checks) setChecks((r as any).checks);   // sector-scoped; shows 2/10-day currency even when current
+      // Fold locally-signed (offline) checks using the sector's OWN tail — not currentAircraft, which is
+      // unset when the Sign-off is opened straight from Your Sectors.
+      const reg = (r as any).registration || currentAircraft()?.registration;
+      if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
+    })   // online → authoritative
       .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
     // Direct server call — the endpoint 404s for flight sectors (card hidden); never depend on the
     // local copy (a server-created maintenance log may not be in the device DB yet).
     closedDefects(sectorId).then((r) => setClosing(r.items)).catch(() => setClosing(null));
-    const reg = currentAircraft()?.registration;
-    if (reg) aircraftStatus(reg).then((x) => setChecks(x.checks || [])).catch(() => {});
   }, [sectorId]);
 
   async function saveWork() {
