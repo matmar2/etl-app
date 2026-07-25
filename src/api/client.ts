@@ -612,7 +612,7 @@ export type Correction = { id: string; field?: string; old_value?: string; new_v
 export const listCorrections = (sectorId: string): Promise<Correction[]> => api(`/sectors/${sectorId}/corrections`);
 export const raiseCorrection = (sectorId: string, body: { field?: string; old_value?: string; new_value?: string; reason: string; signature_image?: string }): Promise<{ id: string }> =>
   mutateOrQueue(`/sectors/${sectorId}/corrections`, { method: 'POST', body: JSON.stringify(body) });
-export const sectorTlHtml = (sectorId: string): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl`);
+export const sectorTlHtml = (sectorId: string, query = ''): Promise<{ html: string }> => api(`/sectors/${sectorId}/tl${query}`);
 // Preview the Tech Log / CRS page a defect rectification will be recorded on, before signing (writes nothing).
 // Cached ON VIEW so the VAW-ETL-01 CRS page you opened online re-opens offline. Online always
 // fetches fresh (cachedHtml only returns the cache on NetworkError). Key bumped to defcrs2_ so the

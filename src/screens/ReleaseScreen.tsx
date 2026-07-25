@@ -42,7 +42,16 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [melOpen, setMelOpen] = useState(false);
   const [cdlOpen, setCdlOpen] = useState(false);
   const [clearSel, setClearSel] = useState<Set<string>>(new Set());   // defects / HIL ticked to clear on this TL
-  const toggleClear = (id: string) => setClearSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleClear = (d: any) => {
+    const has = clearSel.has(d.id);
+    setClearSel((prev) => { const n = new Set(prev); has ? n.delete(d.id) : n.add(d.id); return n; });
+    if (!has) {   // ticking: auto-add its HIL / MEL / CDL reference to the work carried out
+      const bits = [d.hil_no ? `HIL ${d.hil_no}` : null, d.mel_ref ? `MEL ${d.mel_ref}` : null, d.cdl_ref ? `CDL ${d.cdl_ref}` : null,
+        (!d.mel_ref && !d.cdl_ref && d.approved_ref) ? `Approved data ${d.approved_ref}` : null].filter(Boolean);
+      const ref = [bits.join(' · '), d.title || d.description].filter(Boolean).join(' — ');
+      if (ref) setWorkDone((w) => (w || '').includes(ref) ? w : (w.trim() ? `${w.trim()}\n${ref}` : ref));
+    }
+  };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
@@ -85,9 +94,11 @@ export default function ReleaseScreen({ route, navigation }: any) {
   function completeTL() {
     const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
     if (unticked.length) { setMsg('Tick each open defect below to clear it on this Tech Log (or rectify / defer it first), then Complete.'); return; }
-    const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
-    const tickedDef = ((st as any).maintenance_only) && (st!.deferred || []).some((d) => clearSel.has(d.id));
-    if (bp && !tickedDef) { setMsg('Confirm the delayed-OASES conditions above, or tick the overdue hold item(s) below to clear them, then Complete.'); return; }
+    // Flight release (not maintenance) still needs the delayed-OASES bridge confirmed.
+    if (!((st as any).maintenance_only)) {
+      const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
+      if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
+    }
     if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence, then Complete.'); return; }
     sig ? submitRelease(sig) : setSigning(true);
   }
@@ -107,10 +118,13 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
   // Preview the Tech Log / CRS page for this sector before signing (writes nothing).
   async function previewCRS() {
+    if (previewing) return;                                    // guard: never open the preview twice
     setPreviewing(true); setMsg('');
+    // On a maintenance TL, preview ONLY the ticked items + the W/O (not every open aircraft defect).
+    const q = (st as any)?.maintenance_only && clearSel.size ? `?preview_clear=${Array.from(clearSel).join(',')}` : '';
     try {
-      if (await printServerPdf(`/sectors/${sectorId}/pdf`)) { setMsg(''); return; }     // server PDF: header + Page N of X
-      const { html } = await sectorTlHtmlCached(sectorId); if (html) await printHtml(html);
+      if (await printServerPdf(`/sectors/${sectorId}/pdf${q}`)) { setMsg(''); return; }     // server PDF: header + Page N of X
+      const { html } = await sectorTlHtml(sectorId, q).catch(() => ({ html: '' })); if (html) await printHtml(html);
     }
     catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the preview.')); }
     finally { setPreviewing(false); }
@@ -193,16 +207,17 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // Delayed-OASES bridge (checks OR overdue hold items): once the certifying staff have confirmed
   // the conditions for this leg (check_override.mechanic_by set), they no longer block the CRS — the
   // server allows the release. Only an UNCONFIRMED bridge condition holds the button.
-  const bridgePending = !!(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by;
+  // The delayed-OASES bridge is a FLIGHT-release concept (dispatch). A maintenance TL certifies work
+  // and doesn't dispatch, so the bridge never applies there.
+  const bridgePending = !(st as any).maintenance_only && !!(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by;
   const bridgeIsHil = ((st as any).check_blockers || []).some((r: string) => /hold item/i.test(r));
-  // On a maintenance TL, a ticked blocker / HIL will be cleared on release, so it no longer blocks
-  // the CRS. Ticking the overdue hold items lets you complete (the release clears them → serviceable);
-  // otherwise confirm the delayed-OASES bridge. The backend re-validates on release.
+  // Completing a MAINTENANCE Tech Log certifies the work — it is gated only by OPEN blocking defects
+  // (which must be cleared/ticked or deferred first). Deferred HILs (in-date or overdue) do NOT block
+  // it: they are the commander's dispatch concern, and completing the TL does not release the aircraft
+  // for a flight. A ticked blocker is cleared on release, so it no longer blocks. Flight releases still
+  // require the delayed-OASES bridge.
   const untickedBlockers = (st.blockers || []).filter((b) => !clearSel.has(b.id)).length;
-  const tickedDeferred = (st.deferred || []).some((d) => clearSel.has(d.id));
-  const relLocked = (st as any).maintenance_only
-    ? (untickedBlockers > 0 || (bridgePending && !tickedDeferred))
-    : (st.blockers.length > 0 || bridgePending);
+  const relLocked = (st as any).maintenance_only ? untickedBlockers > 0 : (st.blockers.length > 0 || bridgePending);
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
@@ -274,7 +289,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
                   <Text style={s.btnTxt}>✍ Complete the Tech Log — Sign</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={{ color: theme.sub, fontSize: 11 }}>Completing signs this Tech Log — it closes the ticked items + the W/O and releases the aircraft. A W/O with no defects completes NIL-defect.</Text>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>Completing signs this Tech Log and certifies the maintenance — it closes the ticked items + the W/O. It does NOT release the aircraft for a flight; the commander accepts that separately. A W/O with no defects completes NIL-defect.</Text>
               <Text style={{ color: theme.sub, fontSize: 11 }}>The Tech Log can be modified before the flight departs, or before the CRS is signed — whichever applies.</Text>
             </View>
           ) : null}
@@ -298,7 +313,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
         </View>
       ) : null}
 
-      {(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by ? (
+      {bridgePending ? (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 8, padding: 12, marginBottom: 10 }}>
           <Text style={{ color: theme.text, fontWeight: '800' }}>Certifying staff confirmation required — delayed OASES update</Text>
           <Text style={[s.sub, { marginTop: 4 }]}>The following show unserviceable due to the delayed OASES update. As certifying staff, confirm they are resolved before signing the CRS — the commander then signs the acceptance on the strength of your CRS:</Text>
@@ -483,7 +498,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
 function Group({ title, items, empty, color, nav, selectable, selected, onToggle }:
   { title: string; items: DefectBrief[]; empty: string; color: string; nav: any;
-    selectable?: boolean; selected?: Set<string>; onToggle?: (id: string) => void }) {
+    selectable?: boolean; selected?: Set<string>; onToggle?: (d: DefectBrief) => void }) {
   return (
     <>
       <Text style={s.section}>{title}</Text>
@@ -491,7 +506,7 @@ function Group({ title, items, empty, color, nav, selectable, selected, onToggle
       {items.length ? items.map((d) => (
         <View key={d.id} style={s.row}>
           {selectable ? (
-            <TouchableOpacity onPress={() => onToggle?.(d.id)} style={{ paddingRight: 10 }}>
+            <TouchableOpacity onPress={() => onToggle?.(d)} style={{ paddingRight: 10 }}>
               <Text style={{ fontSize: 20, color: selected?.has(d.id) ? theme.green : theme.sub }}>{selected?.has(d.id) ? '☑' : '☐'}</Text>
             </TouchableOpacity>
           ) : null}
