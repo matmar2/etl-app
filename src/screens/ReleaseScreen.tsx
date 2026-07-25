@@ -5,7 +5,7 @@ import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correctio
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
-import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
+import { deleteSector, getSector, localReleaseStatus, markLocalReleased } from '../db/sectors';
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
@@ -39,6 +39,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [workSaved, setWorkSaved] = useState('');     // last-saved value, to show the Save state
   const [woRef, setWoRef] = useState('');             // editable W/O ref / scope — build up the TL with more work
   const [woSaved, setWoSaved] = useState('');
+  const [maintBad, setMaintBad] = useState<{ wo?: boolean; work?: boolean }>({});   // highlight missing mandatory fields on Complete
   const [ammOpen, setAmmOpen] = useState(false);
   const [melOpen, setMelOpen] = useState(false);
   const [cdlOpen, setCdlOpen] = useState(false);
@@ -106,9 +107,33 @@ export default function ReleaseScreen({ route, navigation }: any) {
       if (unticked.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before the flight CRS.'); return; }
       const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
       if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
+    } else {
+      // Maintenance TL: the work order / scope and the work carried out are mandatory. Don't disable
+      // the button — highlight what's missing when it's pressed so the mechanic sees why.
+      const bad = { wo: !woRef.trim(), work: !workDone.trim() };
+      if (bad.wo || bad.work) {
+        setMaintBad(bad);
+        setMsg(bad.wo && bad.work ? 'Enter the Work order / scope and the Work carried out before completing.'
+          : bad.wo ? 'Enter the Work order / scope before completing.'
+          : 'Enter the Work carried out before completing.');
+        return;
+      }
+      setMaintBad({});
     }
     if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence, then Complete.'); return; }
     sig ? submitRelease(sig) : setSigning(true);
+  }
+  // Discard an unsigned maintenance Tech Log opened by mistake / no longer required (double-confirm).
+  // Only possible BEFORE the CRS is signed — once released it is an official record (reset/back office).
+  async function discardTL() {
+    if (!(await confirmAction('Discard this maintenance Tech Log?\n\nIt was opened but not signed — this removes it entirely, including any draft work order, ticked items and component-change entries on it.', 'Discard Tech Log'))) return;
+    if (!(await confirmAction('Confirm once more — permanently delete this Tech Log? This cannot be undone.', 'Confirm delete'))) return;
+    try { await deleteSector(sectorId); navigation.goBack(); }
+    catch (e: any) {
+      setMsg(/409|released|signed|closed/i.test(e?.message || '')
+        ? 'This Tech Log is already signed/closed and can no longer be discarded — request a CRS reset or ask the back office.'
+        : (e?.message || 'Could not discard the Tech Log.'));
+    }
   }
   async function submitCorrection() {
     if (!corr.reason.trim()) { setMsg('Enter a reason for the correction.'); return; }
@@ -249,10 +274,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
               below, then a single CRS clears all. Standalone W/O releases even with NIL defects. */}
           {isMech ? (
             <>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope <Text style={{ color: theme.sub, fontWeight: '400' }}>(optional)</Text></Text>
-              <TextInput style={[s.input, { minHeight: Math.max(56, woRef.split('\n').length * 22 + 24), textAlignVertical: 'top' }]}
-                value={woRef} onChangeText={setWoRef} multiline
-                placeholder="Optional — work order / task-card ref(s) and scope. Task Card / MEL / CDL below are optional too." placeholderTextColor={theme.sub} />
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope <Text style={{ color: theme.red }}>*</Text></Text>
+              <TextInput style={[s.input, { minHeight: Math.max(56, woRef.split('\n').length * 22 + 24), textAlignVertical: 'top' }, maintBad.wo ? { borderColor: theme.red, borderWidth: 2 } : null]}
+                value={woRef} onChangeText={(v) => { setWoRef(v); if (maintBad.wo) setMaintBad((b) => ({ ...b, wo: false })); }} multiline
+                placeholder="Work order / task-card ref(s) and scope. Task Card / MEL / CDL below optional." placeholderTextColor={theme.sub} />
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setAmmOpen(true)}><Text style={s.btnTxt}>＋ Task Card (AMM)</Text></TouchableOpacity>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setMelOpen(true)}><Text style={s.btnTxt}>Pick MEL</Text></TouchableOpacity>
@@ -260,10 +285,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 {/* Component Change Record — removed/installed parts (P/N & S/N off/on + Form 1); entries print on this Tech Log. */}
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => navigation.navigate('ComponentChange', { sectorId })}><Text style={s.btnTxt}>🔧 CCR</Text></TouchableOpacity>
               </View>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken</Text>
-              <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
-                value={workDone} onChangeText={setWorkDone} multiline
-                placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Leave blank if this log only clears the defects / HIL below." placeholderTextColor={theme.sub} />
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken <Text style={{ color: theme.red }}>*</Text></Text>
+              <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }, maintBad.work ? { borderColor: theme.red, borderWidth: 2 } : null]}
+                value={workDone} onChangeText={(v) => { setWorkDone(v); if (maintBad.work) setMaintBad((b) => ({ ...b, work: false })); }} multiline
+                placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Ticking a defect / HIL below adds its reference here." placeholderTextColor={theme.sub} />
               {/* Save draft always shown, but unclickable until the work carried out is entered. The
                   work is also saved automatically when you sign the CRS — Save is only for drafts. */}
               {(() => { const dirty = workDone !== workSaved || woRef !== woSaved; const canSave = !!workDone.trim() && dirty; return (
@@ -308,6 +333,13 @@ export default function ReleaseScreen({ route, navigation }: any) {
               </View>
               <Text style={{ color: theme.sub, fontSize: 11 }}>Completing signs this Tech Log and certifies the maintenance — it closes the ticked items + the W/O. It does NOT release the aircraft for a flight; the commander accepts that separately. A W/O with no defects completes NIL-defect.</Text>
               <Text style={{ color: theme.sub, fontSize: 11 }}>The Tech Log can be modified before the flight departs, or before the CRS is signed — whichever applies.</Text>
+              {/* Discard an unsigned log opened by mistake / no longer required (double-confirm). Once
+                  the CRS is signed it becomes an official record and this is no longer offered. */}
+              {!st.released ? (
+                <TouchableOpacity style={{ alignSelf: 'flex-start', marginTop: 12, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.red }} onPress={discardTL}>
+                  <Text style={{ color: theme.red, fontWeight: '800', fontSize: 13 }}>🗑 Discard this Tech Log</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : null}
         </View>

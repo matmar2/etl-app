@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ammIawLine, ammRevision, can, createMaintenance, currentAircraft, extendDefect, listActiveDefects, listHIL, NetworkError, serverSectors, syncPush, userName } from '../api/client';
-import { createLocalMaintenance } from '../db/sectors';
+import { createLocalMaintenance, deleteSector } from '../db/sectors';
 import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
 import MelPicker from '../components/MelPicker';
@@ -93,6 +93,19 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     } catch (e: any) { setMsg(e.message || 'Could not save the extension.'); }
   }
 
+  // Discard an unsigned maintenance Tech Log opened by mistake / no longer required (double-confirm).
+  async function discardLog(id: string, label: string) {
+    if (!(await confirmAction(`Discard ${label}?\n\nIt was opened but not signed — this removes it entirely, including any draft work order and component-change entries on it.`, 'Discard Tech Log'))) return;
+    if (!(await confirmAction('Confirm once more — permanently delete this Tech Log? This cannot be undone.', 'Confirm delete'))) return;
+    setMsg('');
+    try { await deleteSector(id); load(); }
+    catch (e: any) {
+      setMsg(/409|released|signed|closed/i.test(e?.message || '')
+        ? 'This Tech Log is already signed/closed and can no longer be discarded — ask the back office.'
+        : (e?.message || 'Could not discard the Tech Log.'));
+    }
+  }
+
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <Text style={s.title}>Ground Maintenance · {reg}</Text>
@@ -167,7 +180,13 @@ export default function MaintenanceScreen({ route, navigation }: any) {
                   <Text style={s.rowTitle}>TL #{l.page_no != null ? fmtTl(l.page_no) : '—'}{l.dep ? ` · ${l.dep}` : ''}{l.flight_date ? ` · ${String(l.flight_date).slice(0, 10)}` : ''}</Text>
                   <Text style={s.sub} numberOfLines={2}>{l.wo_ref || 'No work-order reference recorded yet'}</Text>
                 </View>
-                <Text style={s.rectify}>resume ›</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                  <Text style={s.rectify}>resume ›</Text>
+                  {/* Discard this unsigned log (double-confirm) — opened by mistake / no longer needed. */}
+                  <TouchableOpacity onPress={() => discardLog(l.id, `TL #${l.page_no != null ? fmtTl(l.page_no) : '—'}`)} hitSlop={12}>
+                    <Text style={{ color: theme.red, fontWeight: '800', fontSize: 16 }}>🗑</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </TouchableOpacity>
           ))}
