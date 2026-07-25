@@ -86,8 +86,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
     const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
     if (unticked.length) { setMsg('Tick each open defect below to clear it on this Tech Log (or rectify / defer it first), then Complete.'); return; }
     const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
-    if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
-    if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence in the CRS section below, then Complete.'); return; }
+    const tickedDef = ((st as any).maintenance_only) && (st!.deferred || []).some((d) => clearSel.has(d.id));
+    if (bp && !tickedDef) { setMsg('Confirm the delayed-OASES conditions above, or tick the overdue hold item(s) below to clear them, then Complete.'); return; }
+    if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence, then Complete.'); return; }
     sig ? submitRelease(sig) : setSigning(true);
   }
   async function submitCorrection() {
@@ -194,9 +195,14 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // server allows the release. Only an UNCONFIRMED bridge condition holds the button.
   const bridgePending = !!(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by;
   const bridgeIsHil = ((st as any).check_blockers || []).some((r: string) => /hold item/i.test(r));
-  // On a maintenance TL, a ticked blocker will be cleared on release, so it no longer blocks the CRS.
+  // On a maintenance TL, a ticked blocker / HIL will be cleared on release, so it no longer blocks
+  // the CRS. Ticking the overdue hold items lets you complete (the release clears them → serviceable);
+  // otherwise confirm the delayed-OASES bridge. The backend re-validates on release.
   const untickedBlockers = (st.blockers || []).filter((b) => !clearSel.has(b.id)).length;
-  const relLocked = ((st as any).maintenance_only ? untickedBlockers : st.blockers.length) > 0 || bridgePending;
+  const tickedDeferred = (st.deferred || []).some((d) => clearSel.has(d.id));
+  const relLocked = (st as any).maintenance_only
+    ? (untickedBlockers > 0 || (bridgePending && !tickedDeferred))
+    : (st.blockers.length > 0 || bridgePending);
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
@@ -253,12 +259,23 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 • To raise a NEW defect, use the <Text style={{ fontWeight: '700' }}>Defects</Text> page.
               </Text>
               {clearSel.size ? <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ {clearSel.size} item(s) ticked to clear on this Tech Log.</Text> : null}
-              {/* Complete the Tech Log = sign it (the CRS), closing every ticked item + the W/O, and release. */}
-              <TouchableOpacity style={[s.btn, { backgroundColor: relLocked ? '#444' : theme.green, marginTop: 4 }]}
-                disabled={busy || relLocked} onPress={completeTL}>
-                <Text style={s.btnTxt}>✍ Complete the Tech Log — Sign</Text>
-              </TouchableOpacity>
-              <Text style={{ color: theme.sub, fontSize: 11 }}>Signing completes this Tech Log — it closes the ticked items + the W/O and releases. Enter your name + licence in the CRS section below. A W/O with no defects releases NIL-defect.</Text>
+              {/* Certifying staff — prefilled from profile, editable. Needed to complete/sign the TL. */}
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
+                <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no. *" placeholderTextColor={theme.sub} autoCapitalize="characters" />
+              </View>
+              {/* Preview then Complete — on one line. Completing signs the Tech Log (closing ticked items
+                  + the W/O and releasing); the signature pad opens next. */}
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TouchableOpacity style={[s.btn, { flex: 1, marginTop: 0, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} disabled={previewing} onPress={previewCRS}>
+                  <Text style={s.btnTxt}>{previewing ? 'Opening…' : '👁 Preview TL'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[s.btn, { flex: 1, marginTop: 0, backgroundColor: relLocked ? '#444' : theme.green }]} disabled={busy || relLocked} onPress={completeTL}>
+                  <Text style={s.btnTxt}>✍ Complete the Tech Log — Sign</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>Completing signs this Tech Log — it closes the ticked items + the W/O and releases the aircraft. A W/O with no defects completes NIL-defect.</Text>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>The Tech Log can be modified before the flight departs, or before the CRS is signed — whichever applies.</Text>
             </View>
           ) : null}
         </View>
@@ -393,7 +410,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity style={[s.btn, { backgroundColor: relLocked ? '#444' : theme.green }]} disabled={busy || relLocked}
             onPress={completeTL}>
-            <Text style={[s.btnTxt, relLocked ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & sign' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign — complete Tech Log' : '✍ Complete the Tech Log — Sign') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
+            <Text style={[s.btnTxt, relLocked ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & sign' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign — Complete the Tech Log/CRS' : '✍ Complete the Tech Log/CRS') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
           </TouchableOpacity>
           {st.blockers.length ? <Text style={[s.sub, { color: theme.red }]}>Cannot release: {st.blockers.length} open defect(s) must be deferred (MEL/HIL) or rectified first.</Text> : null}
         </>
