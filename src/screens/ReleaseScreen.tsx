@@ -41,6 +41,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [ammOpen, setAmmOpen] = useState(false);
   const [melOpen, setMelOpen] = useState(false);
   const [cdlOpen, setCdlOpen] = useState(false);
+  const [clearSel, setClearSel] = useState<Set<string>>(new Set());   // defects / HIL ticked to clear on this TL
+  const toggleClear = (id: string) => setClearSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
@@ -81,7 +83,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // Complete the Tech Log = sign the CRS (releases the aircraft, closing every item on the page).
   // Used by the button in the W/O box and the one at the bottom of the page.
   function completeTL() {
-    if (st!.blockers.length) { setMsg('Rectify or defer the open defect(s) first — tap them below.'); return; }
+    const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
+    if (unticked.length) { setMsg('Tick each open defect below to clear it on this Tech Log (or rectify / defer it first), then Complete.'); return; }
     const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
     if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
     if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence in the CRS section below, then Complete.'); return; }
@@ -133,6 +136,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
       const r: any = await releaseSector(sectorId, {
         note: note.trim() || undefined, signer_name: signer.trim() || undefined,
         licence_no: licence.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined,
+        clear_ids: Array.from(clearSel),
       });
       setSig(null); setOtp(''); setNeedOtp(false);
       if (r?.queued) {
@@ -190,6 +194,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // server allows the release. Only an UNCONFIRMED bridge condition holds the button.
   const bridgePending = !!(st as any).check_blockers?.length && !(st as any).check_override?.mechanic_by;
   const bridgeIsHil = ((st as any).check_blockers || []).some((r: string) => /hold item/i.test(r));
+  // On a maintenance TL, a ticked blocker will be cleared on release, so it no longer blocks the CRS.
+  const untickedBlockers = (st.blockers || []).filter((b) => !clearSel.has(b.id)).length;
+  const relLocked = ((st as any).maintenance_only ? untickedBlockers : st.blockers.length) > 0 || bridgePending;
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
@@ -238,21 +245,20 @@ export default function ReleaseScreen({ route, navigation }: any) {
             <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>{(st as any).wo_ref ? `W/O: ${(st as any).wo_ref}` : ''}{(st as any).work_performed ? `\nWork carried out: ${(st as any).work_performed}` : ''}</Text>
           ) : null}
           {isMech ? (
-            <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 12, paddingTop: 10, gap: 8 }}>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>This Tech Log — add more, or complete it</Text>
-              {/* Add another item to the SAME TL: a HIL / defect to clear (rectify or defer it, it joins
-                  this page), or another W/O / task card via the pickers above. */}
-              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, alignSelf: 'flex-start' }]}
-                onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration })}>
-                <Text style={[s.btnTxt, { color: theme.accent }]}>＋ Add / clear a HIL or defect on this TL ›</Text>
+            <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 12, paddingTop: 10, gap: 6 }}>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>This Tech Log — build it up, then complete it</Text>
+              <Text style={{ color: theme.sub, fontSize: 12 }}>
+                • Add another W/O or task card with the Task Card / MEL / CDL buttons above.{'\n'}
+                • <Text style={{ fontWeight: '700' }}>Tick the defects / HIL to clear</Text> in the lists further down — the work above is their action taken.{'\n'}
+                • To raise a NEW defect, use the <Text style={{ fontWeight: '700' }}>Defects</Text> page.
+              </Text>
+              {clearSel.size ? <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ {clearSel.size} item(s) ticked to clear on this Tech Log.</Text> : null}
+              {/* Complete the Tech Log = sign it (the CRS), closing every ticked item + the W/O, and release. */}
+              <TouchableOpacity style={[s.btn, { backgroundColor: relLocked ? '#444' : theme.green, marginTop: 4 }]}
+                disabled={busy || relLocked} onPress={completeTL}>
+                <Text style={s.btnTxt}>✍ Complete the Tech Log — Sign</Text>
               </TouchableOpacity>
-              <Text style={{ color: theme.sub, fontSize: 11 }}>Add another W/O or task card with the buttons above. Rectify or defer a HIL / defect and it joins this Tech Log.</Text>
-              {/* Complete the Tech Log = sign the CRS: closes every item on this page and releases. */}
-              <TouchableOpacity style={[s.btn, { backgroundColor: (st.blockers.length || bridgePending) ? '#444' : theme.green }]}
-                disabled={busy || st.blockers.length > 0 || bridgePending} onPress={completeTL}>
-                <Text style={s.btnTxt}>✍ Complete the Tech Log — sign CRS</Text>
-              </TouchableOpacity>
-              <Text style={{ color: theme.sub, fontSize: 11 }}>Completing the TL signs the CRS below (enter your name + licence there). A W/O with no defects releases NIL-defect.</Text>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>Signing completes this Tech Log — it closes the ticked items + the W/O and releases. Enter your name + licence in the CRS section below. A W/O with no defects releases NIL-defect.</Text>
             </View>
           ) : null}
         </View>
@@ -306,9 +312,11 @@ export default function ReleaseScreen({ route, navigation }: any) {
         </View>
       ) : null}
       <Group title={`Blocking defects (${st.blockers.length})`} items={st.blockers} empty="None"
-        color={theme.red} nav={navigation} />
+        color={theme.red} nav={navigation}
+        selectable={(st as any).maintenance_only && isMech} selected={clearSel} onToggle={toggleClear} />
       <Group title={`Deferred · HIL (${st.deferred.length})`} items={st.deferred} empty="None"
-        color={theme.accent} nav={navigation} />
+        color={theme.accent} nav={navigation}
+        selectable={(st as any).maintenance_only && isMech} selected={clearSel} onToggle={toggleClear} />
 
       <Text style={s.section}>Maintenance release (CRS)</Text>
       {st.released ? (
@@ -383,9 +391,9 @@ export default function ReleaseScreen({ route, navigation }: any) {
             onPress={previewCRS}>
             <Text style={s.btnTxt}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.btn, { backgroundColor: (st.blockers.length || bridgePending) ? '#444' : theme.green }]} disabled={busy || st.blockers.length > 0 || bridgePending}
+          <TouchableOpacity style={[s.btn, { backgroundColor: relLocked ? '#444' : theme.green }]} disabled={busy || relLocked}
             onPress={completeTL}>
-            <Text style={[s.btnTxt, st.blockers.length ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & release' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign CRS — complete Tech Log' : '✍ Sign CRS — complete & release Tech Log') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
+            <Text style={[s.btnTxt, relLocked ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & sign' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign — complete Tech Log' : '✍ Complete the Tech Log — Sign') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
           </TouchableOpacity>
           {st.blockers.length ? <Text style={[s.sub, { color: theme.red }]}>Cannot release: {st.blockers.length} open defect(s) must be deferred (MEL/HIL) or rectified first.</Text> : null}
         </>
@@ -456,18 +464,28 @@ export default function ReleaseScreen({ route, navigation }: any) {
   );
 }
 
-function Group({ title, items, empty, color, nav }: { title: string; items: DefectBrief[]; empty: string; color: string; nav: any }) {
+function Group({ title, items, empty, color, nav, selectable, selected, onToggle }:
+  { title: string; items: DefectBrief[]; empty: string; color: string; nav: any;
+    selectable?: boolean; selected?: Set<string>; onToggle?: (id: string) => void }) {
   return (
     <>
       <Text style={s.section}>{title}</Text>
+      {selectable && items.length ? <Text style={[s.sub, { marginTop: -2, marginBottom: 6 }]}>Tick each item to clear on this Tech Log; tap the row to open it.</Text> : null}
       {items.length ? items.map((d) => (
-        <TouchableOpacity key={d.id} style={s.row} onPress={() => nav.navigate('DefectDetail', { defectId: d.id })}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.rowTitle}>{d.title || d.description}</Text>
-            <Text style={s.sub}>{(d.source || '').toUpperCase()} · {d.area === 'cabin' ? 'CABIN' : 'TECH'} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}</Text>
-          </View>
-          <Text style={[s.rowStatus, { color }]}>{d.status}</Text>
-        </TouchableOpacity>
+        <View key={d.id} style={s.row}>
+          {selectable ? (
+            <TouchableOpacity onPress={() => onToggle?.(d.id)} style={{ paddingRight: 10 }}>
+              <Text style={{ fontSize: 20, color: selected?.has(d.id) ? theme.green : theme.sub }}>{selected?.has(d.id) ? '☑' : '☐'}</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => nav.navigate('DefectDetail', { defectId: d.id })}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.rowTitle}>{d.title || d.description}</Text>
+              <Text style={s.sub}>{(d.source || '').toUpperCase()} · {d.area === 'cabin' ? 'CABIN' : 'TECH'} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}</Text>
+            </View>
+            <Text style={[s.rowStatus, { color }]}>{d.status}</Text>
+          </TouchableOpacity>
+        </View>
       )) : <Text style={s.sub}>{empty}</Text>}
     </>
   );

@@ -568,7 +568,7 @@ export const setClosedDefects = (sectorId: string, ids: string[]) => api(`/secto
 
 export const releaseStatus = (sectorId: string): Promise<ReleaseStatus> =>
   api(`/sectors/${sectorId}/release-status`);
-export async function releaseSector(sectorId: string, body: { note?: string; signer_name?: string; licence_no?: string; signature_image?: string; otp?: string; device_id?: string }) {
+export async function releaseSector(sectorId: string, body: { note?: string; signer_name?: string; licence_no?: string; signature_image?: string; otp?: string; device_id?: string; clear_ids?: string[] }) {
   let res: Response;
   try {
     res = await fetch(`${BASE}/sectors/${sectorId}/release`, {
