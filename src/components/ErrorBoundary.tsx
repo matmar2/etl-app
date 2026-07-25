@@ -24,7 +24,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
           The app hit an error and reported it to the team automatically. Your saved work is kept. Please fully close the app (swipe up) and reopen it; if it keeps happening, note the steps in Feedback.
         </Text>
         <TouchableOpacity onPress={() => this.setState({ err: null })} style={{ backgroundColor: theme.accent, borderRadius: 8, paddingVertical: 12, paddingHorizontal: 22 }}>
-          <Text style={{ color: '#1a1300', fontWeight: '800' }}>Try again</Text>
+          <Text style={{ color: theme.onAccent, fontWeight: '800' }}>Try again</Text>
         </TouchableOpacity>
       </View>
     );

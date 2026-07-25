@@ -539,7 +539,7 @@ export default function DepartureScreen({ route, navigation }: any) {
                 {(['KG', 'LB', 'IG', 'L'] as const).map((u) => (
                   <TouchableOpacity key={u} onPress={() => changeUnit(u)}
                     style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: upliftUnit === u ? theme.accent : theme.border, backgroundColor: upliftUnit === u ? theme.accent : theme.tile }}>
-                    <Text style={{ color: upliftUnit === u ? '#1a1300' : theme.text, fontWeight: '800', fontSize: 12 }}>{u}</Text>
+                    <Text style={{ color: upliftUnit === u ? theme.onAccent : theme.text, fontWeight: '800', fontSize: 12 }}>{u}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -885,7 +885,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       {s.status === 'preflight_signed' ? (
         <>
           <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.accent }]}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>Accepted ✓</Text>
+            <Text style={[sx.saveText, { color: theme.onAccent }]}>Accepted ✓</Text>
           </TouchableOpacity>
           {isCrew && !s.takeoff ? (
             <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 8 }]} onPress={undoAccept}>
@@ -900,7 +900,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         <>
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
           <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR && !testing)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR || testing)) ? 1 : 0.4 }]} onPress={accept}>
-            <Text style={[sx.saveText, { color: '#1a1300' }]}>{!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)'}</Text>
+            <Text style={[sx.saveText, { color: theme.onAccent }]}>{!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)'}</Text>
           </TouchableOpacity>
           {/* Transient feedback (errors, "undone", offline) — kept OUT of the button label so it
               never masks the real action the button performs. */}

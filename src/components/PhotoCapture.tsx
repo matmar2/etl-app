@@ -135,7 +135,7 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
               </View>
             ) : null}
             <TouchableOpacity style={[s.btn, { marginTop: 10, alignSelf: 'flex-end', backgroundColor: theme.accent }]} onPress={() => setViewer(false)}>
-              <Text style={[s.btnTxt, { color: '#1a1300' }]}>Close</Text>
+              <Text style={[s.btnTxt, { color: theme.onAccent }]}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>

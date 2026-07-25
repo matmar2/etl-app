@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   refreshBtn: { borderWidth: 1, borderColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 88, alignItems: 'center' },
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
   updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },
-  updateTxt: { color: '#1a1300', fontWeight: '800', fontSize: 13 },
+  updateTxt: { color: theme.onAccent, fontWeight: '800', fontSize: 13 },
   updateBadge: { position: 'absolute', top: -4, right: -4, width: 13, height: 13, borderRadius: 7, backgroundColor: theme.red, borderWidth: 2, borderColor: theme.bg },
   pendingBar: { backgroundColor: '#B45309', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   pendingBarTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },

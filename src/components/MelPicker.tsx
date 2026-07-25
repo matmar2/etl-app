@@ -135,7 +135,7 @@ const s = StyleSheet.create({
   chip: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile },
   chipOn: { backgroundColor: theme.accent, borderColor: theme.accent },
   chipTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
-  chipTxtOn: { color: '#1a1300' },
+  chipTxtOn: { color: theme.onAccent },
   hint: { color: theme.sub, fontSize: 11, marginTop: 6 },
   results: { flex: 1, marginTop: 8 },
   sub: { color: theme.sub, marginTop: 16 },

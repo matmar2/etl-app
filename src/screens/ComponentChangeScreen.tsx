@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
+import { can, CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
 import { printHtml } from '../print';
+import RoBanner from '../components/RoBanner';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -12,6 +13,8 @@ import { theme } from '../theme';
 export default function ComponentChangeScreen({ route }: any) {
   const { defectId, sectorId } = route.params || {};
   const scope = { defectId, sectorId };
+  // Component changes are a CERTIFYING-STAFF (maintenance) record. Others may only view / preview.
+  const canEdit = can('defects', 'rectify') || can('maintenance');
   const [rows, setRows] = useState<CcrRow[]>([]);
   const [editing, setEditing] = useState<CcrRow | null>(null);   // row being edited (id '' = new)
   const [msg, setMsg] = useState('');
@@ -103,13 +106,14 @@ export default function ComponentChangeScreen({ route }: any) {
       <Text style={s.title}>Component Change (CCR)</Text>
       <Text style={s.sub}>One row per removed / installed component — as on the paper tech log. The installed part needs its EASA Form 1 / CoC certificate № and a photo of the certificate.</Text>
       {msg ? <Text style={[s.sub, { color: msg.startsWith('✓') ? theme.green : theme.red, fontWeight: '700' }]}>{msg}</Text> : null}
+      {!canEdit ? <RoBanner text="only certifying staff (mechanic) record component changes — view only" /> : null}
 
       {rows.map((r) => (
         <View key={r.id} style={s.card}>
           <Text style={s.rowTitle}>{r.seq}. {r.description || '—'}{r.position ? `  ·  ${r.position}` : ''}</Text>
           <Text style={s.meta}>OFF  P/N {r.pn_off || '—'} · S/N {r.sn_off || '—'}      ON  P/N {r.pn_on || '—'} · S/N {r.sn_on || '—'}</Text>
           <Text style={s.meta}>Cert № {r.cert_no || '—'}{r.has_cert_photo ? '  ·  📷 certificate photo' : ''}{r.emailed_at ? `  ·  ✉ sent ${String(r.emailed_at).slice(0, 16)}` : ''}</Text>
-          {!r.emailed_at ? (
+          {!r.emailed_at && canEdit ? (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 6 }}>
               <TouchableOpacity onPress={() => { setEditing(r); setCertPhoto(null); }}><Text style={{ color: theme.accent, fontWeight: '700' }}>✎ Edit</Text></TouchableOpacity>
               <TouchableOpacity onPress={() => remove(r)}><Text style={{ color: theme.red, fontWeight: '700' }}>✕ Remove</Text></TouchableOpacity>
@@ -142,15 +146,15 @@ export default function ComponentChangeScreen({ route }: any) {
             <TouchableOpacity style={s.btn2} onPress={() => { setEditing(null); setCertPhoto(null); }}><Text style={s.btn2t}>Cancel</Text></TouchableOpacity>
           </View>
         </View>
-      ) : !sealed ? (
+      ) : !sealed && canEdit ? (
         <TouchableOpacity style={[s.btn, { backgroundColor: theme.accent, marginTop: 10 }]} onPress={() => { setEditing(blank); setCertPhoto(null); }}>
-          <Text style={[s.btnT, { color: '#1a1300' }]}>+ Add component change</Text>
+          <Text style={[s.btnT, { color: theme.onAccent }]}>+ Add component change</Text>
         </TouchableOpacity>
       ) : null}
 
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
         <TouchableOpacity style={s.btn2} onPress={preview}><Text style={s.btn2t}>👁 Preview / print report</Text></TouchableOpacity>
-        {rows.length && !sealed ? (
+        {canEdit && rows.length && !sealed ? (
           <TouchableOpacity style={[s.btn, { backgroundColor: theme.green }]} disabled={busy} onPress={send}>
             <Text style={s.btnT}>✉ Send report to recipients</Text>
           </TouchableOpacity>

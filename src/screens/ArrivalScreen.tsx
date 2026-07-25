@@ -409,7 +409,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         return (
           <>
             <TouchableOpacity disabled={!canSign} style={[sx.save, { backgroundColor: theme.accent, opacity: canSign ? 1 : 0.4 }]} onPress={accept}>
-              <Text style={[sx.saveText, { color: '#1a1300' }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : 'Sign — close sector (arrival)'}</Text>
+              <Text style={[sx.saveText, { color: theme.onAccent }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : 'Sign — close sector (arrival)'}</Text>
             </TouchableOpacity>
             {canAct && missing.length ? (
               <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Complete before signing: {missing.map((x) => x.label).join(', ')}</Text>

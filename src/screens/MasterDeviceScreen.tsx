@@ -132,7 +132,7 @@ export default function MasterDeviceScreen() {
               ) : (
                 <TouchableOpacity disabled={busy} onPress={() => makeMaster(d)}
                   style={{ backgroundColor: theme.accent, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14 }}>
-                  <Text style={{ color: '#1a1300', fontWeight: '800', fontSize: 12 }}>Make master</Text>
+                  <Text style={{ color: theme.onAccent, fontWeight: '800', fontSize: 12 }}>Make master</Text>
                 </TouchableOpacity>
               )}
             </View>

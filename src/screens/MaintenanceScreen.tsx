@@ -150,7 +150,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
               setCdlPick(false);
             }} />
           <TouchableOpacity style={[s.btn, { backgroundColor: theme.accent, opacity: busy ? 0.5 : 1 }]} disabled={busy} onPress={start}>
-            <Text style={[s.btnTxt, { color: '#1a1300' }]}>{busy ? 'Opening…' : 'Open maintenance log & go to CRS'}</Text>
+            <Text style={[s.btnTxt, { color: theme.onAccent }]}>{busy ? 'Opening…' : 'Open maintenance log & go to CRS'}</Text>
           </TouchableOpacity>
           {msg ? <Text style={s.err}>{msg}</Text> : null}
         </>
@@ -202,7 +202,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
               {extBad && msg ? <Text style={[s.err, { marginTop: 4 }]}>{msg}</Text> : null}
               <TextInput style={[s.input, { marginTop: 8 }]} value={extNote} onChangeText={setExtNote} placeholder="Extension reason / authority (optional)" placeholderTextColor={theme.sub} />
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
-                <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.accent }]} onPress={() => saveExtension(d.id)}><Text style={[s.btnTxt, { color: '#1a1300' }]}>Save extension</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.accent }]} onPress={() => saveExtension(d.id)}><Text style={[s.btnTxt, { color: theme.onAccent }]}>Save extension</Text></TouchableOpacity>
                 <TouchableOpacity style={[s.smallBtn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => setExtId(null)}><Text style={s.btnTxt}>Cancel</Text></TouchableOpacity>
               </View>
             </View>

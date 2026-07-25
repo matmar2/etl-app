@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, saveMaintWork, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
@@ -58,6 +58,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
   const [signing, setSigning] = useState(false);     // signature pad open
   const [previewing, setPreviewing] = useState(false);
+  const previewingRef = useRef(false);   // synchronous re-entry guard (state is async — double-fire opens twice)
   const [sig, setSig] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [needOtp, setNeedOtp] = useState(false);
@@ -93,12 +94,11 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // Complete the Tech Log = sign the CRS (releases the aircraft, closing every item on the page).
   // Used by the button in the W/O box and the one at the bottom of the page.
   function completeTL() {
-    const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
-    if (unticked.length) { setMsg('Tick each open defect below to clear it on this Tech Log (or rectify / defer it first), then Complete.'); return; }
-    if ((st as any).maintenance_only) {
-      const ov = (st!.deferred || []).filter((d: any) => d.overdue && !clearSel.has(d.id)).length;
-      if (ov) { setMsg(`${ov} hold item(s) overdue — extend the due date (tap the HIL) or tick it to clear, then Complete.`); return; }
-    } else {   // flight release still needs the delayed-OASES bridge confirmed
+    // A FLIGHT CRS must clear open defects + the delayed-OASES bridge; a MAINTENANCE TL never blocks
+    // on those (it certifies the work — the aircraft stays unserviceable for dispatch).
+    if (!((st as any).maintenance_only)) {
+      const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
+      if (unticked.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before the flight CRS.'); return; }
       const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
       if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
     }
@@ -121,7 +121,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
   // Preview the Tech Log / CRS page for this sector before signing (writes nothing).
   async function previewCRS() {
-    if (previewing) return;                                    // guard: never open the preview twice
+    if (previewingRef.current) return;                         // synchronous guard: never open the preview twice
+    previewingRef.current = true;
     setPreviewing(true); setMsg('');
     // On a maintenance TL, preview ONLY the ticked items + the W/O (not every open aircraft defect).
     const q = (st as any)?.maintenance_only && clearSel.size ? `?preview_clear=${Array.from(clearSel).join(',')}` : '';
@@ -130,7 +131,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
       const { html } = await sectorTlHtml(sectorId, q).catch(() => ({ html: '' })); if (html) await printHtml(html);
     }
     catch (e: any) { setMsg(/network|connection|offline|cached/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the preview.')); }
-    finally { setPreviewing(false); }
+    finally { previewingRef.current = false; setPreviewing(false); }
   }
 
   // Sign first, then submit the release with signature (+ MFA code).
@@ -220,10 +221,11 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // for a flight. A ticked blocker is cleared on release, so it no longer blocks. Flight releases still
   // require the delayed-OASES bridge.
   const untickedBlockers = (st.blockers || []).filter((b) => !clearSel.has(b.id)).length;
-  // An OVERDUE hold item blocks the maintenance CRS until it is EXTENDED (new due date, on its detail
-  // page) or ticked to clear. In-date deferred HILs never block.
   const untickedOverdue = (st.deferred || []).filter((d: any) => d.overdue && !clearSel.has(d.id)).length;
-  const relLocked = (st as any).maintenance_only ? (untickedBlockers > 0 || untickedOverdue > 0) : (st.blockers.length > 0 || bridgePending);
+  // A MAINTENANCE Tech Log can always be accomplished (it certifies the work carried out) — open
+  // blocking defects and overdue HILs keep the aircraft unserviceable for DISPATCH but never block
+  // signing the TL. Only a FLIGHT CRS is gated by open defects + the delayed-OASES bridge.
+  const relLocked = (st as any).maintenance_only ? false : (st.blockers.length > 0 || bridgePending);
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
@@ -241,10 +243,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
               below, then a single CRS clears all. Standalone W/O releases even with NIL defects. */}
           {isMech ? (
             <>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope</Text>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope <Text style={{ color: theme.sub, fontWeight: '400' }}>(optional)</Text></Text>
               <TextInput style={[s.input, { minHeight: Math.max(56, woRef.split('\n').length * 22 + 24), textAlignVertical: 'top' }]}
                 value={woRef} onChangeText={setWoRef} multiline
-                placeholder="Work order / task-card ref(s) and scope. Add another W/O or task card with the buttons below." placeholderTextColor={theme.sub} />
+                placeholder="Optional — work order / task-card ref(s) and scope. Task Card / MEL / CDL below are optional too." placeholderTextColor={theme.sub} />
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setAmmOpen(true)}><Text style={s.btnTxt}>＋ Task Card (AMM)</Text></TouchableOpacity>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setMelOpen(true)}><Text style={s.btnTxt}>Pick MEL</Text></TouchableOpacity>
@@ -280,7 +282,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 • To raise a NEW defect, use the <Text style={{ fontWeight: '700' }}>Defects</Text> page.
               </Text>
               {clearSel.size ? <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ {clearSel.size} item(s) ticked to clear on this Tech Log.</Text> : null}
-              {untickedOverdue ? <Text style={{ color: theme.red, fontSize: 12, fontWeight: '700' }}>▲ {untickedOverdue} hold item(s) overdue — extend the due date (tap the HIL below) or tick it to clear before completing.</Text> : null}
+              {untickedOverdue ? <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700' }}>ℹ {untickedOverdue} hold item(s) overdue — the aircraft stays unserviceable until each is extended (tap the HIL) or cleared. You can still complete this Tech Log.</Text> : null}
               {/* Certifying staff — prefilled from profile, editable. Needed to complete/sign the TL. */}
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
@@ -333,7 +335,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
             if (!(await confirmAction('Please confirm once more: the listed conditions are resolved. This is recorded with your name.', 'Confirm again'))) return;
             try { await sectorCheckOverrideMechanic(sectorId); await load(); } catch (e: any) { setNote(String(e?.message || e)); }
           }}>
-            <Text style={{ color: '#1a1300', fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
+            <Text style={{ color: theme.onAccent, fontWeight: '800' }}>Confirm — conditions resolved (this leg)</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -493,7 +495,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
           <TextInput style={s.input} value={corr.field} onChangeText={(v) => setCorr({ ...corr, field: v })} placeholder="What changed (e.g. Off-block time, Fuel uplift)" placeholderTextColor={theme.sub} />
           <TextInput style={s.input} value={corr.new_value} onChangeText={(v) => setCorr({ ...corr, new_value: v })} placeholder="Corrected value" placeholderTextColor={theme.sub} />
           <TextInput style={s.input} value={corr.reason} onChangeText={(v) => setCorr({ ...corr, reason: v })} placeholder="Reason for the correction (required)" placeholderTextColor={theme.sub} multiline />
-          <TouchableOpacity style={[s.btn, { backgroundColor: theme.accent }]} onPress={submitCorrection}><Text style={[s.btnTxt, { color: '#1a1300' }]}>Submit correction</Text></TouchableOpacity>
+          <TouchableOpacity style={[s.btn, { backgroundColor: theme.accent }]} onPress={submitCorrection}><Text style={[s.btnTxt, { color: theme.onAccent }]}>Submit correction</Text></TouchableOpacity>
           <TouchableOpacity onPress={() => setShowCorr(false)} style={{ marginTop: 6 }}><Text style={s.sub}>Cancel</Text></TouchableOpacity>
         </View>
       ) : (

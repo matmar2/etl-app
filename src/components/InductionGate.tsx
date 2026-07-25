@@ -163,9 +163,14 @@ export default function InductionGate() {
             <Text style={s.email}>{body}</Text>
           </ScrollView>
         ) : phase === 'slide' ? (
-          <TouchableOpacity style={s.slideArea} activeOpacity={0.96} onPress={next}>
-            <Image source={{ uri: slides[i] }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
-          </TouchableOpacity>
+          // Fill the width and let the reader pinch-zoom to read detail (a 16:9 slide otherwise sits
+          // small with big letterbox bars on a tall screen). Tap to advance; use the Next button too.
+          <ScrollView style={s.slideArea} contentContainerStyle={s.slideScroll}
+            maximumZoomScale={3} minimumZoomScale={1} bouncesZoom showsVerticalScrollIndicator={false}>
+            <TouchableOpacity activeOpacity={0.97} onPress={next}>
+              <Image source={{ uri: slides[i] }} style={{ width: '100%', aspectRatio: 16 / 9 }} resizeMode="contain" />
+            </TouchableOpacity>
+          </ScrollView>
         ) : (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={s.ackContent}>
             <Text style={s.ackTitle}>Before you continue</Text>
@@ -193,7 +198,7 @@ export default function InductionGate() {
             <TouchableOpacity style={[s.btn, s.grow]} onPress={next} activeOpacity={0.85}>
               <Text style={s.btnTxt}>
                 {phase === 'email' ? (slides.length ? 'Read the Quick Reference  ›' : (mode === 'view' ? (previewRole ? 'Back to roles' : 'Close') : 'Continue  ›'))
-                  : (lastSlide ? (mode === 'view' ? (previewRole ? 'Back to roles' : 'Close') : 'Continue to acknowledgement  ›') : 'Next  ›   (or tap the slide)')}
+                  : (lastSlide ? (mode === 'view' ? (previewRole ? 'Back to roles' : 'Close') : 'Continue to acknowledgement  ›') : 'Next  ›   (tap the slide · pinch to zoom)')}
               </Text>
             </TouchableOpacity>
           )}
@@ -219,7 +224,8 @@ const s = StyleSheet.create({
   email: { color: theme.text, fontSize: 15, lineHeight: 23 },
   req: { color: theme.red, fontSize: 12, fontWeight: '700' },
   opt: { color: theme.sub, fontSize: 12, fontWeight: '400' },
-  slideArea: { flex: 1, backgroundColor: '#000', padding: 8 },
+  slideArea: { flex: 1, backgroundColor: theme.bg },
+  slideScroll: { flexGrow: 1, justifyContent: 'center', padding: 10, maxWidth: 1100, width: '100%', alignSelf: 'center' },
   ackContent: { padding: 24, width: '100%', maxWidth: 620, alignSelf: 'center', flexGrow: 1, justifyContent: 'center' },
   ackTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 8 },
   ackSub: { color: theme.sub, fontSize: 14, lineHeight: 21, marginBottom: 22 },

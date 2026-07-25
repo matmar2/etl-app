@@ -217,7 +217,7 @@ const s = StyleSheet.create({
   tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.panel },
   tabOn: { backgroundColor: theme.accent, borderColor: theme.accent },
   tabTxt: { color: theme.text, fontWeight: '700', fontSize: 13 },
-  tabTxtOn: { color: '#1a1300' },
+  tabTxtOn: { color: theme.onAccent },
   title: { color: theme.text, fontSize: 22, fontWeight: '800' },
   sub: { color: theme.sub, marginTop: 6, fontSize: 13 },
   row: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 14, marginTop: 10 },

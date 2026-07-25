@@ -416,7 +416,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               placeholder="ATA ref — e.g. 21‑21‑01" placeholderTextColor={theme.sub} />
             <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, opacity: ata.trim() === (d.ata_chapter || '') ? 0.4 : 1 }]}
               disabled={ata.trim() === (d.ata_chapter || '')} onPress={saveAta}>
-              <Text style={[styles.act2t, { color: '#1a1300' }]}>Save ATA</Text>
+              <Text style={[styles.act2t, { color: theme.onAccent }]}>Save ATA</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -462,7 +462,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
                 }
                 setDiSigning(true);
               }}>
-                <Text style={[styles.act2t, { color: '#1a1300' }]}>Sign double inspection</Text>
+                <Text style={[styles.act2t, { color: theme.onAccent }]}>Sign double inspection</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -502,7 +502,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           {workNeedOtp ? (
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 8 }}>
               <TextInput style={[styles.input, { width: 170, minHeight: 0 }]} value={workOtp} onChangeText={setWorkOtp} keyboardType="number-pad" placeholder="Authenticator code" placeholderTextColor={theme.sub} />
-              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent }]} onPress={() => workRetrySig && submitWork(workRetrySig)}><Text style={[styles.act2t, { color: '#1a1300' }]}>Sign Tech Log</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent }]} onPress={() => workRetrySig && submitWork(workRetrySig)}><Text style={[styles.act2t, { color: theme.onAccent }]}>Sign Tech Log</Text></TouchableOpacity>
             </View>
           ) : null}
           </>)}
@@ -575,7 +575,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
                     const days: any = { B: 3, C: 10, D: 120 };
                     if (days[sel]) { const t = new Date(); t.setUTCDate(t.getUTCDate() + days[sel]); setDue(t.toISOString().slice(0, 10)); }
                   }} style={[styles.iv, rectIv === iv && { backgroundColor: theme.accent, borderColor: theme.accent }]}>
-                    <Text style={[styles.ivt, rectIv === iv && { color: '#1a1300' }]}>{iv}</Text>
+                    <Text style={[styles.ivt, rectIv === iv && { color: theme.onAccent }]}>{iv}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -609,7 +609,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
               max_cycles: maxCyc ? Number(maxCyc) : undefined,
               max_fh: maxFh ? (parseFH(maxFh) as number) : undefined,
             }); }}>
-            <Text style={[styles.act2t, { color: '#1a1300' }]}>{amending ? 'Update deferral' : 'Defer'}{basis ? ` per ${basis === 'approved_data' ? 'Approved data' : basis.toUpperCase()}` : ''}{basis === 'mel' && rectIv ? ' ' + rectIv : ''}</Text>
+            <Text style={[styles.act2t, { color: theme.onAccent }]}>{amending ? 'Update deferral' : 'Defer'}{basis ? ` per ${basis === 'approved_data' ? 'Approved data' : basis.toUpperCase()}` : ''}{basis === 'mel' && rectIv ? ' ' + rectIv : ''}</Text>
           </TouchableOpacity>
           </>)}
 
@@ -661,7 +661,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             </ScrollView>
             <TouchableOpacity style={{ backgroundColor: theme.accent, borderRadius: 8, paddingVertical: 12, alignItems: 'center', marginTop: 12 }}
               onPress={() => { const id = chain.logId; setChain(null); navigation.navigate('Release', { sectorId: id }); }}>
-              <Text style={{ color: '#1a1300', fontWeight: '800' }}>No more — go to the TL CRS ›</Text>
+              <Text style={{ color: theme.onAccent, fontWeight: '800' }}>No more — go to the TL CRS ›</Text>
             </TouchableOpacity>
             <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={() => setChain(null)}>
               <Text style={{ color: theme.sub, fontSize: 13 }}>Stay on this defect</Text>

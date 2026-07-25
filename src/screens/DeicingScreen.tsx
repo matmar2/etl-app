@@ -82,7 +82,7 @@ export default function DeicingScreen({ route, navigation }: any) {
       </View>
 
       <TouchableOpacity style={[sx.save, { backgroundColor: theme.accent }]} onPress={onSave}>
-        <Text style={[sx.saveText, { color: '#1a1300' }]}>Save de-icing data</Text>
+        <Text style={[sx.saveText, { color: theme.onAccent }]}>Save de-icing data</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -93,5 +93,5 @@ const sx2 = {
   chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile } as any,
   chipOn: { backgroundColor: theme.accent, borderColor: theme.accent } as any,
   chipTxt: { color: theme.sub, fontWeight: '700' } as any,
-  chipTxtOn: { color: '#1a1300' } as any,
+  chipTxtOn: { color: theme.onAccent } as any,
 };

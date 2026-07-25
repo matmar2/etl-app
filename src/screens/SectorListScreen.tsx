@@ -462,5 +462,5 @@ const styles = StyleSheet.create({
   mlbl: { color: theme.sub, fontSize: 11, marginBottom: 4 },
   minput: { backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 },
   manualBtn: { backgroundColor: theme.accent, borderRadius: 8, padding: 12, alignItems: 'center', marginTop: 10 },
-  manualBtnTxt: { color: '#1a1300', fontWeight: '800' },
+  manualBtnTxt: { color: theme.onAccent, fontWeight: '800' },
 });

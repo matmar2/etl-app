@@ -307,7 +307,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
               <TextInput style={s.input} editable={canEdit} value={inspLicence} onChangeText={setInspLicence} placeholder="Inspector licence / auth no." placeholderTextColor={theme.sub} />
               {canEdit ? (
                 <TouchableOpacity style={[s.btn, { backgroundColor: inspSig ? theme.tile : theme.accent, marginTop: 10 }]} onPress={() => setSigTarget('insp')}>
-                  <Text style={[s.btnTxt, inspSig ? null : { color: '#1a1300' }]}>{inspSig ? 'Inspector signature captured ✓ — tap to re-sign' : 'Capture inspector signature'}</Text>
+                  <Text style={[s.btnTxt, inspSig ? null : { color: theme.onAccent }]}>{inspSig ? 'Inspector signature captured ✓ — tap to re-sign' : 'Capture inspector signature'}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -402,7 +402,7 @@ const s = StyleSheet.create({
   tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile },
   tabOn: { backgroundColor: theme.accent, borderColor: theme.accent },
   tabTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
-  tabTxtOn: { color: '#1a1300' },
+  tabTxtOn: { color: theme.onAccent },
   section: { color: theme.text, fontWeight: '800', fontSize: 13, marginTop: 18, marginBottom: 6, textTransform: 'uppercase' },
   task: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginBottom: 8 },
   taskTxt: { color: theme.text, fontSize: 13 },

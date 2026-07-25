@@ -143,7 +143,7 @@ const s = StyleSheet.create({
   chip: { height: 34, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile, maxWidth: 220, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
   chipOn: { backgroundColor: theme.accent, borderColor: theme.accent },
   chipTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
-  chipTxtOn: { color: '#1a1300' },
+  chipTxtOn: { color: theme.onAccent },
   row: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 12, marginTop: 8 },
   tno: { color: theme.text, fontWeight: '800', fontSize: 15 },
   meta: { color: theme.sub, fontSize: 12, marginTop: 2 },
@@ -157,5 +157,5 @@ const s = StyleSheet.create({
   vhead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10 },
   vfoot: { padding: 12, borderTopWidth: 1, borderTopColor: theme.border },
   pickBtn: { backgroundColor: theme.accent, borderRadius: 8, padding: 14, alignItems: 'center' },
-  pickTxt: { color: '#1a1300', fontWeight: '800' },
+  pickTxt: { color: theme.onAccent, fontWeight: '800' },
 });
