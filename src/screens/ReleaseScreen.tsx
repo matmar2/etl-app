@@ -274,7 +274,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
               below, then a single CRS clears all. Standalone W/O releases even with NIL defects. */}
           {isMech ? (
             <>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope <Text style={{ color: theme.red }}>*</Text></Text>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope <Text style={{ color: theme.red }}>*</Text>{(st as any).tl ? <Text style={{ color: theme.accent, fontWeight: '800' }}>   ·   TL #{(st as any).tl}</Text> : null}</Text>
               <TextInput style={[s.input, { minHeight: Math.max(56, woRef.split('\n').length * 22 + 24), textAlignVertical: 'top' }, maintBad.wo ? { borderColor: theme.red, borderWidth: 2 } : null]}
                 value={woRef} onChangeText={(v) => { setWoRef(v); if (maintBad.wo) setMaintBad((b) => ({ ...b, wo: false })); }} multiline
                 placeholder="Work order / task-card ref(s) and scope. Task Card / MEL / CDL below optional." placeholderTextColor={theme.sub} />
