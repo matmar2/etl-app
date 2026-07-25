@@ -112,7 +112,8 @@ export default function DefectsScreen({ route, navigation }: any) {
         {can('maintenance') ? (
           <TouchableOpacity style={[styles.addBtn, { flex: 1, minWidth: 150, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]}
             onPress={() => navigation.navigate('Maintenance', { aircraftId })}>
-            <Text style={styles.addTxt}>⚙ Ground Maint. — no crew (clear defect and/or CRS)</Text>
+            <Text style={styles.addTxt}>⚙ Ground Maintenance</Text>
+            <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2, textAlign: 'center' }}>To accomplish the work order and clear defects.</Text>
           </TouchableOpacity>
         ) : null}
       </View>
