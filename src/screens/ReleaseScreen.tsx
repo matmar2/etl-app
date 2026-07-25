@@ -293,6 +293,13 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no. *" placeholderTextColor={theme.sub} autoCapitalize="characters" />
               </View>
+              {/* Component Change Record — removed/installed parts for this maintenance log; the entries
+                  print on this Tech Log (P/N & S/N off/on + Form 1). Opened before Preview so the TL is
+                  complete when previewed/signed. */}
+              <TouchableOpacity style={[s.btn, { marginTop: 4, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]}
+                onPress={() => navigation.navigate('ComponentChange', { sectorId })}>
+                <Text style={s.btnTxt}>🔧 Component Change Record (CCR)</Text>
+              </TouchableOpacity>
               {/* Preview then Complete — on one line. Completing signs the Tech Log (closing ticked items
                   + the W/O and releasing); the signature pad opens next. */}
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
