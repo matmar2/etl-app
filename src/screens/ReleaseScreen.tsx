@@ -9,6 +9,10 @@ import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors'
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
+import AmmPicker from '../components/AmmPicker';
+import MelPicker from '../components/MelPicker';
+import CdlPicker from '../components/CdlPicker';
+import { ammIawLine } from '../api/client';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -32,6 +36,11 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [note, setNote] = useState('');
   const [workDone, setWorkDone] = useState('');       // action taken for a standalone W/O (maintenance log)
   const [workSaved, setWorkSaved] = useState('');     // last-saved value, to show the Save state
+  const [woRef, setWoRef] = useState('');             // editable W/O ref / scope — build up the TL with more work
+  const [woSaved, setWoSaved] = useState('');
+  const [ammOpen, setAmmOpen] = useState(false);
+  const [melOpen, setMelOpen] = useState(false);
+  const [cdlOpen, setCdlOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [finalize, setFinalize] = useState<{ frac: number; label: string } | null>(null);   // post-release progress
@@ -52,7 +61,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const [corr, setCorr] = useState({ field: '', new_value: '', reason: '' });
   const [showCorr, setShowCorr] = useState(false);
   const load = useCallback(() => {
-    releaseStatus(sectorId).then((r) => { setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); })   // online → authoritative
+    releaseStatus(sectorId).then((r) => { setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); const o = (r as any).wo_ref || ''; setWoRef(o); setWoSaved(o); })   // online → authoritative
       .catch(() => localReleaseStatus(sectorId).then(setSt).catch(() => setMsg('Release page unavailable offline for this sector.')));
     listCorrections(sectorId).then(setCorrections).catch(() => {});
     // Direct server call — the endpoint 404s for flight sectors (card hidden); never depend on the
@@ -64,10 +73,19 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
   async function saveWork() {
     try {
-      const r: any = await saveMaintWork(sectorId, { work_performed: workDone });
-      setWorkSaved(workDone);
-      setMsg(r?.queued ? 'Work saved offline — will sync ✓' : 'Work carried out saved ✓');
+      const r: any = await saveMaintWork(sectorId, { work_performed: workDone, wo_ref: woRef });
+      setWorkSaved(workDone); setWoSaved(woRef);
+      setMsg(r?.queued ? 'Work saved offline — will sync ✓' : 'Work order saved ✓');
     } catch (e: any) { setMsg(`Could not save: ${e.message}`); }
+  }
+  // Complete the Tech Log = sign the CRS (releases the aircraft, closing every item on the page).
+  // Used by the button in the W/O box and the one at the bottom of the page.
+  function completeTL() {
+    if (st!.blockers.length) { setMsg('Rectify or defer the open defect(s) first — tap them below.'); return; }
+    const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
+    if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
+    if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence in the CRS section below, then Complete.'); return; }
+    sig ? submitRelease(sig) : setSigning(true);
   }
   async function submitCorrection() {
     if (!corr.reason.trim()) { setMsg('Enter a reason for the correction.'); return; }
@@ -109,8 +127,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
   async function submitRelease(signature: string) {
     setBusy(true); setMsg('');
     try {
-      if ((st as any)?.maintenance_only && workDone !== workSaved) {   // persist any unsaved W/O work first
-        await saveMaintWork(sectorId, { work_performed: workDone }).then(() => setWorkSaved(workDone)).catch(() => {});
+      if ((st as any)?.maintenance_only && (workDone !== workSaved || woRef !== woSaved)) {   // persist any unsaved W/O first
+        await saveMaintWork(sectorId, { work_performed: workDone, wo_ref: woRef }).then(() => { setWorkSaved(workDone); setWoSaved(woRef); }).catch(() => {});
       }
       const r: any = await releaseSector(sectorId, {
         note: note.trim() || undefined, signer_name: signer.trim() || undefined,
@@ -185,32 +203,58 @@ export default function ReleaseScreen({ route, navigation }: any) {
         <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginBottom: 4 }}>
           <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance work order{(st as any).station ? ` · ${(st as any).station}` : ''}</Text>
           {route?.params?.resumed ? <Text style={{ color: theme.accent, fontSize: 12, marginTop: 2, fontWeight: '700' }}>✓ Resumed today's open Tech Log page — continue the work order here.</Text> : null}
-          <Text style={{ color: (st as any).wo_ref ? theme.sub : theme.red, fontSize: 12, marginTop: 4 }}>
-            {(st as any).wo_ref || 'No work-order reference / scope recorded — go back and add it before the CRS.'}
-          </Text>
-          {/* Standalone W/O (task-card / scheduled work, no linked defect): record what was carried out
-              here. It prints on the Tech Log and the CRS certifies it even with NIL defects. */}
+          {/* Build up ONE Tech Log: edit / add work orders + task cards here, clear HILs / defects
+              below, then a single CRS clears all. Standalone W/O releases even with NIL defects. */}
           {isMech ? (
             <>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken (this work order)</Text>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 8 }}>Work order(s) / scope</Text>
+              <TextInput style={[s.input, { minHeight: Math.max(56, woRef.split('\n').length * 22 + 24), textAlignVertical: 'top' }]}
+                value={woRef} onChangeText={setWoRef} multiline
+                placeholder="Work order / task-card ref(s) and scope. Add another W/O or task card with the buttons below." placeholderTextColor={theme.sub} />
+              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setAmmOpen(true)}><Text style={s.btnTxt}>＋ Task Card (AMM)</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setMelOpen(true)}><Text style={s.btnTxt}>Pick MEL</Text></TouchableOpacity>
+                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setCdlOpen(true)}><Text style={s.btnTxt}>Pick CDL</Text></TouchableOpacity>
+              </View>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken</Text>
               <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
                 value={workDone} onChangeText={setWorkDone} multiline
                 placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Leave blank if this log only clears the defects / HIL below." placeholderTextColor={theme.sub} />
-              {/* Only a DRAFT-save (so the text survives if you leave to rectify a defect). It is also
-                  saved automatically when you sign the CRS — you never have to press Save to finish. */}
-              {workDone.trim() && workDone !== workSaved ? (
-                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={saveWork}>
-                  <Text style={s.btnTxt}>Save draft</Text>
+              {/* Save draft always shown, but unclickable until the work carried out is entered. The
+                  work is also saved automatically when you sign the CRS — Save is only for drafts. */}
+              {(() => { const dirty = workDone !== workSaved || woRef !== woSaved; const canSave = !!workDone.trim() && dirty; return (
+                <TouchableOpacity disabled={!canSave} style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', opacity: canSave ? 1 : 0.5 }]} onPress={saveWork}>
+                  <Text style={s.btnTxt}>{!dirty && (workDone.trim() || woRef.trim()) ? '✓ Draft saved' : 'Save draft'}</Text>
                 </TouchableOpacity>
-              ) : workDone.trim() ? (
-                <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ Draft saved (also saved when you sign the CRS)</Text>
-              ) : null}
+              ); })()}
+              <AmmPicker visible={ammOpen} reg={currentAircraft()?.registration} onClose={() => setAmmOpen(false)}
+                onPick={(m: any) => { const line = ammIawLine(m); setWorkDone((n) => n.trim() ? `${n.trim()}\n${line}` : line); if (m.task_card_ref) setWoRef((w) => (w || '').split(',').map((x) => x.trim()).filter(Boolean).includes(m.task_card_ref) ? w : (w ? `${w}, ${m.task_card_ref}` : m.task_card_ref)); setAmmOpen(false); }} />
+              <MelPicker visible={melOpen} onClose={() => setMelOpen(false)}
+                onPick={(m: any) => { const ref = `MEL ${m.ata || ''} · ${m.item}${m.category ? ` (Cat ${m.category}${m.rectification_interval ? `, ${m.rectification_interval}` : ''})` : ''}`.replace(/\s+/g, ' ').trim(); setWoRef((w) => w.trim() ? `${w.trim()}\n${ref}` : ref); setMelOpen(false); }} />
+              <CdlPicker visible={cdlOpen} onClose={() => setCdlOpen(false)}
+                onPick={(c: any) => { const ref = `CDL ${c.ata || ''}${c.code ? ` (${c.code})` : ''} · ${c.item || c.system}${c.dispatch ? ` — ${c.dispatch}` : ''}`.replace(/\s+/g, ' ').trim(); setWoRef((w) => w.trim() ? `${w.trim()}\n${ref}` : ref); setCdlOpen(false); }} />
             </>
-          ) : (st as any).work_performed ? (
-            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>Work carried out: {(st as any).work_performed}</Text>
+          ) : (st as any).work_performed || (st as any).wo_ref ? (
+            <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>{(st as any).wo_ref ? `W/O: ${(st as any).wo_ref}` : ''}{(st as any).work_performed ? `\nWork carried out: ${(st as any).work_performed}` : ''}</Text>
           ) : null}
-          <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700', marginTop: 10 }}>To complete this Tech Log:</Text>
-          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>1 · Record the work above and/or rectify or defer the defects / HIL listed below (tap an item to work it).{'\n'}2 · Sign the CRS at the bottom — that completes and releases this Tech Log. A W/O with no defects releases NIL-defect.</Text>
+          {isMech ? (
+            <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 12, paddingTop: 10, gap: 8 }}>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800' }}>This Tech Log — add more, or complete it</Text>
+              {/* Add another item to the SAME TL: a HIL / defect to clear (rectify or defer it, it joins
+                  this page), or another W/O / task card via the pickers above. */}
+              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, alignSelf: 'flex-start' }]}
+                onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration })}>
+                <Text style={[s.btnTxt, { color: theme.accent }]}>＋ Add / clear a HIL or defect on this TL ›</Text>
+              </TouchableOpacity>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>Add another W/O or task card with the buttons above. Rectify or defer a HIL / defect and it joins this Tech Log.</Text>
+              {/* Complete the Tech Log = sign the CRS: closes every item on this page and releases. */}
+              <TouchableOpacity style={[s.btn, { backgroundColor: (st.blockers.length || bridgePending) ? '#444' : theme.green }]}
+                disabled={busy || st.blockers.length > 0 || bridgePending} onPress={completeTL}>
+                <Text style={s.btnTxt}>✍ Complete the Tech Log — sign CRS</Text>
+              </TouchableOpacity>
+              <Text style={{ color: theme.sub, fontSize: 11 }}>Completing the TL signs the CRS below (enter your name + licence there). A W/O with no defects releases NIL-defect.</Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -340,11 +384,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
             <Text style={s.btnTxt}>{previewing ? 'Opening…' : '👁 Preview Tech Log / CRS'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[s.btn, { backgroundColor: (st.blockers.length || bridgePending) ? '#444' : theme.green }]} disabled={busy || st.blockers.length > 0 || bridgePending}
-            onPress={() => {
-              if (st.blockers.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before release.'); return; }
-              if (!signer.trim() || !licence.trim()) { setMsg('Enter mechanic name and licence first.'); return; }
-              sig ? submitRelease(sig) : setSigning(true);   // reuse an already-captured signature (MFA / licence retry)
-            }}>
+            onPress={completeTL}>
             <Text style={[s.btnTxt, st.blockers.length ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & release' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign CRS — complete Tech Log' : '✍ Sign CRS — complete & release Tech Log') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
           </TouchableOpacity>
           {st.blockers.length ? <Text style={[s.sub, { color: theme.red }]}>Cannot release: {st.blockers.length} open defect(s) must be deferred (MEL/HIL) or rectified first.</Text> : null}
