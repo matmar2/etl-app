@@ -22,18 +22,23 @@ let _printing = false;   // iOS UIPrintInteractionController allows only one at 
 // device — iPad print preview cannot paginate HTML like desktop browsers). Returns false
 // when offline / the endpoint failed, so callers fall back to the HTML path.
 export async function printServerPdf(path: string): Promise<boolean> {
+  // Fetch the PDF FIRST. Only a failure to PRODUCE the PDF (offline / endpoint down) returns false
+  // so the caller may fall back to the HTML preview. Once the PDF is in hand and the preview has been
+  // presented, we ALWAYS return true — a user cancelling/dismissing it must NOT trigger a second
+  // (HTML) preview. (The old code re-threw on any cancel message the regex missed → false → double.)
+  let uri: string | null = null;
   try {
     const { fetchPdfLocal } = require('../api/client');
-    const uri = await fetchPdfLocal(path);
-    if (!uri) return false;
-    if (Platform.OS === 'web') { window.open(uri, '_blank'); return true; }
-    if (_printing) return true;
-    _printing = true;
-    try { await Print.printAsync({ uri }); }
-    catch (e: any) { if (!/cancel|dismiss/i.test(String(e?.message))) throw e; }
-    finally { _printing = false; }
-    return true;
-  } catch { return false; }
+    uri = await fetchPdfLocal(path);
+  } catch { return false; }                                  // could not fetch → allow HTML fallback
+  if (!uri) return false;                                    // no PDF available → allow HTML fallback
+  if (Platform.OS === 'web') { window.open(uri, '_blank'); return true; }
+  if (_printing) return true;
+  _printing = true;
+  try { await Print.printAsync({ uri }); }
+  catch { /* cancelled, dismissed, or any print error — the preview WAS presented; never fall back */ }
+  finally { _printing = false; }
+  return true;                                               // PDF path handled it → no second preview
 }
 // Safari (iPad web app) blocks window.open() once it is called AFTER an await — the user-gesture
 // context from the tap is gone. So callers that must fetch the HTML first open the window
