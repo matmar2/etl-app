@@ -165,7 +165,7 @@ const styles = StyleSheet.create({
   printTxt: { color: theme.text, fontWeight: '700', fontSize: 13 },
   addBtn: { marginTop: 10, paddingVertical: 11, borderRadius: 8, backgroundColor: theme.red, alignItems: 'center' },
   addTxt: { color: '#fff', fontWeight: '800', fontSize: 14 },
-  tab: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile },
+  tab: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.tile },
   tabOn: { backgroundColor: theme.accent, borderColor: theme.accent },
   tabTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
   tabTxtOn: { color: '#fff' },
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   dSub: { color: theme.sub, fontSize: 12, marginTop: 3 },
   dDates: { color: theme.sub, fontSize: 11, marginTop: 3, fontWeight: '600' },
   remain: { minWidth: 168, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border },
-  rowPrint: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, marginHorizontal: 8 },
+  rowPrint: { borderWidth: 1, borderColor: theme.border, borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, marginHorizontal: 8 },
   rowPrintTxt: { color: theme.sub, fontWeight: '700', fontSize: 12 },
   status: { fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
 });
