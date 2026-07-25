@@ -9,6 +9,7 @@ import { getSector, localReleaseStatus, markLocalReleased } from '../db/sectors'
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
+import HilRemaining from '../components/HilRemaining';
 import AmmPicker from '../components/AmmPicker';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
@@ -94,8 +95,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
   function completeTL() {
     const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
     if (unticked.length) { setMsg('Tick each open defect below to clear it on this Tech Log (or rectify / defer it first), then Complete.'); return; }
-    // Flight release (not maintenance) still needs the delayed-OASES bridge confirmed.
-    if (!((st as any).maintenance_only)) {
+    if ((st as any).maintenance_only) {
+      const ov = (st!.deferred || []).filter((d: any) => d.overdue && !clearSel.has(d.id)).length;
+      if (ov) { setMsg(`${ov} hold item(s) overdue — extend the due date (tap the HIL) or tick it to clear, then Complete.`); return; }
+    } else {   // flight release still needs the delayed-OASES bridge confirmed
       const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
       if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
     }
@@ -217,7 +220,10 @@ export default function ReleaseScreen({ route, navigation }: any) {
   // for a flight. A ticked blocker is cleared on release, so it no longer blocks. Flight releases still
   // require the delayed-OASES bridge.
   const untickedBlockers = (st.blockers || []).filter((b) => !clearSel.has(b.id)).length;
-  const relLocked = (st as any).maintenance_only ? untickedBlockers > 0 : (st.blockers.length > 0 || bridgePending);
+  // An OVERDUE hold item blocks the maintenance CRS until it is EXTENDED (new due date, on its detail
+  // page) or ticked to clear. In-date deferred HILs never block.
+  const untickedOverdue = (st.deferred || []).filter((d: any) => d.overdue && !clearSel.has(d.id)).length;
+  const relLocked = (st as any).maintenance_only ? (untickedBlockers > 0 || untickedOverdue > 0) : (st.blockers.length > 0 || bridgePending);
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <View style={[s.banner, { backgroundColor: svc ? '#11351d' : '#3a1111', borderColor: svc ? theme.green : theme.red }]}>
@@ -274,6 +280,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 • To raise a NEW defect, use the <Text style={{ fontWeight: '700' }}>Defects</Text> page.
               </Text>
               {clearSel.size ? <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ {clearSel.size} item(s) ticked to clear on this Tech Log.</Text> : null}
+              {untickedOverdue ? <Text style={{ color: theme.red, fontSize: 12, fontWeight: '700' }}>▲ {untickedOverdue} hold item(s) overdue — extend the due date (tap the HIL below) or tick it to clear before completing.</Text> : null}
               {/* Certifying staff — prefilled from profile, editable. Needed to complete/sign the TL. */}
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
@@ -512,10 +519,12 @@ function Group({ title, items, empty, color, nav, selectable, selected, onToggle
           ) : null}
           <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => nav.navigate('DefectDetail', { defectId: d.id })}>
             <View style={{ flex: 1 }}>
-              <Text style={s.rowTitle}>{d.title || d.description}</Text>
-              <Text style={s.sub}>{(d.source || '').toUpperCase()} · {d.area === 'cabin' ? 'CABIN' : 'TECH'} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}</Text>
+              <Text style={s.rowTitle}>{(d as any).hil_no ? `${(d as any).hil_no}  ` : ''}{d.title || d.description}</Text>
+              <Text style={s.sub}>{(d.source || '').toUpperCase()} · {d.area === 'cabin' ? 'CABIN' : 'TECH'} · ATA {d.ata_chapter || '—'}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{(d as any).due_date ? ` · due ${(d as any).due_date}` : ''}</Text>
             </View>
-            <Text style={[s.rowStatus, { color }]}>{d.status}</Text>
+            {(d as any).due_date != null || (d as any).max_fh != null || (d as any).max_cycles != null
+              ? <HilRemaining item={d} style={{ minWidth: 150, marginHorizontal: 6, paddingHorizontal: 8, borderLeftWidth: 1, borderLeftColor: theme.border }} />
+              : <Text style={[s.rowStatus, { color }]}>{d.status}</Text>}
           </TouchableOpacity>
         </View>
       )) : <Text style={s.sub}>{empty}</Text>}
