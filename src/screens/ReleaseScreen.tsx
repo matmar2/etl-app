@@ -242,7 +242,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
 
       {(st as any).maintenance_only ? (
         <View style={{ backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginBottom: 4 }}>
-          <Text style={{ color: theme.text, fontWeight: '800' }}>Maintenance work order{(st as any).station ? ` · ${(st as any).station}` : ''}</Text>
+          <Text style={{ color: theme.text, fontWeight: '800' }}>Ground Maintenance{(st as any).station ? ` · ${(st as any).station}` : ''}</Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>To accomplish the work order and clear defects.</Text>
           {route?.params?.resumed ? <Text style={{ color: theme.accent, fontSize: 12, marginTop: 2, fontWeight: '700' }}>✓ Resumed today's open Tech Log page — continue the work order here.</Text> : null}
           {/* Build up ONE Tech Log: edit / add work orders + task cards here, clear HILs / defects
               below, then a single CRS clears all. Standalone W/O releases even with NIL defects. */}
