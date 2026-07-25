@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Alert } from 'react-native';
-import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, role, setAirworthiness, userLicence, userName, workSigned, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
+import { acceptDispatch, addDefectAction, ammIawLine, ammRevision, can, CdlItem, clearanceAuthorized, classifyDefect, closeDefect, defectCrsPreview, deleteDefect, getDefect, MelItem, MfaRequired, reverseRectification, setAirworthiness, userLicence, userName, workSigned, closedDefects, listActiveDefects, listHIL, serverSectors, setClosedDefects } from '../api/client';
 import { printHtml, printServerPdf } from '../print';
 import { appendLocalDefectAction, cacheDefect, getLocalDefect } from '../db/defects';
 import MelPicker from '../components/MelPicker';
@@ -70,9 +70,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
   // Open/troubleshooting → defer; deferred (HIL) → amend the deferral. Never cabin, never rectified/closed.
   const canDefer = can('defects', 'defer') && ['open', 'troubleshooting', 'deferred'].includes(d?.status) && d?.area !== 'cabin';
   const amending = d?.status === 'deferred';
-  const isCaptain = ['captain', 'pilot', 'admin'].includes(role() ?? '');
-  const isCommander = role() === 'admin' ||
-    (['captain', 'pilot'].includes(role() ?? '') && clearanceAuthorized());
+  // Cabin-defect dispatch/clearance is the commander's decision — driven by the permission matrix
+  // (departure.cabin_decision: captain/pilot rw, cabin/mechanic ro), never a role literal. Clearing
+  // additionally requires the user's commander-clearance authorisation flag.
+  const canCabinDispatch = can('departure', 'cabin_decision');
+  const canCommanderClear = canCabinDispatch && clearanceAuthorized();
 
   function appendNarr(line: string) { setNarr((n) => (n ? n.replace(/\s+$/, '') + '\n\n' : '') + line); }
   // Time remaining to a calendar due date (limit = end of that day). "Nd Hh Mm left" / "OVERDUE …".
@@ -367,7 +369,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         </>
       )}
 
-      {d.area === 'cabin' && isCaptain && d.status !== 'closed' && (
+      {d.area === 'cabin' && canCabinDispatch && d.status !== 'closed' && (
         <>
           <Text style={styles.section}>Cabin defect — commander dispatch decision</Text>
           {d.airworthiness === true ? (
@@ -626,7 +628,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         </>
       )}
 
-      {isCommander && d.captain_clearable && d.status !== 'closed' && (
+      {canCommanderClear && d.captain_clearable && d.status !== 'closed' && (
         <>
           <Text style={styles.section}>Commander clearance</Text>
           <Text style={styles.sub}>This item is approved for clearance by the commander (e.g. cabin defect).</Text>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, cabinLogHtml, cabinLogHtmlOne, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, hilHtml, hilHtmlOne, oasesCheckHtml, role, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
+import { access, appSettings, cabinLogHtml, cabinLogHtmlOne, checkHtml, clearedItems, ClearedItem, currentAircraft, defectCrsPreview, hilHtml, hilHtmlOne, oasesCheckHtml, sectorTlHtmlCached, SignOff, signoffsRecent } from '../api/client';
 import { beginPrint, finishPrint } from '../print';
 import { theme } from '../theme';
 
@@ -12,7 +12,9 @@ const KIND: Record<string, string> = {
 };
 
 export default function SignOffScreen({ navigation }: any) {
-  const isCabin = role() === 'cabin';                         // cabin crew see Cleared Cabin defects only
+  // Cleared-Cabin-only view = no access to the Maintenance Release page (matrix-driven, not a role
+  // literal): `release` is 'none' only for cabin crew, who see cabin defects but no CRS / HIL history.
+  const isCabin = access('release') === 'none';
   const VIEWS: { key: 'signoffs' | 'hil' | 'cabin'; label: string }[] = isCabin
     ? [{ key: 'cabin', label: 'Cleared Cabin' }]
     : [{ key: 'signoffs', label: 'Sign-offs' }, { key: 'hil', label: 'Cleared HIL' }, { key: 'cabin', label: 'Cleared Cabin' }];
