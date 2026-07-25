@@ -192,19 +192,25 @@ export default function ReleaseScreen({ route, navigation }: any) {
               here. It prints on the Tech Log and the CRS certifies it even with NIL defects. */}
           {isMech ? (
             <>
-              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken</Text>
+              <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken (this work order)</Text>
               <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
                 value={workDone} onChangeText={setWorkDone} multiline
-                placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Leave blank if this log only clears the defects/HIL below." placeholderTextColor={theme.sub} />
-              <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', opacity: workDone === workSaved ? 0.5 : 1 }]}
-                disabled={workDone === workSaved} onPress={saveWork}>
-                <Text style={s.btnTxt}>{workDone === workSaved ? '✓ Work saved' : 'Save work carried out'}</Text>
-              </TouchableOpacity>
+                placeholder="Describe the maintenance carried out (e.g. Replaced RH landing light i.a.w AMM 33-42, ops check satisfactory). Leave blank if this log only clears the defects / HIL below." placeholderTextColor={theme.sub} />
+              {/* Only a DRAFT-save (so the text survives if you leave to rectify a defect). It is also
+                  saved automatically when you sign the CRS — you never have to press Save to finish. */}
+              {workDone.trim() && workDone !== workSaved ? (
+                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={saveWork}>
+                  <Text style={s.btnTxt}>Save draft</Text>
+                </TouchableOpacity>
+              ) : workDone.trim() ? (
+                <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>✓ Draft saved (also saved when you sign the CRS)</Text>
+              ) : null}
             </>
           ) : (st as any).work_performed ? (
             <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>Work carried out: {(st as any).work_performed}</Text>
           ) : null}
-          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 8 }}>Rectify or defer any items below (or none, for a standalone W/O), then issue the CRS to complete and release the work order.</Text>
+          <Text style={{ color: theme.text, fontSize: 12, fontWeight: '700', marginTop: 10 }}>To complete this Tech Log:</Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginTop: 2 }}>1 · Record the work above and/or rectify or defer the defects / HIL listed below (tap an item to work it).{'\n'}2 · Sign the CRS at the bottom — that completes and releases this Tech Log. A W/O with no defects releases NIL-defect.</Text>
         </View>
       ) : null}
 
@@ -339,7 +345,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
               if (!signer.trim() || !licence.trim()) { setMsg('Enter mechanic name and licence first.'); return; }
               sig ? submitRelease(sig) : setSigning(true);   // reuse an already-captured signature (MFA / licence retry)
             }}>
-            <Text style={[s.btnTxt, st.blockers.length ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & release' : st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)'}</Text>
+            <Text style={[s.btnTxt, st.blockers.length ? { color: theme.sub } : null]}>{busy ? 'Releasing…' : needOtp ? 'Verify & release' : (st as any).maintenance_only ? (st.released ? '↺ Re-sign CRS — complete Tech Log' : '✍ Sign CRS — complete & release Tech Log') : (st.released ? 'Re-release flight (CRS)' : 'Sign & release flight (CRS)')}</Text>
           </TouchableOpacity>
           {st.blockers.length ? <Text style={[s.sub, { color: theme.red }]}>Cannot release: {st.blockers.length} open defect(s) must be deferred (MEL/HIL) or rectified first.</Text> : null}
         </>
