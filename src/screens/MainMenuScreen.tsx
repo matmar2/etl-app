@@ -290,7 +290,7 @@ export default function MainMenuScreen({ navigation }: any) {
           </TouchableOpacity>
           <View>
             <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
-              {checking ? <ActivityIndicator size="small" color="#1a1300" /> : <Text style={styles.updateTxt}>⇩ Update</Text>}
+              {checking ? <ActivityIndicator size="small" color={theme.onAccent} /> : <Text style={styles.updateTxt}>⇩ Update</Text>}
             </TouchableOpacity>
             {updateAvail && !checking ? <View style={styles.updateBadge} /> : null}
           </View>
