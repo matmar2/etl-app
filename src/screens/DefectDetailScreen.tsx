@@ -439,15 +439,15 @@ export default function DefectDetailScreen({ route, navigation }: any) {
           {isMech && d.status !== 'work_done' && (<>
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => act('troubleshooting')}><Text style={styles.act2t}>Troubleshooting</Text></TouchableOpacity>
 
-          {/* Double Inspection (DI) — a second qualified person signs an independent inspection (name + licence + signature + date/time). */}
-          <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setDiOpen((v) => !v)}>
-            <Text style={styles.act2t}>👥 Double Inspection (DI){diOpen ? ' ▴' : ' ▾'}</Text>
-          </TouchableOpacity>
-
           {/* Component Change Report — required whenever a component is replaced during rectification. */}
           <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]}
             onPress={() => navigation.navigate('ComponentChange', { defectId })}>
             <Text style={styles.act2t}>🔩 Component Change (CCR) ›</Text>
+          </TouchableOpacity>
+
+          {/* Double Inspection (DI) — a second qualified person signs an independent inspection (name + licence + signature + date/time). */}
+          <TouchableOpacity style={[styles.act2, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start', marginTop: 8 }]} onPress={() => setDiOpen((v) => !v)}>
+            <Text style={styles.act2t}>👥 Double Inspection (DI){diOpen ? ' ▴' : ' ▾'}</Text>
           </TouchableOpacity>
           {diOpen ? (
             <View style={{ marginTop: 8, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
