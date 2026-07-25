@@ -256,6 +256,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setAmmOpen(true)}><Text style={s.btnTxt}>＋ Task Card (AMM)</Text></TouchableOpacity>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setMelOpen(true)}><Text style={s.btnTxt}>Pick MEL</Text></TouchableOpacity>
                 <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => setCdlOpen(true)}><Text style={s.btnTxt}>Pick CDL</Text></TouchableOpacity>
+                {/* Component Change Record — removed/installed parts (P/N & S/N off/on + Form 1); entries print on this Tech Log. */}
+                <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, alignSelf: 'flex-start' }]} onPress={() => navigation.navigate('ComponentChange', { sectorId })}><Text style={s.btnTxt}>🔧 CCR</Text></TouchableOpacity>
               </View>
               <Text style={{ color: theme.text, fontSize: 12, fontWeight: '800', marginTop: 10 }}>Work carried out / action taken</Text>
               <TextInput style={[s.input, { minHeight: Math.max(64, workDone.split('\n').length * 22 + 28), textAlignVertical: 'top' }]}
@@ -293,13 +295,6 @@ export default function ReleaseScreen({ route, navigation }: any) {
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
                 <TextInput style={[s.input, { flex: 1, minWidth: 160, marginTop: 0 }]} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no. *" placeholderTextColor={theme.sub} autoCapitalize="characters" />
               </View>
-              {/* Component Change Record — removed/installed parts for this maintenance log; the entries
-                  print on this Tech Log (P/N & S/N off/on + Form 1). Opened before Preview so the TL is
-                  complete when previewed/signed. */}
-              <TouchableOpacity style={[s.btn, { marginTop: 4, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]}
-                onPress={() => navigation.navigate('ComponentChange', { sectorId })}>
-                <Text style={s.btnTxt}>🔧 Component Change Record (CCR)</Text>
-              </TouchableOpacity>
               {/* Preview then Complete — on one line. Completing signs the Tech Log (closing ticked items
                   + the W/O and releasing); the signature pad opens next. */}
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
