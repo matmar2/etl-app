@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -47,10 +47,16 @@ async function runOfflinePrep(reg?: string) {
   _offlineRunning = true;
   try {
     if (!(await serverReachable())) { _offlineRunning = false; return; }   // offline now → retry next focus
-    await prepareOffline(reg, (frac, label) => _emitOffline({ frac, label }));
+    // First-ever prep on this device/tail shows the full-screen progress bar (there is nothing cached
+    // to work with yet). Once prepared, later logins only DELTA-refresh what changed, so run it
+    // silently in the background — the cached data is already usable immediately.
+    const silent = await offlinePrepared(reg).catch(() => false);
+    await prepareOffline(reg, silent ? () => {} : (frac, label) => _emitOffline({ frac, label }));
     _offlineDone = true;
-    _emitOffline({ frac: 1, label: 'Ready for offline' });
-    setTimeout(() => { if (_offlineDone) _emitOffline(null); }, 2500);
+    if (!silent) {
+      _emitOffline({ frac: 1, label: 'Ready for offline' });
+      setTimeout(() => { if (_offlineDone) _emitOffline(null); }, 2500);
+    }
   } catch { _emitOffline(null); /* release the block; _offlineDone stays false so it resumes next focus */ }
   finally { _offlineRunning = false; }
 }

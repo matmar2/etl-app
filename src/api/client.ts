@@ -1629,15 +1629,44 @@ export function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timed out')), ms))]);
 }
 
+// --- Offline delta sync -------------------------------------------------------
+// Bump when the set of cached data below changes (new prep step / cache) so every device
+// does one full refresh after that app update — an unchanged data stamp must never hide a
+// newly-required cache.
+const PREP_SCHEMA = 1;
+const _manKey = (reg?: string) => `offmanifest:${(reg || '_').toUpperCase()}`;
+export type OfflineManifest = { ref?: string; help?: string; tail?: string };
+export async function syncManifest(reg?: string): Promise<OfflineManifest | null> {
+  try { return await api(`/sync/manifest${reg ? `?reg=${encodeURIComponent(reg)}` : ''}`); } catch { return null; }
+}
+// Has this device completed an offline prep for this tail on the current prep-schema? Drives the
+// login UX: first-ever prep shows the full-screen bar; later logins delta-refresh in the background.
+export async function offlinePrepared(reg?: string): Promise<boolean> {
+  try { const { data } = await getRef<any>(_manKey(reg)); return !!data && data._v === PREP_SCHEMA; }
+  catch { return false; }
+}
+
 export async function prepareOffline(reg: string | undefined,
                                      onProgress: (frac: number, label: string) => void): Promise<void> {
   const { Platform } = require('react-native');
   if (Platform.OS === 'web') { onProgress(1, 'Online'); return; }
-  const steps: { label: string; ms: number; run: () => Promise<any> }[] = [
-    { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', ms: 45000, run: () => refreshReference() },
+
+  // Delta manifest: compare the server's per-category stamps to what this device last cached, and
+  // run ONLY the categories that changed. `key` is the manifest category a step depends on; steps
+  // with no key (flights / previous-fuel / route maps) are time-sensitive or self-cached and ALWAYS
+  // run, so nothing time-critical is ever skipped. First prep (or an app-schema bump, or a cleared
+  // cache → no stored manifest) runs everything.
+  const server = await syncManifest(reg);
+  const storedRes = await getRef<any>(_manKey(reg)).catch(() => ({ data: null }));
+  const stored: any = (storedRes && storedRes.data && storedRes.data._v === PREP_SCHEMA) ? storedRes.data : null;
+  const full = !server || !stored;                       // can't delta (offline manifest / first run / schema bump) → full
+  const changed = (key?: string) => !key || full || stored[key] !== (server as any)[key];
+
+  const steps: { label: string; ms: number; key?: keyof OfflineManifest; run: () => Promise<any> }[] = [
+    { label: 'Maintenance reference (MEL, CDL, task cards, AMM)', ms: 45000, key: 'ref', run: () => refreshReference() },
     { label: 'Flight schedule (next 72 h)', ms: 20000, run: () => prefetchOfflineFlights() },
-    { label: 'Aircraft defects & HIL', ms: 15000, run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
-    { label: '2/10-day check forms & planned tasks', ms: 20000, run: async () => {
+    { label: 'Aircraft defects & HIL', ms: 15000, key: 'tail', run: () => (reg ? prefetchAircraftDefects(reg) : Promise.resolve()) },
+    { label: '2/10-day check forms & planned tasks', ms: 20000, key: 'tail', run: async () => {
       if (!reg) return;
       await Promise.all([
         checkTemplate('2day', reg).catch(() => {}),
@@ -1646,18 +1675,29 @@ export async function prepareOffline(reg: string | undefined,
         nextTl(reg).catch(() => {}),
       ]);
     } },
-    { label: 'HIL, Cabin, sign-offs & fuel config', ms: 25000, run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
+    { label: 'HIL, Cabin, sign-offs & fuel config', ms: 25000, key: 'tail', run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
     { label: 'Previous-leg fuel', ms: 15000, run: () => prefetchLastFuel() },
-    { label: 'User guide & assistant', ms: 20000, run: () => prefetchHelp() },
+    { label: 'User guide & assistant', ms: 20000, key: 'help', run: () => prefetchHelp() },
     { label: 'Route maps', ms: 30000, run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
   ];
+
+  const failed = new Set<string>();                      // a category whose fetch did NOT complete this run
   for (let i = 0; i < steps.length; i++) {
-    onProgress(i / steps.length, steps[i].label);
+    const s = steps[i];
+    onProgress(i / steps.length, s.label);
+    if (!changed(s.key)) { onProgress((i + 1) / steps.length, s.label); continue; }   // unchanged → skip
     // Best-effort AND time-boxed per step, so one stalled request (common on the flaky offline→online
-    // moment) advances the bar quickly instead of freezing it. Whatever didn't finish is re-tried
-    // next session (all steps are resumable / skip-cached).
-    try { await withTimeout(steps[i].run(), steps[i].ms); } catch { /* skip — keep going */ }
-    onProgress((i + 1) / steps.length, steps[i].label);
+    // moment) advances the bar quickly instead of freezing it.
+    try { await withTimeout(s.run(), s.ms); } catch { if (s.key) failed.add(s.key); }
+    onProgress((i + 1) / steps.length, s.label);
+  }
+
+  // Persist the new stamps — but a category that FAILED keeps its OLD stamp (or blank), so it stays
+  // "changed" and re-pulls next login. Guarantees an interrupted/timed-out fetch is never lost.
+  if (server) {
+    const next: any = { _v: PREP_SCHEMA, ...server };
+    for (const k of failed) next[k] = (stored && stored[k]) || '';
+    await setRef(_manKey(reg), next).catch(() => {});
   }
   onProgress(1, 'Ready for offline');
 }
