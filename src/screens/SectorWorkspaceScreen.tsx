@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import HilRemaining from '../components/HilRemaining';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml, printServerPdf } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
@@ -122,15 +123,18 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           {defs === null ? <Text style={styles.cardSub}>Loading…</Text> :
            defs.length === 0 ? <Text style={styles.cardSub}>NIL — no active defects on this aircraft.</Text> :
            defs.map((d: any) => (
-            <TouchableOpacity key={d.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.border }}
+            <TouchableOpacity key={d.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.border }}
               onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <Text style={{ color: d.status === 'deferred' ? theme.sub : theme.red, fontWeight: '800', fontSize: 11 }}>
-                  {(d.status || 'open').toUpperCase()}{d.mel_ref ? ` · ${d.mel_ref}` : ''}
-                </Text>
-                {d.area === 'cabin' ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>CABIN{d.dispatch_accepted === true ? ' · dispatch accepted' : d.dispatch_accepted === false ? ' · NOT dispatchable' : ' · decision pending'}</Text> : null}
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text style={{ color: d.status === 'deferred' ? theme.sub : theme.red, fontWeight: '800', fontSize: 11 }}>
+                    {(d.status || 'open').toUpperCase()}{d.mel_ref ? ` · ${d.mel_ref}` : ''}
+                  </Text>
+                  {d.area === 'cabin' ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>CABIN{d.dispatch_accepted === true ? ' · dispatch accepted' : d.dispatch_accepted === false ? ' · NOT dispatchable' : ' · decision pending'}</Text> : null}
+                </View>
+                <Text style={{ color: theme.text, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{d.title || d.description}</Text>
               </View>
-              <Text style={{ color: theme.text, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{d.title || d.description}</Text>
+              {d.status === 'deferred' ? <HilRemaining item={d} style={{ minWidth: 150, marginLeft: 8, paddingLeft: 8, borderLeftWidth: 1, borderLeftColor: theme.border }} /> : null}
             </TouchableOpacity>
           ))}
           <Text style={[styles.cardSub, { marginTop: 6 }]}>Cleared items appear on the printed Tech Log page (Preview above). Tap a defect to open it.</Text>
