@@ -8,6 +8,7 @@ import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
 import AmmPicker from '../components/AmmPicker';
 import PhotoCapture from '../components/PhotoCapture';
+import HilRemaining from '../components/HilRemaining';
 import SignaturePad from '../components/SignaturePad';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -309,15 +310,10 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       <Text style={styles.title}>{d.title || 'Defect'} <Text style={[styles.badge, { color }]}>· {d.status}</Text></Text>
       <Text style={styles.desc}>{d.description}</Text>
       <Text style={styles.sub}>{(() => { const r = String(d.raised_at || ''); if (!r) return ''; const p = r.slice(0, 10).split('-'); return `Opened ${p[2]}/${p[1]}/${p[0].slice(2)} ${r.slice(11, 16)}z · `; })()}{d.source?.toUpperCase()} · ATA {d.ata_chapter || '—'}{d.tl ? ` · TL # ${d.tl}${d.tl_flight ? ` (${d.tl_flight})` : ''}` : ''}{d.mel_ref ? ` · MEL ${d.mel_ref}` : ''}{d.cdl_ref ? ` · CDL ${d.cdl_ref}` : ''}{d.approved_ref ? ` · Approved data ${d.approved_ref}` : ''}{d.rect_interval ? ` · Cat ${d.rect_interval}` : ''}{d.due_date ? ` · due ${d.due_date}` : ''}</Text>
-      {/* Deferred item: remaining calendar time / FH / cycles — whichever limit is reached first applies. */}
-      {d.status === 'deferred' && (d.due_date || d.max_cycles != null || d.max_fh != null) ? (
-        <Text style={[styles.sub, { fontWeight: '700', color: (/OVERDUE/.test(remainingDue(d.due_date) || '') || (d.remaining_cycles != null && d.remaining_cycles <= 0) || (d.remaining_fh != null && d.remaining_fh <= 0)) ? theme.red : theme.accent }]}>
-          {[
-            d.due_date && remainingDue(d.due_date) ? remainingDue(d.due_date) : null,
-            d.max_fh != null ? `${fmtFH(d.remaining_fh != null ? d.remaining_fh : d.max_fh)} of ${fmtFH(d.max_fh)} FH left` : null,
-            d.max_cycles != null ? `${d.remaining_cycles != null ? d.remaining_cycles : d.max_cycles} of ${d.max_cycles} cycles left` : null,
-          ].filter(Boolean).join('  ·  ')}
-        </Text>
+      {/* Deferred item: the standard remaining columns (Days / Hrs / Cyc) — same presentation as the
+          HIL lists; whichever limit is reached first applies. */}
+      {d.status === 'deferred' ? (
+        <HilRemaining item={d} style={{ alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8 }} />
       ) : null}
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
