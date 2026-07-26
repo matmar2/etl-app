@@ -340,7 +340,7 @@ async function _devId(): Promise<string> { if (!_devIdCache) _devIdCache = await
 
 let _lastApiOk = 0;   // epoch ms of the last time a request actually reached the server (any status)
 
-async function api(path: string, init: RequestInit = {}) {
+export async function api(path: string, init: RequestInit = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()), ...(init.headers ?? {}) };
   let res: Response;
   try {

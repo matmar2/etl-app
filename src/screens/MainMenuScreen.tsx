@@ -212,6 +212,7 @@ export default function MainMenuScreen({ navigation }: any) {
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
+      require('../push').registerPush().catch(() => {}),   // real push (APNs) token — no-op on web/old builds
       deviceId().then((d) => appRelease(d)).then((r) => { if (isAlive()) setVer(r); }).catch(() => {}),
       Promise.resolve().then(() => (Updates.isEnabled ? Updates.checkForUpdateAsync() : null)).catch(() => {}),   // probe; the useUpdates() hook drives the star (available OR downloaded-pending)
     ];

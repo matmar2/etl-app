@@ -42,6 +42,8 @@
       "expo-asset",
       "expo-secure-store",
       "expo-sqlite",
+      ["expo-camera", { "cameraPermission": "Used to scan part barcodes / QR codes when recording a component change, and to photograph certificates." }],
+      ["expo-notifications", { "defaultChannel": "default" }],
       "./plugins/withPeerSync"
     ],
     "owner": "mathewos"

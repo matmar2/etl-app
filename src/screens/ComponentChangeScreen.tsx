@@ -3,6 +3,7 @@ import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View 
 import * as ImagePicker from 'expo-image-picker';
 import { can, CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
 import { printHtml } from '../print';
+import BarcodeScanner, { parsePartBarcode } from '../components/BarcodeScanner';
 import RoBanner from '../components/RoBanner';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -29,6 +30,20 @@ export default function ComponentChangeScreen({ route }: any) {
   const blank: CcrRow = { id: '', description: '', position: '', pn_off: '', sn_off: '', pn_on: '', sn_on: '', cert_no: '' };
   const [certPhoto, setCertPhoto] = useState<string | null>(null);
   const sealed = rows.some((r) => r.emailed_at);
+
+  // Barcode/QR scan of a part label → fills Part № (+ Serial № when the label carries both).
+  const [scanSide, setScanSide] = useState<'off' | 'on' | null>(null);
+  function applyScan(raw: string) {
+    const side = scanSide; if (!side) return;
+    const { pn, sn } = parsePartBarcode(raw);
+    setEditing((e) => {
+      if (!e) return e;
+      const upd: any = { ...e };
+      if (pn) upd[side === 'off' ? 'pn_off' : 'pn_on'] = pn;
+      if (sn) upd[side === 'off' ? 'sn_off' : 'sn_on'] = sn;
+      return upd;
+    });
+  }
 
   // CAMO inventory picker (online only — offline stays manual entry): fills P/N + S/N of one side.
   const [invSide, setInvSide] = useState<'off' | 'on' | null>(null);
@@ -129,10 +144,12 @@ export default function ComponentChangeScreen({ route }: any) {
           <View style={s.row}>{F('description', 'Component description *', 300)}{F('position', 'Position (e.g. ENG 1)')}</View>
           <Text style={s.lbl}>Removed (OFF)</Text>
           <View style={s.row}>{F('pn_off', 'Part № OFF')}{F('sn_off', 'Serial № OFF')}
+            <TouchableOpacity style={s.btn2} onPress={() => setScanSide('off')}><Text style={s.btn2t}>📷 Scan</Text></TouchableOpacity>
             <TouchableOpacity style={s.btn2} onPress={() => { setInvSide('off'); setInvQ(''); setInvItems(null); setInvMsg(''); }}><Text style={s.btn2t}>▾ CAMO inventory</Text></TouchableOpacity>
           </View>
           <Text style={s.lbl}>Installed (ON)</Text>
           <View style={s.row}>{F('pn_on', 'Part № ON')}{F('sn_on', 'Serial № ON')}
+            <TouchableOpacity style={s.btn2} onPress={() => setScanSide('on')}><Text style={s.btn2t}>📷 Scan</Text></TouchableOpacity>
             <TouchableOpacity style={s.btn2} onPress={() => { setInvSide('on'); setInvQ(''); setInvItems(null); setInvMsg(''); }}><Text style={s.btn2t}>▾ CAMO inventory</Text></TouchableOpacity>
           </View>
           <View style={s.row}>{F('cert_no', 'Certificate № (Form 1 / CoC)', 220)}</View>
@@ -186,6 +203,9 @@ export default function ComponentChangeScreen({ route }: any) {
           </View>
         </View>
       </Modal>
+
+      {/* Part-label barcode / QR scanner → fills Part № (+ Serial № when encoded) on the chosen side. */}
+      <BarcodeScanner visible={scanSide !== null} onClose={() => setScanSide(null)} onScanned={applyScan} />
     </ScrollView>
   );
 }
