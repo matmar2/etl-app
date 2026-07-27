@@ -11,7 +11,7 @@ import PhotoCapture from '../components/PhotoCapture';
 import HilRemaining from '../components/HilRemaining';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
 import { theme } from '../theme';
 
 const INTERVALS = ['A', 'B', 'C', 'D'];
@@ -169,18 +169,25 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     finally { setPreviewing(false); }
   }
 
-  // Rectify + CRS — a certification: all entries complete, confirm, sign, MFA.
+  // Rectify + CRS — a certification: all entries complete, confirm, sign, MFA. Missing entries
+  // pop as a dialog (same pattern as the Departure/Arrival sign-offs).
   async function rectifyCRS() {
-    if (!narr.trim()) { setMsg('Describe the rectification work first.'); return; }
-    if (!amo.trim()) { setMsg('Enter the AMO / Part-145 approval number.'); return; }
-    if (!lic.trim()) { setMsg('Enter your licence / authorisation number.'); return; }
+    const miss = [
+      !narr.trim() ? '• Rectification / action narrative' : null,
+      !amo.trim() ? '• AMO / Part-145 approval number' : null,
+      !lic.trim() ? '• Licence / authorisation number' : null,
+    ].filter(Boolean) as string[];
+    if (miss.length) { setMsg('Complete before the CRS: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete the rectification first'); return; }
     if (!(await confirmAction('Issue the CRS for this rectification? You will sign and authenticate.', 'Rectify + CRS'))) return;
     setSigning(true);
   }
   // Step 1 of the two-step W/O: sign the Tech Log for the work, no CRS (aircraft stays unserviceable).
   async function recordWork() {
-    if (!narr.trim()) { setMsg('Describe the work carried out first.'); return; }
-    if (!lic.trim()) { setMsg('Enter your licence / authorisation number.'); return; }
+    const miss = [
+      !narr.trim() ? '• Work carried out / action narrative' : null,
+      !lic.trim() ? '• Licence / authorisation number' : null,
+    ].filter(Boolean) as string[];
+    if (miss.length) { setMsg('Complete before signing: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete before signing the Tech Log'); return; }
     if (!(await confirmAction('Sign the Tech Log for this work now? No CRS is issued yet — the aircraft stays UNSERVICEABLE until the CRS (release) is signed, which needs every other open item cleared.', 'Record work + sign TL'))) return;
     setWorkSigning(true);
   }
@@ -460,7 +467,12 @@ export default function DefectDetailScreen({ route, navigation }: any) {
                 <TextInput style={[styles.input, { width: 260, minHeight: 0 }]} value={diTask} onChangeText={setDiTask} placeholder="DI — inspected item / task *" placeholderTextColor={theme.sub} />
               </View>
               <TouchableOpacity style={[styles.act2, { backgroundColor: theme.accent, marginTop: 8 }]} onPress={() => {
-                if (!diName.trim() || !diLic.trim() || !diTask.trim()) { setMsg('Enter the DI inspector name, their licence, and the inspected item / task.'); return; }
+                if (!diName.trim() || !diLic.trim() || !diTask.trim()) {
+                  const miss = [!diName.trim() ? '• DI — inspector name' : null, !diLic.trim() ? '• DI — licence / auth no' : null, !diTask.trim() ? '• DI — inspected item / task' : null].filter(Boolean) as string[];
+                  setMsg('Enter the DI inspector name, their licence, and the inspected item / task.');
+                  notifyAction(miss.join('\n'), 'Complete the Double Inspection entries');
+                  return;
+                }
                 if (diName.trim().toLowerCase() === (userName() || '').trim().toLowerCase() || (userLicence() && diLic.trim().toUpperCase() === (userLicence() || '').trim().toUpperCase())) {
                   setMsg('The double inspection must be a DIFFERENT qualified person than the one rectifying.'); return;
                 }

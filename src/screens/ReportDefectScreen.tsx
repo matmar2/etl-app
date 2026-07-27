@@ -7,7 +7,7 @@ import CdlPicker from '../components/CdlPicker';
 import AmmPicker from '../components/AmmPicker';
 import SignaturePad from '../components/SignaturePad';
 import { createDefect } from '../db/defects';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
 import { theme } from '../theme';
 
 const REQ_LABEL: Record<string, string> = { title: 'System / Title', description: 'Defect description', ata_chapter: 'ATA chapter', reporter_licence: 'Licence / auth no.' };
@@ -78,7 +78,10 @@ export default function ReportDefectScreen({ route, navigation }: any) {
   const canSubmit = missing.length === 0 && canReport;
 
   async function raise() {
-    if (!canSubmit) return;
+    if (!canReport || busy) return;
+    // Button stays tappable with gaps — pop the missing list so the reporter (cabin crew /
+    // mechanic / pilot) sees exactly what to fill (same pattern as Departure/Arrival sign-offs).
+    if (missing.length) { notifyAction(missing.map((f) => `• ${REQ_LABEL[f] || f}`).join('\n'), 'Complete the defect report'); return; }
     const warn = blocks ? '\n\n⚠ This will make the aircraft UNSERVICEABLE until it is cleared or deferred.' : '';
     if (!(await confirmAction(`Raise this ${source.toUpperCase()} defect?${warn}`, 'Raise defect'))) return;
     setSigning(true);                                 // sign to attribute the report
@@ -191,7 +194,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
       {missing.length ? <Text style={styles.req}>Required: {missing.map((f) => REQ_LABEL[f] || f).join(', ')}</Text> : null}
       {!canReport ? <Text style={styles.req}>You do not have permission to raise defects.</Text> : null}
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 10 }}>You will confirm and sign to raise the defect{blocks ? '. This makes the aircraft unserviceable.' : '.'}</Text>
-      <TouchableOpacity style={[styles.btn, !canSubmit && { opacity: 0.4 }]} onPress={raise} disabled={busy || !canSubmit}>
+      <TouchableOpacity style={[styles.btn, (!canReport || (missing.length > 0)) && { opacity: 0.6 }]} onPress={raise} disabled={busy || !canReport}>
         <Text style={styles.btnText}>{busy ? 'Saving…' : 'Raise defect · sign'}</Text>
       </TouchableOpacity>
       <SignaturePad visible={signing} title="Sign defect report"

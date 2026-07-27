@@ -15,7 +15,7 @@ import AmmPicker from '../components/AmmPicker';
 import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
 import { ammIawLine } from '../api/client';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
 import { theme } from '../theme';
 
 // Assemble the TL from the server, or fall back to the local cache when offline.
@@ -105,23 +105,38 @@ export default function ReleaseScreen({ route, navigation }: any) {
     // on those (it certifies the work — the aircraft stays unserviceable for dispatch).
     if (!((st as any).maintenance_only)) {
       const unticked = (st!.blockers || []).filter((b) => !clearSel.has(b.id));
-      if (unticked.length) { setMsg('Defer (MEL/HIL) or rectify the open defect(s) before the flight CRS.'); return; }
+      if (unticked.length) {
+        setMsg('Defer (MEL/HIL) or rectify the open defect(s) before the flight CRS.');
+        notifyAction(unticked.map((b: any) => `• ${b.title || b.description}`).join('\n') + '\n\nDefer (MEL/HIL) or rectify these before the flight CRS.', 'Open defects block the flight CRS');
+        return;
+      }
       const bp = !!((st as any).check_blockers?.length) && !((st as any).check_override?.mechanic_by);
-      if (bp) { setMsg('Confirm the delayed-OASES conditions first (card above the defect list).'); return; }
+      if (bp) {
+        setMsg('Confirm the delayed-OASES conditions first (card above the defect list).');
+        notifyAction(((st as any).check_blockers || []).map((r: string) => `• ${r}`).join('\n') + '\n\nConfirm the delayed-OASES conditions first (card above the defect list).', 'Cannot sign the flight CRS yet');
+        return;
+      }
     } else {
       // Maintenance TL: the work order / scope and the work carried out are mandatory. Don't disable
       // the button — highlight what's missing when it's pressed so the mechanic sees why.
       const bad = { wo: !woRef.trim(), work: !workDone.trim() };
       if (bad.wo || bad.work) {
         setMaintBad(bad);
+        const miss = [bad.wo ? '• Work order(s) / scope' : null, bad.work ? '• Work carried out / action taken' : null].filter(Boolean) as string[];
         setMsg(bad.wo && bad.work ? 'Enter the Work order / scope and the Work carried out before completing.'
           : bad.wo ? 'Enter the Work order / scope before completing.'
           : 'Enter the Work carried out before completing.');
+        notifyAction(miss.join('\n'), 'Complete the Tech Log first');
         return;
       }
       setMaintBad({});
     }
-    if (!signer.trim() || !licence.trim()) { setMsg('Enter your name and licence, then Complete.'); return; }
+    if (!signer.trim() || !licence.trim()) {
+      const miss = [!signer.trim() ? '• Name' : null, !licence.trim() ? '• Licence / Part-145 auth no.' : null].filter(Boolean) as string[];
+      setMsg('Enter your name and licence, then Complete.');
+      notifyAction(miss.join('\n'), 'Complete before signing');
+      return;
+    }
     sig ? submitRelease(sig) : setSigning(true);
   }
   // Discard an unsigned maintenance Tech Log opened by mistake / no longer required (double-confirm).
