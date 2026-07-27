@@ -7,6 +7,11 @@ import { api } from './api/client';
 export async function registerPush(): Promise<void> {
   if (Platform.OS === 'web') return;
   try {
+    // Ask the native registry BEFORE require()ing the library — on binaries without the
+    // notifications native module (pre-1.0.2) the library import can abort natively,
+    // which a try/catch cannot stop (same failure mode as the expo-camera boot crash).
+    const { requireOptionalNativeModule } = require('expo');
+    if (!requireOptionalNativeModule('ExpoPushTokenManager') && !requireOptionalNativeModule('NotificationsHandlerModule')) return;
     const Notifications = require('expo-notifications');
     const Constants = require('expo-constants').default;
     const projectId = Constants?.expoConfig?.extra?.eas?.projectId || Constants?.easConfig?.projectId;

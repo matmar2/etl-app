@@ -4,13 +4,16 @@ import { theme } from '../theme';
 
 // Scan a part label (1D/2D barcode or QR) to fill Part № / Serial № on the Component Change form.
 //
-// CRITICAL: expo-camera is loaded with a GUARDED require, never a top-level import. The OTA JS
-// bundle runs on installed binaries that pre-date the camera native module (fleet 1.0/1.0.1);
-// a static import throws at module init on those binaries → the whole app crashes at boot and
-// expo-updates ROLLS BACK to the embedded bundle (the "app went back to the old version" incident
-// of 26 Jul). With the guard, old builds simply show the fallback below until they get 1.0.2.
+// CRITICAL: expo-camera must not even be require()d on binaries that lack the native module.
+// A try/catch around require is NOT enough — the library's import can abort NATIVELY (uncatchable)
+// on pre-1.0.2 binaries, crashing the app at boot so expo-updates rolls back to the embedded
+// bundle (the 26–27 Jul incidents). requireOptionalNativeModule asks the native registry safely
+// (returns null when absent) — only then is the JS library loaded.
+import { requireOptionalNativeModule } from 'expo';
 let Camera: any = null;
-try { Camera = require('expo-camera'); } catch { Camera = null; }
+if (requireOptionalNativeModule('ExpoCamera')) {
+  try { Camera = require('expo-camera'); } catch { Camera = null; }
+}
 export const cameraAvailable = !!(Camera && Camera.CameraView);
 
 export default function BarcodeScanner(props: {
