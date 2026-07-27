@@ -610,10 +610,8 @@ export default function DepartureScreen({ route, navigation }: any) {
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel grade / type</Text>
           <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
         </View>
-        <View style={{ minWidth: 230, flex: 1, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Fuel receipt (bowser)</Text>
-          <PhotoCapture sectorId={s.id} kind="receipt" label="" />
-        </View>
+        {/* Fuel receipt lives OUTSIDE the pointerEvents lock (below) — viewing a photo must never be
+            write-gated; the fuel-card lock made 👁 View photo dead for read-only roles (mechanic). */}
       </View>
       {(() => {
         const sg = num(fuel.fuel_density) || 0.8;
@@ -659,6 +657,13 @@ export default function DepartureScreen({ route, navigation }: any) {
         const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
         tanks.forEach((t) => (p[t.field] = num(fuel[t.field]))); save(p);
       }}><Text style={sx.saveText}>Save departure fuel</Text></TouchableOpacity> : null}
+      </View>
+
+      {/* Outside the fuel-card pointerEvents lock so EVERY role can open the viewer; write actions
+          (take/replace/delete) stay gated by the departure.fuel permission via readOnly. */}
+      <View style={[sx.card, { marginTop: 10 }]}>
+        <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Fuel receipt (bowser)</Text>
+        <PhotoCapture sectorId={s.id} kind="receipt" label="" readOnly={!canFuel} />
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['serv'] = e.nativeEvent.layout.y; }}>Servicing — oil &amp; hydraulic uplift</Text>
