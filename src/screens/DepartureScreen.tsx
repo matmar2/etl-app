@@ -488,7 +488,10 @@ export default function DepartureScreen({ route, navigation }: any) {
             onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
         </View>
       )}
-      <View style={[sx.card, canDep ? null : { opacity: 0.55 }]} pointerEvents={canDep ? 'auto' : 'none'}>
+      {/* Lock applies to the SUB-SECTIONS, not the whole card — the uplift/grade/receipt row stays
+          interactive so 👁 View photo works for read-only roles; its inputs are gated individually. */}
+      <View style={[sx.card, canDep ? null : { opacity: 0.55 }]}>
+      <View pointerEvents={canDep ? 'auto' : 'none'}>
       <Text style={sx.subhead}>Planned</Text>
       <View style={sx.grid}>
         <NumField label="Planned (kg)" bad={badSet.has('fuel_planned_kg')} value={fuel.fuel_planned_kg} onChange={(v: string) => setFuel({ ...fuel, fuel_planned_kg: v })} />
@@ -558,6 +561,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         );
       })()}
       </View>
+      </View>
       <Text style={sx.subhead}>Fuel uplifted, grade &amp; receipt</Text>
       <View style={[sx.grid, { alignItems: 'flex-start' }]}>
         {(() => {
@@ -575,11 +579,11 @@ export default function DepartureScreen({ route, navigation }: any) {
             <View style={{ marginBottom: 10 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel Uplifted ({bowserUnit})</Text>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90 }}
+                <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, opacity: canFuel ? 1 : 0.5 }}
                   keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); }} />
                 {/* unit dropdown (default L) — compact so photo buttons share the line */}
                 <View>
-                  <TouchableOpacity onPress={() => setBowserUnitOpen((o) => !o)}
+                  <TouchableOpacity disabled={!canFuel} onPress={() => setBowserUnitOpen((o) => !o)}
                     style={{ paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.accent, backgroundColor: theme.tile, flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                     <Text style={{ color: theme.text, fontWeight: '800', fontSize: 12 }}>{bowserUnit}</Text>
                     <Text style={{ color: theme.sub, fontSize: 10 }}>▾</Text>
@@ -601,18 +605,23 @@ export default function DepartureScreen({ route, navigation }: any) {
         })()}
         <View style={{ width: 120, marginBottom: 10 }}>
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Specific gravity</Text>
-          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_density') ? 2 : 1, borderColor: badSet.has('fuel_density') ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
+          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_density') ? 2 : 1, borderColor: badSet.has('fuel_density') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
             keyboardType="decimal-pad" value={fuel.fuel_density == null || fuel.fuel_density === '' ? '' : String(fuel.fuel_density)}
             onChangeText={(v) => setFuel({ ...fuel, fuel_density: numericOnly(v) })} />
           <Text style={{ color: theme.sub, fontSize: 10, marginTop: 3 }}>default {refDens}</Text>
         </View>
         <View style={{ width: 150, marginBottom: 10 }}>
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel grade / type</Text>
-          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
+          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
         </View>
-        {/* Fuel receipt lives OUTSIDE the pointerEvents lock (below) — viewing a photo must never be
-            write-gated; the fuel-card lock made 👁 View photo dead for read-only roles (mechanic). */}
+        {/* In-row, OUTSIDE any pointerEvents lock: viewing the receipt must work for every role;
+            write actions stay permission-gated via readOnly. */}
+        <View style={{ minWidth: 230, flex: 1, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Fuel receipt (bowser)</Text>
+          <PhotoCapture sectorId={s.id} kind="receipt" label="" readOnly={!canFuel} />
+        </View>
       </View>
+      <View pointerEvents={canDep ? 'auto' : 'none'}>
       {(() => {
         const sg = num(fuel.fuel_density) || 0.8;
         const gauge = upliftKg;
@@ -658,12 +667,6 @@ export default function DepartureScreen({ route, navigation }: any) {
         tanks.forEach((t) => (p[t.field] = num(fuel[t.field]))); save(p);
       }}><Text style={sx.saveText}>Save departure fuel</Text></TouchableOpacity> : null}
       </View>
-
-      {/* Outside the fuel-card pointerEvents lock so EVERY role can open the viewer; write actions
-          (take/replace/delete) stay gated by the departure.fuel permission via readOnly. */}
-      <View style={[sx.card, { marginTop: 10 }]}>
-        <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Fuel receipt (bowser)</Text>
-        <PhotoCapture sectorId={s.id} kind="receipt" label="" readOnly={!canFuel} />
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['serv'] = e.nativeEvent.layout.y; }}>Servicing — oil &amp; hydraulic uplift</Text>
