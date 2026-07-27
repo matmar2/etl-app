@@ -8,7 +8,7 @@ import RoBanner from '../components/RoBanner';
 import TechLogPageModal from '../components/TechLogPageModal';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
@@ -137,6 +137,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
       setBadSet(new Set(miss.map((x) => x.key)));
       const y = secY.current[miss[0].sec]; if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 70), animated: true });
       setSignMsg('Complete before signing: ' + miss.map((x) => x.label).join(', '));
+      // The scroll jumps away from the sign button, so also LIST the gaps in a dialog the
+      // captain sees regardless of scroll position.
+      notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before signing');
       return;
     }
     setBadSet(new Set());

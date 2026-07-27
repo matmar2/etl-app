@@ -10,7 +10,7 @@ import RoBanner from '../components/RoBanner';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import WalkaroundModal from '../components/WalkaroundModal';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps, GpsState } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
@@ -260,6 +260,9 @@ export default function DepartureScreen({ route, navigation }: any) {
       const y = secY.current[miss[0].sec];
       if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 70), animated: true });
       setSignMsg('Complete before accepting: ' + miss.map((x) => x.label).join(', '));
+      // Also list the gaps in a dialog — the auto-scroll moves away from where the inline
+      // message renders, so the captain may otherwise never see the list.
+      notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before accepting');
       return;
     }
     setBadSet(new Set());
