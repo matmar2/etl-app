@@ -29,7 +29,6 @@ import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
 import AckOverlay from './src/components/AckOverlay';
 import { SyncBlockHost } from './src/components/SyncBlock';
-import { startOnboardSync } from './src/p2p/bootstrap';
 import BroadcastGate from './src/components/BroadcastGate';
 import InductionGate from './src/components/InductionGate';
 import OnlineStatus from './src/components/OnlineStatus';
@@ -73,7 +72,11 @@ export default function App() {
 
   // On-board iPad-to-iPad Bluetooth peer sync — starts when the native MultipeerConnectivity
   // transport is present (a native EAS build); a no-op in Expo Go / web / older builds.
-  useEffect(() => { startOnboardSync().catch(() => {}); }, []);
+  // On-board Bluetooth peer sync: NOT auto-started at launch. A native-start fault must never be
+  // able to crash the app at boot (which would loop before an OTA fix could even download — the
+  // 26-Jul lesson). The transport starts ON DEMAND from Master iPad → "Sync all iPads", inside
+  // its own guard, once the two-iPad trial proves it stable; auto-start can return then.
+  useEffect(() => { /* startOnboardSync() intentionally not called at boot */ }, []);
 
   // Global JS-error handler: report uncaught fatals (that the React boundary can't see — async,
   // native module) to the back office so QA/CAMO get the cause + a recommended corrective action.

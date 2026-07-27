@@ -39,11 +39,16 @@ export default function MasterDeviceScreen() {
   // MERGES them into the complete latest, then DISTRIBUTES the complete package to all. Audit-logged.
   async function syncAll() {
     setSyncOpen(true); setSyncDone(false); setSyncList([]); setNoPeers(''); cancelled.current = false;
+    // ON-DEMAND start of the on-board Bluetooth transport (never at app boot — a native-start fault
+    // must not be able to crash the app at launch). First tap starts advertising/browsing; peers can
+    // take a few seconds to appear, so the first attempt may report none — tap again.
+    try { const { startOnboardSync } = require('../p2p/bootstrap'); await startOnboardSync(); } catch { /* stay inert */ }
+    await new Promise((r) => setTimeout(r, 1500));   // brief window for MC discovery after a fresh start
     // Which iPads are actually reachable over the on-board link right now.
     const peers = peerSyncAvailable() ? onlinePeers() : [];
     if (peers.length === 0) {
       setNoPeers(peerSyncAvailable()
-        ? 'No other iPads found on the on-board Bluetooth network. Make sure the other iPads are switched on and nearby, then try again.'
+        ? 'No other iPads found on the on-board Bluetooth network. Make sure the other iPads are switched on, nearby and have opened Master iPad → Sync all iPads once (the link starts on demand), then try again.'
         : 'The on-board iPad-to-iPad (Bluetooth) link is not active on this app build yet, so there is no on-board network to scan. iPads currently sync through the server automatically whenever they have connectivity. (The direct link switches on with the native app build.)');
       setSyncDone(true);
       syncAllComplete(reg, { synced: 0, pending: 0, pending_labels: [], timed_out: false }).catch(() => {});
