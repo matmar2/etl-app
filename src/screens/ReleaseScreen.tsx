@@ -9,6 +9,7 @@ import { deleteSector, getSector, localReleaseStatus, markLocalReleased } from '
 import { getSectorDefects } from '../db/defects';
 import { airPrint, bluetoothAvailable, bluetoothPrint, printHtml, printServerPdf, shareHtml, sharePdf } from '../print';
 import SignaturePad from '../components/SignaturePad';
+import SignatureBlock from '../components/SignatureBlock';
 import HilRemaining from '../components/HilRemaining';
 import AmmPicker from '../components/AmmPicker';
 import MelPicker from '../components/MelPicker';
@@ -405,6 +406,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
           <Text style={s.relKind}>{KIND[st.release.kind || ''] || st.release.kind}</Text>
           <Text style={s.sub}>Aircraft {st.release.serviceable ? 'serviceable' : 'unserviceable'} at release · {st.release.at?.slice(0, 16).replace('T', ' ')}</Text>
           {st.release.note ? <Text style={s.sub}>Note: {st.release.note}</Text> : null}
+          <SignatureBlock label="CRS — signed" sig={[...(((st as any).signatures) || [])].reverse().find((g: any) => g.kind === 'crs' || g.kind === 'release')} />
+          <SignatureBlock label="Commander acceptance — signed" sig={(st as any).signatures?.find((g: any) => g.kind === 'preflight')} />
           {st.reset_request?.status === 'pending' ? (
             <Text style={[s.sub, { color: theme.accent, marginTop: 8 }]}>⏳ CRS reset requested by {st.reset_request.by} — pending CAMO Manager approval.{'\n'}Reason: {st.reset_request.reason}</Text>
           ) : st.reset_request?.status === 'rejected' ? (

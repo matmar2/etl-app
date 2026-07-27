@@ -7,6 +7,7 @@ import OfflineFlash from '../components/OfflineFlash';
 import RoBanner from '../components/RoBanner';
 import TechLogPageModal from '../components/TechLogPageModal';
 import SignaturePad from '../components/SignaturePad';
+import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
@@ -421,9 +422,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
       })()}
       <OfflineFlash message={/offline|will sync|queued/i.test(signMsg) ? signMsg : null} />
       {(s.status === 'closed' || s.status === 'exported') ? (
-        <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowTlp(true)}>
-          <Text style={sx.saveText}>📄  View Tech Log page (goes to OASES)</Text>
-        </TouchableOpacity>
+        <>
+          <SignatureBlock label="Post-flight acceptance — signed" sig={(s as any).signatures?.find((g: any) => g.kind === 'postflight')} style={{ marginBottom: 8 }} />
+          <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => setShowTlp(true)}>
+            <Text style={sx.saveText}>📄  View Tech Log page (goes to OASES)</Text>
+          </TouchableOpacity>
+        </>
       ) : null}
       {showTlp ? <TechLogPageModal sectorId={sectorId} onClose={() => setShowTlp(false)} /> : null}
       <SignaturePad visible={acceptSigning} title="Sign — Post-flight acceptance"

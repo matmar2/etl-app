@@ -8,6 +8,7 @@ import OfflineFlash from '../components/OfflineFlash';
 import PhotoCapture from '../components/PhotoCapture';
 import RoBanner from '../components/RoBanner';
 import SignaturePad from '../components/SignaturePad';
+import SignatureBlock from '../components/SignatureBlock';
 import WalkaroundModal from '../components/WalkaroundModal';
 import { confirmAction } from '../util/confirm';
 import { checkAirportGps, GpsState } from '../util/geo';
@@ -895,6 +896,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           <TouchableOpacity disabled style={[sx.save, { backgroundColor: theme.accent }]}>
             <Text style={[sx.saveText, { color: theme.onAccent }]}>Accepted ✓</Text>
           </TouchableOpacity>
+          <SignatureBlock label="Commander acceptance — signed" sig={(s as any).signatures?.find((g: any) => g.kind === 'preflight')} />
           {isCrew && !s.takeoff ? (
             <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 8 }]} onPress={undoAccept}>
               <Text style={[sx.saveText, { color: theme.red }]}>Undo acceptance (before take-off)</Text>

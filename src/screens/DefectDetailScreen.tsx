@@ -10,6 +10,7 @@ import AmmPicker from '../components/AmmPicker';
 import PhotoCapture from '../components/PhotoCapture';
 import HilRemaining from '../components/HilRemaining';
 import SignaturePad from '../components/SignaturePad';
+import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
@@ -316,6 +317,11 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         <HilRemaining item={d} style={{ alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8 }} />
       ) : null}
       {d.last_updated_by ? <Text style={[styles.sub, { fontSize: 12 }]}>Last updated by {d.last_updated_by}</Text> : null}
+      {/* The reporter's drawn signature — cabin crew / PIREP / MAREP sign when raising the defect. */}
+      {d.reporter_signature ? (
+        <SignatureBlock label={`${(d.source || 'report').toUpperCase()} — reported & signed`}
+          sig={{ signer_name: d.reported_by_name, licence_no: d.reporter_licence, signed_at: d.raised_at, signature_image: d.reporter_signature }} />
+      ) : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
 
       {/* Once the CRS is signed (rectified/closed) the photos are part of the signed record — view only, no re-take/library. */}
