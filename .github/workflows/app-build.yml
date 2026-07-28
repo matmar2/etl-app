@@ -32,9 +32,33 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: OTA update (JS only)
+      # One OTA reaches EVERY install: both channels (production = TestFlight + Jamf store build,
+      # adhoc = ad-hoc installs) and both runtimes (current app.json version + the fleet's 1.0.0
+      # embedded binaries). Mirrors app/deploy-ota.sh, including its native-import gate.
+      - name: OTA update (JS only — all installs, both runtimes)
         if: ${{ inputs.mode == 'ota' }}
-        run: eas update --channel ${{ inputs.profile == 'adhoc' && 'adhoc' || 'production' }} --platform ios --message "Back-office OTA (${{ inputs.profile }})" --non-interactive
+        run: |
+          set -euo pipefail
+          # Native-import gate (27 Jul crash-rollback incident): an OTA must never ship JS that
+          # statically imports a native lib older binaries lack — registry-gate required.
+          for lib in expo-camera expo-notifications; do
+            if grep -rnE "^[[:space:]]*import[^;]* from ['\"]$lib" src App.tsx; then
+              echo "✗ OTA BLOCKED: static import of '$lib' (native-abort risk on older binaries)"; exit 1
+            fi
+          done
+          grep -q "requireOptionalNativeModule('ExpoCamera')" src/components/BarcodeScanner.tsx || { echo "✗ BarcodeScanner guard missing"; exit 1; }
+          grep -q "requireOptionalNativeModule('ExpoPushTokenManager')" src/push.ts || { echo "✗ push.ts guard missing"; exit 1; }
+          echo "✓ native-import gate passed"
+          CUR=$(node -p "require('./app.json').expo.version")
+          RUNTIMES="$CUR"; [ "$CUR" != "1.0.0" ] && RUNTIMES="$CUR 1.0.0"
+          for V in $RUNTIMES; do
+            sed -i "s/\"version\": \"$CUR\"/\"version\": \"$V\"/" app.json
+            for CH in production adhoc; do
+              eas update --channel "$CH" --platform ios --message "Back-office OTA (runtime $V)" --non-interactive
+            done
+            sed -i "s/\"version\": \"$V\"/\"version\": \"$CUR\"/" app.json
+          done
+          git checkout -- app.json
 
       - name: Native build (+ auto-submit to TestFlight)
         if: ${{ inputs.mode == 'build' }}
