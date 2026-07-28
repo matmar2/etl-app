@@ -71,7 +71,7 @@ export default function MasterDeviceScreen() {
     <ScrollView style={{ flex: 1, backgroundColor: theme.bg }} contentContainerStyle={{ padding: 16, maxWidth: 720, alignSelf: 'center', width: '100%' }}>
       <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Master iPad · {reg}</Text>
       <Text style={{ color: theme.sub, marginTop: 6, fontSize: 13 }}>
-        The master iPad&apos;s entries take priority when several iPads sync the same flight. Order of precedence: master → First Officer → Backup → Cabin Crew. The Captain (or the current master) can transfer the master here.
+        The master iPad&apos;s entries take priority when several iPads sync the same flight. Order of precedence: master → First Officer → Backup/Mechanic → Cabin Crew. The Captain (or the current master) can transfer the master here.
       </Text>
       <TouchableOpacity onPress={syncAll} disabled={busy || !reg}
         style={{ backgroundColor: theme.green, borderRadius: 10, padding: 13, marginTop: 14, alignItems: 'center' }}>
@@ -145,7 +145,7 @@ export default function MasterDeviceScreen() {
         ))}
       </View>
       <Text style={{ color: theme.sub, fontSize: 11, marginTop: 16 }}>
-        Roles (Captain / First Officer / Backup / Cabin Crew) are assigned by the administrator in the back office; the default master is the Captain iPad.
+        Roles (Captain / First Officer / Backup / Mechanic / Cabin Crew) are assigned by the administrator in the back office; the default master is the Captain iPad.
       </Text>
     </ScrollView>
   );
