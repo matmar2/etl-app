@@ -41,7 +41,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     listServicing(sectorId).then((rows: any[]) => {
       if (!rows?.length) return;
       const QTL = 0.946353;
-      const upSys = ['eng1', 'eng2', 'hyd_green', 'hyd_blue', 'hyd_yellow'];
+      const upSys = ['eng1', 'eng2', 'idg1', 'idg2', 'hyd_green', 'hyd_blue', 'hyd_yellow'];
       setServ((prev: any) => {
         const n = { ...prev };
         for (const r of rows) {
@@ -701,11 +701,14 @@ export default function DepartureScreen({ route, navigation }: any) {
         const redB = { borderColor: theme.red, borderWidth: 2 };
         return (
           <View style={{ gap: 12 }}>
-            {/* Row 1 — engine oil UPLIFT */}
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              {([['eng1', 'Eng 1'], ['eng2', 'Eng 2']] as const).map(([key, label]) => (
+            {/* Row 1 — engine + IDG oil UPLIFT (wraps on narrow screens) */}
+            <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+              {([['eng1', `Eng 1 oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`],
+                 ['eng2', `Eng 2 oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`],
+                 ['idg1', `IDG Eng 1 oil uplift (${oilUnitLbl})`],
+                 ['idg2', `IDG Eng 2 oil uplift (${oilUnitLbl})`]] as const).map(([key, label]) => (
                 <View key={key} style={{ width: 190 }}>
-                  <Text style={oilLbl} numberOfLines={1}>{`${label} oil uplift (${oilUnitLbl})${oilMinU != null ? ` · min ${oilMinU}` : ''}`}</Text>
+                  <Text style={oilLbl} numberOfLines={1}>{label}</Text>
                   <TextInput style={oilInput} keyboardType="decimal-pad" value={oilShown(serv[key])} editable={canServ} onChangeText={(raw) => { const v = numericOnly(raw); setServ({ ...serv, [key]: v === '' ? '' : oilToL(v) }); }} />
                 </View>
               ))}
@@ -725,7 +728,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       {servMsg ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6 }}>{servMsg}</Text> : null}
       {canServ ? <TouchableOpacity style={sx.save} onPress={async () => {
         if (!(await confirmAction('Save servicing uplifts?'))) return;
-        for (const sys of ['eng1', 'eng2', 'hyd_green', 'hyd_blue', 'hyd_yellow'] as const) {
+        for (const sys of ['eng1', 'eng2', 'idg1', 'idg2', 'hyd_green', 'hyd_blue', 'hyd_yellow'] as const) {
           const up = num(serv[sys]);
           if (up != null) try { await addServicing({ sector_id: sectorId, system: sys, uplift_lt: up }); } catch {}
         }
