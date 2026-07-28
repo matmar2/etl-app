@@ -289,7 +289,14 @@ export default function DepartureScreen({ route, navigation }: any) {
       const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
       setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
     }
-    catch (e: any) { setSignMsg(e?.message || 'Could not accept — try again'); return; }
+    catch (e: any) {
+      const em = e?.message || 'Could not accept — try again';
+      setSignMsg(em);
+      // The server enforces the admin mandatory-field matrix too — surface its rejection as the
+      // same pop-up the client-side check uses, so a blocked sign is never a silent small note.
+      if (/complete|mandatory|required/i.test(em)) notifyAction(em, 'Complete before accepting');
+      return;
+    }
     refresh().catch(() => {});   // a refresh hiccup must never read as a failed acceptance
   }
 

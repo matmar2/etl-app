@@ -159,7 +159,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
       setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
     } catch (e: any) {
       const em = e?.message || '';
-      setSignMsg(/complete|mandatory|required/i.test(em) ? em : 'Offline — queued');
+      if (/complete|mandatory|required/i.test(em)) {
+        setSignMsg(em);
+        // Server-side mandatory-field rejection → same pop-up as the client-side check, so the
+        // captain always sees WHY the flight didn't close (V71806 28 Jul: silent 400).
+        notifyAction(em, 'Complete before signing');
+      } else setSignMsg('Offline — queued');
     }
   }
 
