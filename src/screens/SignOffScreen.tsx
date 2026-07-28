@@ -192,7 +192,7 @@ export default function SignOffScreen({ navigation }: any) {
               {(g as any).action_summary ? <Text style={[s.defs, { color: theme.green }]}>✔ {(g as any).action_summary}</Text> : null}
               {openable(g) ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginTop: 6 }}>
-                  <Text style={s.open}>{openingId === g.id ? 'Opening…' : (isCheck(g) ? 'Tap to open the signed check ›' : 'Tap to open the signed CRS ›')}</Text>
+                  <Text style={s.open}>{openingId === g.id ? 'Opening…' : (isCheck(g) ? 'Tap to open the signed check ›' : (g.kind === 'crs' || g.kind === 'release') ? 'Tap to open the signed CRS ›' : 'Tap to open the signed Tech Log ›')}</Text>
                   {g.defect_id ? (
                     <TouchableOpacity onPress={() => navigation.navigate('DefectDetail', { defectId: g.defect_id })}>
                       <Text style={s.details}>details ›</Text>
