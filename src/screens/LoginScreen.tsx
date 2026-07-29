@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
-import { forgotPassword, hasOfflineSession, login, loginOffline, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
+import { forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
@@ -84,6 +84,24 @@ export default function LoginScreen({ navigation }: any) {
     check();
     const t = setInterval(check, 8000);   // keep the indicator live while on the login screen
     return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // Web SSO from the EFF app (?sso=<token>): EFF login is delegated to this backend, so the
+  // token is the user's own ETL session — adopt it and land on the Menu. The token is stripped
+  // from the URL/history immediately; an invalid/expired one just leaves the normal login form
+  // (which also remains the Mechanic/Cabin path). Web-only guard — native never runs this.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const qs = new URLSearchParams(window.location.search);
+    const t = qs.get('sso');
+    if (!t) return;
+    qs.delete('sso');
+    window.history.replaceState(null, '', window.location.pathname + (qs.toString() ? `?${qs}` : '') + window.location.hash);
+    setBusy(true); setNote('Signing you in from EFF…');
+    loginWithToken(t)
+      .then((ok) => { if (ok) navigation.replace('Menu'); else setNote(''); })
+      .catch(() => setNote(''))
+      .finally(() => setBusy(false));
   }, []);
 
   async function submit() {

@@ -253,6 +253,26 @@ export async function loginOffline(username: string, password: string, otp?: str
   return { access_token: c.token, role: c.role, offline: true };
 }
 
+// Web SSO hand-off from the EFF crew app (/app/?sso=<token>): the EFF login already verified
+// these credentials against THIS backend (auth delegation) and passes back the user's OWN ETL
+// bearer token. Adopt it exactly as a successful login would — same storage key — validate via
+// /auth/me and load permissions. Returns false (token dropped) when invalid/expired so the
+// caller falls through to the normal login form. Web-only caller; no native path uses this.
+export async function loginWithToken(token: string): Promise<boolean> {
+  await SecureStore.setItem('token', token);
+  _cacheToken(token);
+  let me: any;
+  try { me = await api('/auth/me'); }
+  catch { await SecureStore.deleteItem('token'); _cacheToken(''); return false; }
+  _role = me.role ?? null;
+  _username = me.username ?? null;
+  _name = me.name ?? null;
+  _licence = me.licence ?? null;
+  _clearanceAuthorized = !!me.clearance_authorized;
+  await loadPermissions();
+  return true;
+}
+
 export const requestOtp = (username: string) =>
   fetch(`${BASE}/auth/otp/request`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
