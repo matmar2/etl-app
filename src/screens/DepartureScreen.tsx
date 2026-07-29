@@ -14,7 +14,7 @@ import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps, GpsState } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
-import { fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
 
 // A serviceability reason the delayed-OASES bridge can cover (mirrors backend is_oases_lag_reason):
 // 2/10-day check currency OR an overdue hold item. Never open technical / cabin defects.
@@ -25,6 +25,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
   const { s, msg, syncing, save, stamp, setManual, clearTime, refresh } = useSector(sectorId);
   const [fuel, setFuel] = useState<any>({});
+  // Fields on this sector still holding the value imported from the EFF flight folder (rendered blue).
+  // Seeded from sector.eff_fields; editing a field prunes its key (→ normal style) and persists the
+  // pruned list so it stays manual after reload.
+  const [effFields, setEffFields] = useState<Set<string>>(new Set());
   const [serv, setServ] = useState<any>({});
   const [servBad, setServBad] = useState(false);      // mandatory total-oil validation
   const [servMsg, setServMsg] = useState('');
@@ -133,6 +137,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // returns both ETL + Leon candidates
     listAttachments({ sector_id: sectorId }).then((a) => setReceiptN(a.filter((x) => x.kind === 'receipt').length)).catch(() => setReceiptN(null));
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
+    setEffFields(new Set(Array.isArray(s.eff_fields) ? s.eff_fields : []));
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
       fuel_supplier: s.fuel_supplier, fuel_receipt_no: s.fuel_receipt_no, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
       bowser_uplift_lt: s.bowser_uplift_lt, fuel_grade: s.fuel_grade || gradeDefRef.current, nil_oils_fluids: !!s.nil_oils_fluids });
@@ -229,6 +234,19 @@ export default function DepartureScreen({ route, navigation }: any) {
   const canServTot = can('departure', 'servicing_totals'); // total Eng 1/2 oil — pilot or mechanic
   const canIce = can('departure', 'ice');
   const isCrew = canAccept;
+
+  // EFF-import highlight: which of THIS screen's fields are still blue, and pruning on manual edit.
+  const EFF_DEP_KEYS = ['fuel_planned_kg', 'fuel_found_kg', 'bowser_uplift_lt', 'fuel_density', 'dep_fuel_kg', 'taxi_fuel_kg', 'fuel_supplier', 'fuel_receipt_no'];
+  const isEff = (k: string) => effFields.has(k);
+  const anyEffDep = EFF_DEP_KEYS.some((k) => effFields.has(k));
+  // Editing an EFF field drops it to the normal (manual) style AND persists the pruned list so it
+  // stays manual after reload — SectorIn accepts eff_fields, updateSector merges + syncs it.
+  function pruneEff(key: string) {
+    if (!effFields.has(key)) return;
+    const n = new Set(effFields); n.delete(key);
+    setEffFields(n);
+    save({ eff_fields: Array.from(n) });
+  }
 
   const hasV = (v: any) => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
   function computeMissing() {
@@ -419,6 +437,7 @@ export default function DepartureScreen({ route, navigation }: any) {
 
       {!canDep ? <RoBanner text="fuel and acceptance are entered by flight crew" /> : null}
       <Text style={sx.section} onLayout={(e) => { secY.current['fuel'] = e.nativeEvent.layout.y; }}>Departure fuel</Text>
+      <EffLegend show={anyEffDep} />
       {prevDiverge ? (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 10, marginBottom: 8 }}>
           <Text style={{ color: theme.red, fontSize: 13, fontWeight: '800' }}>⚠ Previous-leg fuel differs — choose the value to use</Text>
@@ -446,10 +465,10 @@ export default function DepartureScreen({ route, navigation }: any) {
           {/* The actual on-board reading is independent of which source is right — always enterable. */}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <View style={{ width: 170 }}>
-              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
-              <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
+              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
                 keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
-                onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+                onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
             </View>
             <View style={{ width: 170 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Difference vs previous leg (kg)</Text>
@@ -475,10 +494,10 @@ export default function DepartureScreen({ route, navigation }: any) {
               maintenance ran the APU / did an engine run) + the difference vs the previous leg. */}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <View style={{ width: 170 }}>
-              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
-              <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
+              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
                 keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
-                onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+                onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
             </View>
             <View style={{ width: 170 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Difference vs previous leg (kg)</Text>
@@ -493,10 +512,10 @@ export default function DepartureScreen({ route, navigation }: any) {
       ) : (
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
           {/* No previous-leg record resolved (first leg / re-opened flight) — the reading must still be enterable. */}
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)</Text>
-          <TextInput editable={canFuel} style={{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 170, opacity: canFuel ? 1 : 0.5 }}
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
+          <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 170, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
             keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
-            onChangeText={(v) => setFuel({ ...fuel, fuel_found_kg: numericOnly(v) })} />
+            onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
         </View>
       )}
       {/* Lock applies to the SUB-SECTIONS, not the whole card — the uplift/grade/receipt row stays
@@ -505,7 +524,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       <View pointerEvents={canDep ? 'auto' : 'none'}>
       <Text style={sx.subhead}>Planned</Text>
       <View style={sx.grid}>
-        <NumField label="Planned (kg)" bad={badSet.has('fuel_planned_kg')} value={fuel.fuel_planned_kg} onChange={(v: string) => setFuel({ ...fuel, fuel_planned_kg: v })} />
+        <NumField label="Planned (kg)" bad={badSet.has('fuel_planned_kg')} eff={isEff('fuel_planned_kg')} value={fuel.fuel_planned_kg} onChange={(v: string) => { setFuel({ ...fuel, fuel_planned_kg: v }); pruneEff('fuel_planned_kg'); }} />
       </View>
       {tankEntry ? (<>
       <Text style={sx.subhead}>Tanks (kg)</Text>
@@ -588,10 +607,10 @@ export default function DepartureScreen({ route, navigation }: any) {
           };
           return (
             <View style={{ marginBottom: 10 }}>
-              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel Uplifted ({bowserUnit})</Text>
+              <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel Uplifted ({bowserUnit})<EffHint on={isEff('bowser_uplift_lt')} /></Text>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, opacity: canFuel ? 1 : 0.5 }}
-                  keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); }} />
+                <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, opacity: canFuel ? 1 : 0.5 }, isEff('bowser_uplift_lt') ? effInputStyle : null]}
+                  keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); pruneEff('bowser_uplift_lt'); }} />
                 {/* unit dropdown (default L) — compact so photo buttons share the line */}
                 <View>
                   <TouchableOpacity disabled={!canFuel} onPress={() => setBowserUnitOpen((o) => !o)}
@@ -615,10 +634,10 @@ export default function DepartureScreen({ route, navigation }: any) {
           );
         })()}
         <View style={{ width: 120, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Specific gravity</Text>
-          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_density') ? 2 : 1, borderColor: badSet.has('fuel_density') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Specific gravity<EffHint on={isEff('fuel_density')} /></Text>
+          <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_density') ? 2 : 1, borderColor: badSet.has('fuel_density') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_density') && !badSet.has('fuel_density') ? effInputStyle : null]}
             keyboardType="decimal-pad" value={fuel.fuel_density == null || fuel.fuel_density === '' ? '' : String(fuel.fuel_density)}
-            onChangeText={(v) => setFuel({ ...fuel, fuel_density: numericOnly(v) })} />
+            onChangeText={(v) => { setFuel({ ...fuel, fuel_density: numericOnly(v) }); pruneEff('fuel_density'); }} />
           <Text style={{ color: theme.sub, fontSize: 10, marginTop: 3 }}>default {refDens}</Text>
         </View>
         <View style={{ width: 150, marginBottom: 10 }}>
@@ -626,14 +645,14 @@ export default function DepartureScreen({ route, navigation }: any) {
           <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
         </View>
         <View style={{ width: 170, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel supplier</Text>
-          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
-            value={fuel.fuel_supplier ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_supplier: v })} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel supplier<EffHint on={isEff('fuel_supplier')} /></Text>
+          <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_supplier') ? effInputStyle : null]}
+            value={fuel.fuel_supplier ?? ''} onChangeText={(v) => { setFuel({ ...fuel, fuel_supplier: v }); pruneEff('fuel_supplier'); }} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
         </View>
         <View style={{ width: 140, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Receipt №</Text>
-          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
-            value={fuel.fuel_receipt_no ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_receipt_no: v })} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Receipt №<EffHint on={isEff('fuel_receipt_no')} /></Text>
+          <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_receipt_no') ? effInputStyle : null]}
+            value={fuel.fuel_receipt_no ?? ''} onChangeText={(v) => { setFuel({ ...fuel, fuel_receipt_no: v }); pruneEff('fuel_receipt_no'); }} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
         </View>
         {/* In-row, OUTSIDE any pointerEvents lock: viewing the receipt must work for every role;
             write actions stay permission-gated via readOnly. Uploading the photo also reads the
@@ -658,20 +677,20 @@ export default function DepartureScreen({ route, navigation }: any) {
       <Text style={sx.subhead}>Departure &amp; taxi fuel</Text>
       <View style={[sx.grid, { alignItems: 'flex-start' }]}>
         <View style={{ width: 150, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4, minHeight: 32 }}>Departure fuel (kg){depCalc != null ? ' — calculated' : ''}</Text>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4, minHeight: 32 }}>Departure fuel (kg){depCalc != null ? ' — calculated' : ''}<EffHint on={depCalc == null && isEff('dep_fuel_kg')} /></Text>
           {depCalc != null ? (
             <View style={{ backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}>
               <Text style={{ color: theme.text, fontWeight: '800', fontSize: 15 }}>{fmt(depCalc)}</Text>
             </View>
           ) : (
-            <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('dep_fuel_kg') ? 2 : 1, borderColor: badSet.has('dep_fuel_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
-              keyboardType="decimal-pad" value={fuel.dep_fuel_kg == null ? '' : String(fuel.dep_fuel_kg)} onChangeText={(v) => setFuel({ ...fuel, dep_fuel_kg: numericOnly(v) })} />
+            <TextInput style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('dep_fuel_kg') ? 2 : 1, borderColor: badSet.has('dep_fuel_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10 }, isEff('dep_fuel_kg') && !badSet.has('dep_fuel_kg') ? effInputStyle : null]}
+              keyboardType="decimal-pad" value={fuel.dep_fuel_kg == null ? '' : String(fuel.dep_fuel_kg)} onChangeText={(v) => { setFuel({ ...fuel, dep_fuel_kg: numericOnly(v) }); pruneEff('dep_fuel_kg'); }} />
           )}
         </View>
         <View style={{ width: 150, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4, minHeight: 32 }}>Taxi fuel (kg)</Text>
-          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('taxi_fuel_kg') ? 2 : 1, borderColor: badSet.has('taxi_fuel_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
-            keyboardType="decimal-pad" value={fuel.taxi_fuel_kg == null ? '' : String(fuel.taxi_fuel_kg)} onChangeText={(v) => setFuel({ ...fuel, taxi_fuel_kg: numericOnly(v) })} />
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4, minHeight: 32 }}>Taxi fuel (kg)<EffHint on={isEff('taxi_fuel_kg')} /></Text>
+          <TextInput style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('taxi_fuel_kg') ? 2 : 1, borderColor: badSet.has('taxi_fuel_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10 }, isEff('taxi_fuel_kg') && !badSet.has('taxi_fuel_kg') ? effInputStyle : null]}
+            keyboardType="decimal-pad" value={fuel.taxi_fuel_kg == null ? '' : String(fuel.taxi_fuel_kg)} onChangeText={(v) => { setFuel({ ...fuel, taxi_fuel_kg: numericOnly(v) }); pruneEff('taxi_fuel_kg'); }} />
         </View>
       </View>
       {depCalc != null ? <Text style={{ color: theme.sub, fontSize: 11, marginTop: 2 }}>= {depCalcSrc}</Text> : null}

@@ -6,6 +6,7 @@ export const theme = {
   accent: '#f0a500',   // amber edit highlight (Conduce-style)
   green: '#7cb342',
   red: '#d9534f',
+  eff: '#4aa3df',      // bold-blue: value imported from the EFF flight folder (distinct from amber edit + red bad)
   text: '#ffffff',
   sub: '#9bb4cf',
   // --- design tokens (additive; adopt opportunistically to remove per-screen drift) ---

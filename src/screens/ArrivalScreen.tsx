@@ -12,12 +12,15 @@ import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
-import { fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
 
 export default function ArrivalScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
   const { s, msg, syncing, save, stamp, setManual, clearTime } = useSector(sectorId);
   const [ldg, setLdg] = useState<any>({});
+  // Fields still holding their EFF-imported value (rendered blue). Seeded from sector.eff_fields;
+  // editing one prunes its key and persists the pruned list so it stays manual after reload.
+  const [effFields, setEffFields] = useState<Set<string>>(new Set());
   const [rem, setRem] = useState<any>('');
   const [lf, setLf] = useState<any>('');
   const [signMsg, setSignMsg] = useState('');
@@ -55,6 +58,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!s) return;
     setLdg({ full_stop: String(s.full_stop_ldgs ?? 1), touch_go: s.touch_go, ldgs_before: s.ldgs_before, autoland: s.autoland_ok ? 'ok' : (s.autoland_notes ? 'fail' : ''), autoland_notes: s.autoland_notes ?? '' });
+    setEffFields(new Set(Array.isArray(s.eff_fields) ? s.eff_fields : []));
     setRem(s.fuel_remaining_kg);
     setLf(s.landing_fuel_kg);
     setDiv({ on: !!s.diverted, airport: s.diversion_airport || '' });
@@ -79,6 +83,16 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const canDivA = can('arrival', 'diversion');     // diversion airport
   const canOilA = can('arrival', 'servicing');     // oil quantity on arrival — crew (per AMM) + mechanic at arrival station
   const canAcceptA = can('arrival', 'acceptance'); // post-flight acceptance / close
+  // EFF-import highlight: OOOI times (off/off/on/in) + arrival fuel imported from the flight folder
+  // show blue until edited. pruneEff persists the pruned list (SectorIn accepts eff_fields).
+  const EFF_ARR_KEYS = ['off_block', 'takeoff', 'landing', 'on_block', 'fuel_remaining_kg'];
+  const anyEffArr = EFF_ARR_KEYS.some((k) => effFields.has(k));
+  function pruneEff(key: string) {
+    if (!effFields.has(key)) return;
+    const n = new Set(effFields); n.delete(key);
+    setEffFields(n);
+    save({ eff_fields: Array.from(n) });
+  }
   const depAccepted = s.status !== 'draft';        // commander accepted the departure (preflight signed)
   // Testing: Arrival is accessible without completing Departure (a note explains the go-live rule).
   const effDep = depAccepted || testing;
@@ -193,7 +207,8 @@ export default function ArrivalScreen({ route, navigation }: any) {
       ) : null}
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
-      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} />
+      <EffLegend show={anyEffArr} />
+      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} effSet={effFields} onEdit={pruneEff} />
       <Text style={sx.sub}>{(() => {
         const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; const t = (x: string) => { const d = new Date(x); return d.getUTCHours() * 60 + d.getUTCMinutes(); }; return ((t(b) - t(a)) % 1440 + 1440) % 1440; };
         return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
@@ -306,9 +321,9 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <View style={sx.card}>
         <View style={[sx.grid, { alignItems: 'flex-start' }]}>
           <View style={{ width: 200 }}>
-            <Text numberOfLines={1} style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Remaining — Chocks ON (kg)</Text>
-            <TextInput editable={canFuelA} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_remaining_kg') ? 2 : 1, borderColor: badSet.has('fuel_remaining_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuelA ? 1 : 0.5 }}
-              keyboardType="decimal-pad" value={rem == null ? '' : String(rem)} onChangeText={(v) => setRem(numericOnly(v))} />
+            <Text numberOfLines={1} style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Remaining — Chocks ON (kg)<EffHint on={effFields.has('fuel_remaining_kg')} /></Text>
+            <TextInput editable={canFuelA} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_remaining_kg') ? 2 : 1, borderColor: badSet.has('fuel_remaining_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuelA ? 1 : 0.5 }, effFields.has('fuel_remaining_kg') && !badSet.has('fuel_remaining_kg') ? effInputStyle : null]}
+              keyboardType="decimal-pad" value={rem == null ? '' : String(rem)} onChangeText={(v) => { setRem(numericOnly(v)); pruneEff('fuel_remaining_kg'); }} />
           </View>
         </View>
         <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) save({ fuel_remaining_kg: num(rem) }); }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>

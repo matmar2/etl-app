@@ -90,11 +90,27 @@ export function schedule(s: any): { sta?: string; eta?: string; delayMin: number
   return { sta: s.sta, eta: s.on_block || new Date(sta + delayMs).toISOString(), delayMin: Math.round(delayMs / 60000), arrived: !!s.on_block };
 }
 
-export function NumField({ label, value, onChange, bad, onLayout, decimals = true }: any) {
+// EFF import highlight — a value pulled from the EFF flight folder shows bold blue with a blue left
+// accent so it reads as "imported, still untouched"; the red `bad` (missing/invalid) style always
+// wins over it. Once the crew edits the field the screen prunes the key and it reverts to normal.
+export const effInputStyle = { color: theme.eff, fontWeight: '700' as const, borderColor: theme.eff, borderLeftWidth: 3 };
+export const effHintStyle = { color: theme.eff, fontSize: 10, fontWeight: '700' as const };
+// Inline " · from EFF" tag appended to a field label. Renders nothing when `on` is false.
+export function EffHint({ on }: { on?: boolean }) {
+  return on ? <Text style={effHintStyle}> · from EFF</Text> : null;
+}
+// One-line legend shown near a section header when any field in it is EFF-sourced.
+export function EffLegend({ show }: { show?: boolean }) {
+  if (!show) return null;
+  return <Text style={{ color: theme.eff, fontSize: 11, fontWeight: '600', marginTop: 2, marginBottom: 4 }}>● Blue = imported from EFF (editable)</Text>;
+}
+
+export function NumField({ label, value, onChange, bad, eff, onLayout, decimals = true }: any) {
+  const effOn = !!eff && !bad;   // red `bad` takes precedence over the blue EFF style
   return (
     <View style={styles.field} onLayout={onLayout}>
-      <Text style={styles.lbl}>{label}</Text>
-      <TextInput style={[styles.input, bad ? { borderColor: '#d7263d', borderWidth: 2 } : null]} value={value == null ? '' : String(value)}
+      <Text style={styles.lbl}>{label}<EffHint on={effOn} /></Text>
+      <TextInput style={[styles.input, effOn ? effInputStyle : null, bad ? { borderColor: '#d7263d', borderWidth: 2 } : null]} value={value == null ? '' : String(value)}
         keyboardType="decimal-pad" inputMode={decimals ? 'decimal' : 'numeric'}
         onChangeText={(v) => onChange(numericOnly(v, decimals))} />
     </View>
@@ -102,23 +118,26 @@ export function NumField({ label, value, onChange, bad, onLayout, decimals = tru
 }
 
 // OOOI stamp tiles + manual inputs for the given fields.
-export function OOOISection({ s, fields, stamp, setManual, clear, disabled }: any) {
+// effSet/onEdit: OOOI times imported from EFF render blue; stamping or typing one prunes it (onEdit).
+export function OOOISection({ s, fields, stamp, setManual, clear, disabled, effSet, onEdit }: any) {
+  const isEff = (f: string) => !!effSet && effSet.has(f);
+  const edit = (f: string) => { if (isEff(f) && onEdit) onEdit(f); };   // any manual change/stamp → no longer EFF
   return (
     <>
       <View style={styles.oooiRow}>
         {fields.map((f: string) => (
-          <TouchableOpacity key={f} style={[styles.oooiBtn, disabled && { opacity: 0.4 }]} disabled={disabled} onPress={() => stamp(f)}
-            onLongPress={!disabled && clear ? async () => { if (await confirmAction(`Clear ${OOOI_LABEL[f]} time?\n(e.g. delay / return to stand — re-stamp on the next push-back)`)) clear(f); } : undefined}>
-            <Text style={styles.oooiLbl}>{OOOI_LABEL[f]}</Text>
-            <Text style={styles.oooiVal}>{hhmm(s[f])}</Text>
+          <TouchableOpacity key={f} style={[styles.oooiBtn, disabled && { opacity: 0.4 }, isEff(f) ? { borderColor: theme.eff, borderLeftWidth: 3 } : null]} disabled={disabled} onPress={() => { edit(f); stamp(f); }}
+            onLongPress={!disabled && clear ? async () => { if (await confirmAction(`Clear ${OOOI_LABEL[f]} time?\n(e.g. delay / return to stand — re-stamp on the next push-back)`)) { edit(f); clear(f); } } : undefined}>
+            <Text style={styles.oooiLbl}>{OOOI_LABEL[f]}<EffHint on={isEff(f)} /></Text>
+            <Text style={[styles.oooiVal, isEff(f) ? { color: theme.eff } : null]}>{hhmm(s[f])}</Text>
           </TouchableOpacity>
         ))}
       </View>
       <View style={styles.oooiRow}>
         {fields.map((f: string) => (
-          <TextInput key={`${f}-${s[f]}`} style={[styles.oooiInput, disabled && { opacity: 0.4 }]} editable={!disabled} keyboardType="numbers-and-punctuation"
+          <TextInput key={`${f}-${s[f]}`} style={[styles.oooiInput, disabled && { opacity: 0.4 }, isEff(f) ? effInputStyle : null]} editable={!disabled} keyboardType="numbers-and-punctuation"
             defaultValue={s[f] ? hhmm(s[f]).replace('z', '') : ''} placeholder="hh:mm" placeholderTextColor={theme.sub}
-            onEndEditing={(e) => setManual(f, e.nativeEvent.text)} />
+            onEndEditing={(e) => { edit(f); setManual(f, e.nativeEvent.text); }} />
         ))}
       </View>
       {!disabled ? <Text style={styles.sub}>Tap to stamp now{clear ? ' · long-press to clear (return to stand)' : ''} · or type the UTC time to correct.</Text> : null}
