@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
+import { pullSectorList } from '../db/sectors';
 import { fleetList, forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable, setCurrentAircraft } from '../api/client';
 import { theme } from '../theme';
 
@@ -96,7 +97,9 @@ export default function LoginScreen({ navigation }: any) {
     const t = qs.get('sso');
     if (!t) return;
     const reg = (qs.get('reg') || '').trim().toUpperCase();   // tail the crew had open in EFF
-    qs.delete('sso'); qs.delete('reg');
+    const flightNo = (qs.get('flight') || '').trim().toUpperCase();
+    const flightDate = (qs.get('date') || '').trim();
+    qs.delete('sso'); qs.delete('reg'); qs.delete('flight'); qs.delete('date');
     window.history.replaceState(null, '', window.location.pathname + (qs.toString() ? `?${qs}` : '') + window.location.hash);
     setBusy(true); setNote('Signing you in from EFF…');
     loginWithToken(t)
@@ -107,6 +110,22 @@ export default function LoginScreen({ navigation }: any) {
           try {
             const a = (await fleetList()).find((x) => x.registration.toUpperCase() === reg);
             if (a) await setCurrentAircraft(a);
+          } catch {}
+        }
+        // Deep-link to the flight the crew had open in EFF: straight to its Departure page when
+        // the Tech Log sector already exists, else to Flight Details so they open it there —
+        // starting a sector must stay a crew action (departure-order + one-open-flight rules).
+        if (reg && flightNo) {
+          try {
+            const s = (await pullSectorList(reg)).find(
+              (x: any) => (x.flight_no || '').toUpperCase() === flightNo &&
+                          (!flightDate || x.flight_date === flightDate));
+            if (s) {
+              navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] });
+              return;
+            }
+            navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors' }] });
+            return;
           } catch {}
         }
         navigation.replace('Menu');
