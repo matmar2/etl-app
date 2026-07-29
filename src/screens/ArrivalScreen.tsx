@@ -216,6 +216,38 @@ export default function ArrivalScreen({ route, navigation }: any) {
           </View>
         ) : null}
       </View>
+
+      {/* Take-off thrust — FLEX assumed temperature (°C) or TOGA. Pilot entry; prints in the
+          TL's T/O THRUST box. */}
+      <Text style={sx.section}>TO FLEX/TOGA</Text>
+      <View style={sx.card}>
+        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {(['FLEX', 'TOGA'] as const).map((m) => {
+            const cur = String(s.takeoff_thrust || '');
+            const on = m === 'TOGA' ? cur === 'TOGA' : cur.startsWith('FLEX');
+            return (
+              <TouchableOpacity key={m} disabled={!effDep} onPress={async () => {
+                await save({ takeoff_thrust: m === 'TOGA' ? 'TOGA' : 'FLEX' });
+              }} style={{ borderWidth: 1, borderColor: on ? theme.green : theme.border, backgroundColor: on ? theme.tile : undefined, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 6, opacity: effDep ? 1 : 0.5 }}>
+                <Text style={{ color: on ? theme.green : theme.sub, fontWeight: '800' }}>{m}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          {String(s.takeoff_thrust || '').startsWith('FLEX') ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, textAlign: 'center', opacity: effDep ? 1 : 0.5 }}
+                keyboardType="numbers-and-punctuation" placeholder="°C" placeholderTextColor={theme.sub}
+                editable={effDep}
+                defaultValue={String(s.takeoff_thrust || '').replace(/[^0-9.-]/g, '')}
+                onEndEditing={async (e) => {
+                  const v = e.nativeEvent.text.replace(/[^0-9.-]/g, '');
+                  await save({ takeoff_thrust: v ? `FLEX ${v}` : 'FLEX' });
+                }} />
+              <Text style={{ color: theme.sub }}>°C (FLEX assumed temperature)</Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
       </>) : null}
 
       <Text style={sx.section}>Diversion</Text>
