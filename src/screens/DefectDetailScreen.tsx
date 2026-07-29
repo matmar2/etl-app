@@ -295,12 +295,17 @@ export default function DefectDetailScreen({ route, navigation }: any) {
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
   async function del() {
-    // Admin only, before dispatch/release, with the CAMO Manager's approval recorded.
+    // Admin only, with the CAMO Manager's approval recorded. `force` is the admin cleanup path for a
+    // deferred (HIL) test / wrongly-deferred item — when the normal by-mistake delete isn't offered.
     // Double confirmation for a permanent removal (the server enforces the same rules).
+    const force = !d.can_delete;   // can_delete = open/troubleshooting; else this is a deferred cleanup
     if (!approver.trim()) { setMsg('Record the CAMO Manager who approved this removal first.'); return; }
-    if (!(await confirmAction(`Remove this defect entered by mistake?\n\nApproved by CAMO Manager: ${approver.trim()}\n\nThis is only for entries made in error, before the flight is dispatched/released.`, 'Remove defect'))) return;
-    if (!(await confirmAction('Are you sure? This cannot be undone — the defect and any photos are permanently removed.', 'Confirm removal'))) return;
-    try { await deleteDefect(defectId, approver.trim()); navigation?.goBack(); }
+    const intro = force
+      ? `Remove this DEFERRED (HIL) defect as an admin cleanup?\n\n${d.hil_no ? d.hil_no + '\n' : ''}Approved by CAMO Manager: ${approver.trim()}\n\nUse this for test data or a wrongly-deferred item.`
+      : `Remove this defect entered by mistake?\n\nApproved by CAMO Manager: ${approver.trim()}\n\nThis is only for entries made in error, before the flight is dispatched/released.`;
+    if (!(await confirmAction(intro, force ? 'Admin cleanup — remove HIL' : 'Remove defect'))) return;
+    if (!(await confirmAction('Are you sure? This cannot be undone — the defect, its rectification/CCR history and any photos are permanently removed.', 'Confirm removal'))) return;
+    try { await deleteDefect(defectId, approver.trim(), force); navigation?.goBack(); }
     catch (e: any) {
       const m = e?.message || '';
       setMsg(/409|dispatched|released|departed/i.test(m) ? 'The flight has been dispatched/released — this defect is now part of the record; raise a correction instead.'
@@ -334,15 +339,17 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       {/* Once the CRS is signed (rectified/closed) the photos are part of the signed record — view only, no re-take/library. */}
       <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed' || d.status === 'rectified'} />
 
-      {d.can_delete ? (
+      {(d.can_delete || d.can_force_delete) ? (
         !askDel ? (
           <TouchableOpacity onPress={() => { setMsg(''); setAskDel(true); }} style={{ marginTop: 14 }}>
-            <Text style={{ color: theme.red, fontWeight: '700' }}>Delete defect (entered by mistake)</Text>
+            <Text style={{ color: theme.red, fontWeight: '700' }}>{d.can_delete ? 'Delete defect (entered by mistake)' : 'Delete defect (admin cleanup — test / deferred)'}</Text>
           </TouchableOpacity>
         ) : (
           <View style={{ marginTop: 14, borderWidth: 1, borderColor: theme.red, borderRadius: 8, padding: 12 }}>
-            <Text style={{ color: theme.text, fontWeight: '700' }}>Remove defect (entered by mistake)</Text>
-            <Text style={styles.sub}>Admin only, before the flight is dispatched/released, and only with the CAMO Manager’s approval.</Text>
+            <Text style={{ color: theme.text, fontWeight: '700' }}>{d.can_delete ? 'Remove defect (entered by mistake)' : 'Admin cleanup — remove test / deferred defect'}</Text>
+            <Text style={styles.sub}>{d.can_delete
+              ? 'Admin only, before the flight is dispatched/released, and only with the CAMO Manager’s approval.'
+              : 'Admin only, with CAMO Manager approval. For test data or a wrongly-deferred item — a rectified/closed (signed CRS) defect cannot be deleted.'}</Text>
             <TextInput style={[styles.input, { marginTop: 10, minHeight: 0 }]} value={approver} onChangeText={setApprover}
               placeholder="CAMO Manager who approved (name / authorisation) *" placeholderTextColor={theme.sub} />
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
