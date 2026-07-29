@@ -124,7 +124,7 @@ export default function LoginScreen({ navigation }: any) {
               navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] });
               return;
             }
-            navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors' }] });
+            navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
             return;
           } catch {}
         }
