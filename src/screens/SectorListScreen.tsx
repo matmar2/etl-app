@@ -5,7 +5,6 @@ import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, role
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
-import SyncBlock from '../components/SyncBlock';
 import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, unhideSectorFromList, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
@@ -20,7 +19,10 @@ export default function SectorListScreen({ route, navigation }: any) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);   // reveal rows removed-from-list (per device)   // per-device "removed from list" (record kept)
   const [status, setStatus] = useState('');
-  const [syncing, setSyncing] = useState(true);   // first server pull — block input (time-boxed)
+  // Offline-first: the cached flight list renders immediately and stays usable; the server pull
+  // runs in the BACKGROUND (inline "syncing…" hint, not a blocking overlay). Blocking the whole
+  // screen behind a modal defeated the point of an offline-capable tech log.
+  const [bgSync, setBgSync] = useState(true);      // background server pull in progress (inline hint)
   const [feed, setFeed] = useState('Loading…');
   const [manualForm, setManualForm] = useState<any | null>(null);
   const [displayN, setDisplayN] = useState(10);    // picker shows next-N; full window stays cached offline
@@ -52,7 +54,8 @@ export default function SectorListScreen({ route, navigation }: any) {
   // change from Leon shows immediately when online (in addition to the 60 s live timer below).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useFocusEffect(useCallback(() => {
-    const done = () => setSyncing(false);
+    const done = () => setBgSync(false);
+    setBgSync(true);
     const t = setTimeout(done, 6000);
     pull().then(done).catch(done).finally(() => clearTimeout(t));
     loadFlights();
@@ -282,13 +285,12 @@ export default function SectorListScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <SyncBlock visible={syncing} />
       <Text style={styles.title}>Flight Details · {reg}</Text>
       {status ? <Text style={styles.status}>{status}</Text> : null}
 
       <View style={styles.feedHead}>
         <Text style={styles.section}>Next flights (Leon · departure order)</Text>
-        <Text style={styles.feed}>{feed}</Text>
+        <Text style={styles.feed}>{feed}{bgSync ? ' · syncing…' : ''}</Text>
       </View>
       <TouchableOpacity onPress={() => {
         if (manualForm) { setManualForm(null); return; }
