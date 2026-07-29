@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
-import { forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable } from '../api/client';
+import { fleetList, forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable, setCurrentAircraft } from '../api/client';
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
@@ -95,11 +95,22 @@ export default function LoginScreen({ navigation }: any) {
     const qs = new URLSearchParams(window.location.search);
     const t = qs.get('sso');
     if (!t) return;
-    qs.delete('sso');
+    const reg = (qs.get('reg') || '').trim().toUpperCase();   // tail the crew had open in EFF
+    qs.delete('sso'); qs.delete('reg');
     window.history.replaceState(null, '', window.location.pathname + (qs.toString() ? `?${qs}` : '') + window.location.hash);
     setBusy(true); setNote('Signing you in from EFF…');
     loginWithToken(t)
-      .then((ok) => { if (ok) navigation.replace('Menu'); else setNote(''); })
+      .then(async (ok) => {
+        if (!ok) { setNote(''); return; }
+        if (reg) {
+          // Land on the SAME aircraft the folder is for, so the crew never has to switch tail.
+          try {
+            const a = (await fleetList()).find((x) => x.registration.toUpperCase() === reg);
+            if (a) await setCurrentAircraft(a);
+          } catch {}
+        }
+        navigation.replace('Menu');
+      })
       .catch(() => setNote(''))
       .finally(() => setBusy(false));
   }, []);
