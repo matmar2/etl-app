@@ -46,7 +46,24 @@ export default function DeicingScreen({ route, navigation }: any) {
         ))}
       </View>
 
-      <Text style={sx.section}>Fluid type</Text>
+      {d.procedure === 'Two-step' ? (
+        <>
+          {/* Step 1 — DE-ICING (removal). Separate from the anti-icing (protection) fluid below;
+              the Tech Log prints each in its own box. */}
+          <Text style={sx.section}>Step 1 — de-icing fluid</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {TYPES.map((t) => (
+              <TouchableOpacity key={t} onPress={() => set('de_type', t)}
+                style={[sx2.chip, d.de_type === t && sx2.chipOn]}><Text style={[sx2.chipTxt, d.de_type === t && sx2.chipTxtOn]}>Type {t}</Text></TouchableOpacity>
+            ))}
+          </View>
+          <F label="De-icing mixture (fluid/water %)" k="de_mix" placeholder="e.g. heated 60/40" />
+          <F label="De-icing fluid quantity (L)" k="de_qty_l" placeholder="e.g. 300" kb="numeric" />
+          <Text style={sx.section}>Step 2 — anti-icing fluid</Text>
+        </>
+      ) : (
+        <Text style={sx.section}>Fluid type</Text>
+      )}
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {TYPES.map((t) => (
           <TouchableOpacity key={t} onPress={() => set('type', t)}

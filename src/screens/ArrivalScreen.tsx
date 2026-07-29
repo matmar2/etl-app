@@ -382,6 +382,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         if (!(await confirmAction('Save landings?'))) return; save({
         full_stop_ldgs: Number(ldg.full_stop) || 1, touch_go: (s.flight_type || '').toLowerCase() === 'training' ? (num(ldg.touch_go) || 0) : 0, ldgs_before: oasesCsn,
         this_flight_ldgs: thisLdgs, ldgs_fwd: (oasesCsn || 0) + thisLdgs,
+        tsn_before: oasesTsn, tsn_fwd: newTsn,
         autoland_ok: ldg.autoland === 'ok', autoland_notes: ldg.autoland === 'fail' ? (ldg.autoland_notes || '').trim() : null,
       }); }}><Text style={sx.saveText}>Save landings</Text></TouchableOpacity>
 

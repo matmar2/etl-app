@@ -134,7 +134,7 @@ export default function DepartureScreen({ route, navigation }: any) {
     listAttachments({ sector_id: sectorId }).then((a) => setReceiptN(a.filter((x) => x.kind === 'receipt').length)).catch(() => setReceiptN(null));
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
     setFuel({ fuel_planned_kg: s.fuel_planned_kg, fuel_uplift_kg: s.fuel_uplift_kg, fuel_density: s.fuel_density,
-      fuel_supplier: s.fuel_supplier, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
+      fuel_supplier: s.fuel_supplier, fuel_receipt_no: s.fuel_receipt_no, dep_fuel_kg: s.dep_fuel_kg, taxi_fuel_kg: s.taxi_fuel_kg, fuel_found_kg: s.fuel_found_kg,
       bowser_uplift_lt: s.bowser_uplift_lt, fuel_grade: s.fuel_grade || gradeDefRef.current, nil_oils_fluids: !!s.nil_oils_fluids });
     setBowserText(s.bowser_uplift_lt == null || s.bowser_uplift_lt === '' ? '' : String(round1(Number(s.bowser_uplift_lt))));   // L (default unit)
     aircraftConfig(s.aircraft_id).then((c) => {
@@ -625,11 +625,23 @@ export default function DepartureScreen({ route, navigation }: any) {
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel grade / type</Text>
           <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
         </View>
+        <View style={{ width: 170, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel supplier</Text>
+          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+            value={fuel.fuel_supplier ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_supplier: v })} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
+        </View>
+        <View style={{ width: 140, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Receipt №</Text>
+          <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }}
+            value={fuel.fuel_receipt_no ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_receipt_no: v })} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
+        </View>
         {/* In-row, OUTSIDE any pointerEvents lock: viewing the receipt must work for every role;
-            write actions stay permission-gated via readOnly. */}
+            write actions stay permission-gated via readOnly. Uploading the photo also reads the
+            supplier + receipt № off it server-side and fills the two fields when empty. */}
         <View style={{ minWidth: 230, flex: 1, marginBottom: 10 }}>
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 6 }}>Fuel receipt (bowser)</Text>
-          <PhotoCapture sectorId={s.id} kind="receipt" label="" readOnly={!canFuel} />
+          <PhotoCapture sectorId={s.id} kind="receipt" label="" readOnly={!canFuel}
+            onUploaded={(r: any) => { if (r?.receipt_extracted) setFuel((f: any) => ({ ...f, fuel_supplier: f.fuel_supplier || r.receipt_extracted.supplier || f.fuel_supplier, fuel_receipt_no: f.fuel_receipt_no || r.receipt_extracted.receipt_no || f.fuel_receipt_no })); }} />
         </View>
       </View>
       <View pointerEvents={canDep ? 'auto' : 'none'}>
@@ -674,7 +686,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       })()}
       {canDep ? <TouchableOpacity style={sx.save} onPress={async () => {
         if (!(await confirmAction('Save departure fuel figures?'))) return;
-        const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
+        const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier || null, fuel_receipt_no: fuel.fuel_receipt_no || null, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
         tanks.forEach((t) => (p[t.field] = num(fuel[t.field]))); save(p);
       }}><Text style={sx.saveText}>Save departure fuel</Text></TouchableOpacity> : null}
       </View>

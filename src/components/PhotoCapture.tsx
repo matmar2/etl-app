@@ -6,7 +6,7 @@ import { confirmAction } from '../util/confirm';
 import { queueAttachment } from '../db/attachments';
 import { theme } from '../theme';
 
-type Props = { defectId?: string; sectorId?: string; kind?: 'damage' | 'receipt' | 'document'; label?: string; readOnly?: boolean };
+type Props = { defectId?: string; sectorId?: string; kind?: 'damage' | 'receipt' | 'document'; label?: string; readOnly?: boolean; onUploaded?: (r: any) => void };
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -18,7 +18,7 @@ function uuid() {
 // Capture/attach photos (damage, receipts, documents). Uploads when online, otherwise queues
 // locally and flushes on the next sync. Once a photo exists the button becomes "View photo" —
 // the viewer shows it large and offers Replace / Add another (until the record is signed).
-export default function PhotoCapture({ defectId, sectorId, kind = 'damage', label = 'Photos', readOnly = false }: Props) {
+export default function PhotoCapture({ defectId, sectorId, kind = 'damage', label = 'Photos', readOnly = false, onUploaded }: Props) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [viewer, setViewer] = useState(false);
@@ -73,8 +73,9 @@ export default function PhotoCapture({ defectId, sectorId, kind = 'damage', labe
       data_b64: b64,
     };
     try {
-      await uploadAttachment(body);
+      const r = await uploadAttachment(body);
       if (replaceId) await deleteAttachment(replaceId).catch(() => {});   // replace = new photo in, old out
+      try { onUploaded?.(r); } catch {}
     } catch { await queueAttachment(body); setNote('📷 saved — will sync when online ✓'); }
     finally { setBusy(false); setSel(0); load(); }
   }
