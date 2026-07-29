@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
@@ -93,6 +93,10 @@ export default function MainMenuScreen({ navigation }: any) {
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
   const [initialSync, setInitialSync] = useState(true);   // first server refresh of the menu — block input (time-boxed)
+  // The block clears inside useFocusEffect, so only gate on it while the Menu is actually the
+  // focused screen. When a deep-link (EFF hand-off) lands on a child screen with the Menu mounted
+  // underneath, the focus effect never runs — without this the overlay would hang forever.
+  const menuFocused = useIsFocused();
   const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped (admin-set seconds) — then the app is usable while prep continues
   const prepWaitRef = useRef(15);                          // offline_prep_wait_seconds (admin)
 
@@ -342,7 +346,7 @@ export default function MainMenuScreen({ navigation }: any) {
       })() : null}
 
       <ClockBanner />
-      <SyncBlock visible={initialSync || (!prepWaived && offlineProg != null && offlineProg.frac < 1)}
+      <SyncBlock visible={menuFocused && (initialSync || (!prepWaived && offlineProg != null && offlineProg.frac < 1))}
         label={offlineProg != null && offlineProg.frac < 1
           ? `Wait — preparing offline data… ${Math.round(offlineProg.frac * 100)}% (${offlineProg.label})`
           : undefined} />
