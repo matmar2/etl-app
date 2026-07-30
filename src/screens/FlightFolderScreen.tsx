@@ -1,29 +1,19 @@
-// Electronic Flight Folder (EFF) — merged into the ETL app as a flight-crew module (Milestone 1
-// scaffold). The tile that reaches this screen is admin-gated (eff_module.enabled) and flight-crew
-// only, so with the flag OFF (default) the live fleet never sees it. The EFF screens + offline
-// storage (reusing ETL's SQLite/outbox/SecureStore) land here in the next milestones.
-import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import { theme } from '../theme';
+// Electronic Flight Folder (EFF) — navigator target. This wrapper is deliberately TINY and imports
+// NOTHING from src/eff/ statically: the whole EFF module is pulled in via a dynamic import(), so Metro
+// never evaluates any EFF code at app boot. It runs only when an authorised user actually opens the
+// Flight Folder. Consequence: a bug anywhere in src/eff/ cannot crash ETL boot or affect the fleet —
+// at worst it breaks this one screen for the one user who opened it (and the server allow-list removes
+// even that instantly). Access is gated upstream (Main Menu tile → releases._eff_access).
+import React, { Suspense } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { ui } from '../ui';
+
+const Inner = React.lazy(() => import('../eff/FlightFolder'));
 
 export default function FlightFolderScreen() {
   return (
-    <ScrollView style={ui.screen} contentContainerStyle={{ padding: 18, maxWidth: 900, alignSelf: 'center', width: '100%' }}>
-      <Text style={ui.section}>Electronic Flight Folder</Text>
-      <View style={[ui.card, { marginTop: 10 }]}>
-        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '700' }}>EFF is being integrated into this app</Text>
-        <Text style={{ color: theme.sub, marginTop: 8, lineHeight: 20 }}>
-          Your per-flight briefing folder — OFP, weather &amp; NOTAMs, pre-flight report, nav log and
-          sign-off — is moving into the Tech Log app so it works fully offline on the same store the
-          rest of your flying already uses. This section is enabled by your administrator and is for
-          flight crew only.
-        </Text>
-        <Text style={{ color: theme.sub, marginTop: 12, fontSize: 12.5, lineHeight: 18 }}>
-          While it&apos;s being fitted, the current EFF is available in Safari at
-          {' '}<Text style={{ color: theme.accent }}>etl.avora.aero/eff</Text>.
-        </Text>
-      </View>
-    </ScrollView>
+    <Suspense fallback={<View style={[ui.screen, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator /></View>}>
+      <Inner />
+    </Suspense>
   );
 }

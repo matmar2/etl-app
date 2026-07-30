@@ -478,7 +478,7 @@ export default function MainMenuScreen({ navigation }: any) {
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {GROUPS.map((g) => {
           // EFF Flight Folder tile: shown only when the server authorised THIS user on THIS device
-          // (admin-managed allow-lists; never on aircraft iPads). `effOn` is that server decision.
+          // (admin-managed allow-lists, everything unchecked by default). `effOn` is that decision.
           const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none')
             && (t.key !== 'induction' || hasInduction !== false)
             && (t.key !== 'eff' || effOn));   // Flight Folder — server-authorised users/devices + web
