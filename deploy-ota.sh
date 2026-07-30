@@ -46,3 +46,20 @@ for CH in production adhoc; do
   npx eas update --channel "$CH" --platform ios --message "$MSG" --non-interactive | grep -E "Branch|Message|Commit|Runtime" || true
 done
 echo "✓ OTA published to production + adhoc — stamp matches ./deploy-web.sh"
+
+# --- Release governance: auto-approve the deployed revision -----------------------------------
+# The iPad only surfaces/runs the revision approved in ETL governance. Publishing a version IS
+# approving it — UNLESS the dual-CAMO gate is switched on (go-live), where auto_publish leaves it
+# 'published' pending both CAMO signatures. Best-effort: never fails the OTA if the box is offline.
+VER="$(node -p "require('./app.json').expo.version" 2>/dev/null || true)"
+if [ -n "$VER" ]; then
+  ssh aws-camo "docker exec backend-api-1 python -c \"
+from app.database import SessionLocal
+from app.routers.releases import auto_publish
+db=SessionLocal()
+for ch in ('production','adhoc'):
+    r=auto_publish(db, ch, '$VER', '$VER', 'auto: deploy-ota.sh')
+    print('  release', ch, r['revision'], '->', r['status'], '| auto_approved', r['auto_approved'], '| dual', r['dual_approval'])
+\"" 2>/dev/null && echo "✓ release $VER approved in governance (or held for CAMO if dual-gate on)" \
+    || echo "⚠ release governance not reached — approve $VER in Back office → App Build & Release"
+fi
