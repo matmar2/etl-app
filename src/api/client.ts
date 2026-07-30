@@ -497,9 +497,25 @@ const _sandboxCbs = new Set<(v: boolean) => void>();
 export function isSandbox(): boolean { return _sandbox; }
 export function onSandbox(cb: (v: boolean) => void): () => void { _sandboxCbs.add(cb); cb(_sandbox); return () => { _sandboxCbs.delete(cb); }; }
 function _setSandbox(v: boolean) { if (v !== _sandbox) { _sandbox = v; _sandboxCbs.forEach((f) => f(v)); } }
-export const appRelease = async (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string; sandbox?: boolean }> => {
+
+// EFF (Flight Folder) access — the server decides per user + per device (opt-in allow-lists, never on
+// aircraft iPads). Captured from the same /app/release response so the Main Menu tile can gate on it.
+let _eff = false;
+const _effCbs = new Set<(v: boolean) => void>();
+export function isEffAllowed(): boolean { return _eff; }
+export function onEff(cb: (v: boolean) => void): () => void { _effCbs.add(cb); cb(_eff); return () => { _effCbs.delete(cb); }; }
+function _setEff(v: boolean) { if (v !== _eff) { _eff = v; _effCbs.forEach((f) => f(v)); } }
+// EFF must work offline, so the last online authorization decision is cached and rehydrated at boot —
+// an authorized test user keeps the tile with no connectivity; a fresh online release overrides it.
+export async function hydrateEff(): Promise<void> {
+  try { const { data } = await getRef<boolean>('eff_allowed'); if (data != null) _setEff(!!data); } catch { /* no cache yet */ }
+}
+export const appRelease = async (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string; sandbox?: boolean; eff?: boolean }> => {
   const r = await api(`/app/release${device ? `?device=${encodeURIComponent(device)}` : ''}`);
   _setSandbox(!!(r as any)?.sandbox);
+  const eff = !!(r as any)?.eff;
+  _setEff(eff);
+  setRef('eff_allowed', eff).catch(() => {});     // cache for offline (hydrateEff at boot)
   return r;
 };
 

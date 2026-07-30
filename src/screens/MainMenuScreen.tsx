@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -99,7 +99,7 @@ export default function MainMenuScreen({ navigation }: any) {
   // underneath, the focus effect never runs — without this the overlay would hang forever.
   const menuFocused = useIsFocused();
   const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped (admin-set seconds) — then the app is usable while prep continues
-  const [effOn, setEffOn] = useState(false);              // EFF (Flight Folder) module enabled by admin — flight crew only
+  const [effOn, setEffOn] = useState(false);              // EFF (Flight Folder) access — server-decided per user + device (never on aircraft iPads)
   const prepWaitRef = useRef(15);                          // offline_prep_wait_seconds (admin)
 
   async function syncNow() {
@@ -235,8 +235,10 @@ export default function MainMenuScreen({ navigation }: any) {
   useEffect(() => { appSettings().then((x: any) => {
     const v = Number(x.offline_prep_wait_seconds); if (!isNaN(v)) prepWaitRef.current = Math.max(0, v);
     if (prepWaitRef.current === 0) setPrepWaived(true);
-    setEffOn(!!(x.eff_module && x.eff_module.enabled));   // EFF module tile — OFF by default (fleet untouched)
   }).catch(() => {}); }, []);
+  // EFF tile visibility is a per-user + per-device server decision (releases._eff_access), delivered on
+  // the /app/release response and cached for offline. hydrateEff() restores the last decision at boot.
+  useEffect(() => { hydrateEff(); return onEff(setEffOn); }, []);
   useEffect(() => {
     if (prepWaived || offlineProg == null || offlineProg.frac >= 1) return;
     if (prepWaitRef.current === 0) { setPrepWaived(true); return; }
@@ -475,12 +477,11 @@ export default function MainMenuScreen({ navigation }: any) {
       {/* grouped tiles */}
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {GROUPS.map((g) => {
-          // EFF Flight Folder tile: only when the admin has enabled the module AND the user is flight
-          // crew (pilots) — admin/CAMO see it too for administration/testing. Cabin/mechanic never.
-          const effGate = effOn && ['captain', 'pilot', 'admin', 'camo'].includes(role() || '');
+          // EFF Flight Folder tile: shown only when the server authorised THIS user on THIS device
+          // (admin-managed allow-lists; never on aircraft iPads). `effOn` is that server decision.
           const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none')
             && (t.key !== 'induction' || hasInduction !== false)
-            && (t.key !== 'eff' || effGate));   // Flight Folder — admin-enabled, flight-crew only
+            && (t.key !== 'eff' || effOn));   // Flight Folder — server-authorised users/devices + web
           if (!tiles.length) return null;
           return (
             <View key={g} style={{ marginTop: 18 }}>
