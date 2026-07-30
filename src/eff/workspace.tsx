@@ -23,6 +23,8 @@ import { HelpPage, openInduction } from './help';
 import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
+import { fleetList, setCurrentAircraft } from '../api/client';   // ETL app hub — for the in-app "Open ETL" hand-off
+import { pullSectorList } from '../db/sectors';                  // find the Tech Log sector for this flight (platform-split)
 import { ELEV, R, S, T, TY } from './theme';
 
 const st = {
@@ -91,6 +93,10 @@ const BRIEF_TABS: [string, string][] = [
 const docsFor = (d: any, k: string) => (d?.docs || []).filter((x: any) =>
   k === 'other' ? !['ofp', 'atc', 'wx_pdf', 'notam', 'charts', 'wx'].includes(x.kind)
   : k === 'wx_live' ? x.kind === 'wx' : x.kind === k);
+// Latest revision per title. PPS re-issues each document on every re-plan, so a flight accumulates
+// many revisions of the same doc (AH4002: 30 chart docs = 9 distinct charts x up to 4 revisions).
+// The tab badge and the document list both key on this, so "(N)" matches the charts actually shown.
+const uniqDocs = (docs: any[]) => { const m: Record<string, any> = {}; for (const x of docs) m[x.title] = x; return Object.values(m); };
 
 // Icons follow the ETL back-office style (emoji, fixed-width column).
 const RAIL: { group?: string; key: string; label: string; icon: string }[] = [
@@ -110,7 +116,38 @@ const RAIL: { group?: string; key: string; label: string; icon: string }[] = [
   { group: 'Help', key: 'help', label: 'User Guide & AI Assistant', icon: '📖' },
 ];
 
-export function Workspace({ flight, back, signOut }: { flight: any; back: () => void; signOut?: () => void }) {
+// "Open ETL" — EFF is now a module INSIDE the ETL app, so hand off IN-APP instead of opening the web
+// build in a browser: select the flight's tail and go straight to its Departure page (or Flight
+// Details if the sector isn't started yet), mirroring the web SSO deep-link (LoginScreen). No browser,
+// no re-login. Falls back to the legacy SSO-URL hand-off only if no navigator is present (defensive).
+async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg: (m: string) => void) {
+  const reg = (f.registration || '').toUpperCase();
+  const flightNo = (f.flight_no || '').toUpperCase();
+  const flightDate = (f.date || '').trim();
+  if (!navigation) {
+    const baseUrl = etlAppUrl() || (Platform.OS === 'web' ? '/app' : 'https://etl.avora.aero/app');
+    const url = `${baseUrl}/?sso=${encodeURIComponent(tok || '')}&reg=${encodeURIComponent(reg)}&flight=${encodeURIComponent(flightNo)}&date=${encodeURIComponent(flightDate)}`;
+    if (Platform.OS === 'web') window.open(url, '_blank'); else Linking.openURL(url).catch(() => {});
+    return;
+  }
+  try {
+    if (reg) {
+      const a = (await fleetList()).find((x: any) => (x.registration || '').toUpperCase() === reg);
+      if (a) await setCurrentAircraft(a);
+    }
+    if (reg && flightNo) {
+      const s = (await pullSectorList(reg)).find((x: any) =>
+        (x.flight_no || '').toUpperCase() === flightNo && (!flightDate || x.flight_date === flightDate));
+      navigation.reset(s
+        ? { index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] }
+        : { index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
+      return;
+    }
+    navigation.navigate('Sectors', { aircraftId: reg });
+  } catch (e: any) { setMsg(`Could not open the Tech Log — ${e?.message || e}`); }
+}
+
+export function Workspace({ flight, back, signOut, navigation }: { flight: any; back: () => void; signOut?: () => void; navigation?: any }) {
   const [d, setD] = useState<any>(null);
   const [rep, setRep] = useState<any>({});
   const [sec, setSec] = useState('overview');
@@ -343,7 +380,7 @@ export function Workspace({ flight, back, signOut }: { flight: any; back: () => 
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
             {BRIEF_TABS.map(([k, label]) => {
-              const n = docsFor(d, k).length;
+              const n = uniqDocs(docsFor(d, k)).length;   // distinct documents, not raw revisions
               return (
                 <TouchableOpacity key={k} onPress={() => setBriefTab(k)}
                   style={{ borderWidth: 1, borderColor: briefTab === k ? T.accent : T.line, backgroundColor: briefTab === k ? '#1c3050' : T.card, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8, minHeight: 40, justifyContent: 'center', opacity: n ? 1 : 0.55 }}>
@@ -423,9 +460,7 @@ export function Workspace({ flight, back, signOut }: { flight: any; back: () => 
                 {briefTab === 'charts' ? 'No weather charts for this flight yet — they appear when dispatch generates them in PPS.'
                   : 'Not received from PPS yet — arrives automatically when dispatch files/updates the plan.'}
               </Text>);
-            const latestByTitle: Record<string, any> = {};
-            for (const doc of docs) latestByTitle[doc.title] = doc;
-            const list = Object.values(latestByTitle) as any[];
+            const list = uniqDocs(docs) as any[];
             const shown = viewDoc && list.some((x: any) => x.id === viewDoc.id) ? viewDoc : list[list.length - 1];
             return (
               <View>
@@ -781,13 +816,7 @@ export function Workspace({ flight, back, signOut }: { flight: any; back: () => 
             </Text>
             {tok ? (
               <TouchableOpacity style={[st.btn, { alignSelf: 'flex-start' }]}
-                onPress={() => {
-                  const baseUrl = etlAppUrl() || (Platform.OS === 'web' ? '/app' : 'https://etl.avora.aero/app');
-                  const url = `${baseUrl}/?sso=${encodeURIComponent(tok)}&reg=${encodeURIComponent(f.registration || '')}`
-                    + `&flight=${encodeURIComponent(f.flight_no || '')}&date=${encodeURIComponent(f.date || '')}`;
-                  // web→native: window.open → Linking.openURL (hands off to the ETL crew app / browser)
-                  if (Platform.OS === 'web') window.open(url, '_blank'); else Linking.openURL(url).catch(() => {});
-                }}>
+                onPress={() => openEtlInApp(f, navigation, tok, setMsg)}>
                 <Text style={st.btnTxt}>🛠️ Open ETL — {f.registration}</Text>
               </TouchableOpacity>
             ) : (

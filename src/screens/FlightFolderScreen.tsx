@@ -10,10 +10,10 @@ import { ui } from '../ui';
 
 const Inner = React.lazy(() => import('../eff/FlightFolder'));
 
-export default function FlightFolderScreen() {
+export default function FlightFolderScreen(props: any) {
   return (
     <Suspense fallback={<View style={[ui.screen, { alignItems: 'center', justifyContent: 'center' }]}><ActivityIndicator /></View>}>
-      <Inner />
+      <Inner navigation={props.navigation} />
     </Suspense>
   );
 }

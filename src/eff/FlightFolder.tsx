@@ -18,7 +18,7 @@ import { Workspace } from './workspace';
 import { InductionGate } from './help';
 import { S, T } from './theme';
 
-export default function FlightFolderScreen() {
+export default function FlightFolderScreen({ navigation }: any) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [flight, setFlight] = useState<any>(null);
@@ -78,7 +78,7 @@ export default function FlightFolderScreen() {
       </View>
     );
   } else if (!user) body = <LoginScreen onDone={setUser} />;
-  else if (page === 'folder' && flight) body = <Workspace flight={flight} back={() => setPage('flights')} signOut={signOut} />;
+  else if (page === 'folder' && flight) body = <Workspace flight={flight} back={() => setPage('flights')} signOut={signOut} navigation={navigation} />;
   else body = <FlightsScreen user={user} open={(f: any) => { setFlight(f); setPage('folder'); }} signOut={signOut} />;
 
   // Pilot login induction — shown once per pilot per version, gated server-side (non-pilots/acked see nothing).
