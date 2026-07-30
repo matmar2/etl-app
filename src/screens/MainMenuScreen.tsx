@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -20,6 +20,7 @@ const TILES: Tile[] = [
   { key: 'flight', title: 'Flight Details', sub: 'Leon · today', nav: 'Sectors', icon: '✈️', group: 'Operations', tint: '#3d9be0' },
   { key: 'defects', title: 'Defects', sub: 'PIREP / MAREP / HIL', nav: 'Defects', icon: '🔧', group: 'Operations', tint: theme.accent },
   { key: 'signoff', title: 'Flight Sign Off', sub: 'Recent sign-offs', nav: 'SignOff', icon: '🖊️', group: 'Operations', tint: theme.red },
+  { key: 'eff', title: 'Flight Folder', sub: 'EFF · OFP, WX & NOTAMs, sign', nav: 'FlightFolder', icon: '🗂️', group: 'Operations', tint: '#3d9be0' },
   { key: 'docs', title: 'Documents', sub: 'Controlled documents', nav: 'Documents', icon: '📄', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'forms', title: 'Forms', sub: 'Role forms to fill', nav: 'Forms', icon: '📝', group: 'Documents & forms', tint: '#5a8bd0' },
   { key: 'induction', title: 'Welcome & Quick Ref', sub: 'Your role induction', nav: '', icon: '👋', group: 'Help & feedback', tint: '#9b8cf0' },
@@ -98,6 +99,7 @@ export default function MainMenuScreen({ navigation }: any) {
   // underneath, the focus effect never runs — without this the overlay would hang forever.
   const menuFocused = useIsFocused();
   const [prepWaived, setPrepWaived] = useState(false);    // offline-prep block capped (admin-set seconds) — then the app is usable while prep continues
+  const [effOn, setEffOn] = useState(false);              // EFF (Flight Folder) module enabled by admin — flight crew only
   const prepWaitRef = useRef(15);                          // offline_prep_wait_seconds (admin)
 
   async function syncNow() {
@@ -233,6 +235,7 @@ export default function MainMenuScreen({ navigation }: any) {
   useEffect(() => { appSettings().then((x: any) => {
     const v = Number(x.offline_prep_wait_seconds); if (!isNaN(v)) prepWaitRef.current = Math.max(0, v);
     if (prepWaitRef.current === 0) setPrepWaived(true);
+    setEffOn(!!(x.eff_module && x.eff_module.enabled));   // EFF module tile — OFF by default (fleet untouched)
   }).catch(() => {}); }, []);
   useEffect(() => {
     if (prepWaived || offlineProg == null || offlineProg.frac >= 1) return;
@@ -472,8 +475,12 @@ export default function MainMenuScreen({ navigation }: any) {
       {/* grouped tiles */}
       <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
         {GROUPS.map((g) => {
+          // EFF Flight Folder tile: only when the admin has enabled the module AND the user is flight
+          // crew (pilots) — admin/CAMO see it too for administration/testing. Cabin/mechanic never.
+          const effGate = effOn && ['captain', 'pilot', 'admin', 'camo'].includes(role() || '');
           const tiles = TILES.filter((t) => t.group === g && (!t.perm || access(t.perm) !== 'none')
-            && (t.key !== 'induction' || hasInduction !== false));   // hide Welcome & Quick Ref when the role has no induction
+            && (t.key !== 'induction' || hasInduction !== false)
+            && (t.key !== 'eff' || effGate));   // Flight Folder — admin-enabled, flight-crew only
           if (!tiles.length) return null;
           return (
             <View key={g} style={{ marginTop: 18 }}>

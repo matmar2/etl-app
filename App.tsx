@@ -24,6 +24,7 @@ import SectorListScreen from './src/screens/SectorListScreen';
 import SectorWorkspaceScreen from './src/screens/SectorWorkspaceScreen';
 import SignOffScreen from './src/screens/SignOffScreen';
 import GuideScreen from './src/screens/GuideScreen';
+import FlightFolderScreen from './src/screens/FlightFolderScreen';
 import AssistantScreen from './src/screens/AssistantScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import MasterDeviceScreen from './src/screens/MasterDeviceScreen';
@@ -196,6 +197,7 @@ export default function App() {
         <Stack.Screen name="Forms" component={FormsScreen} options={{ title: 'Forms' }} />
         <Stack.Screen name="SignOff" component={SignOffScreen} options={{ title: 'Flight Sign Off' }} />
         <Stack.Screen name="Guide" component={GuideScreen} options={{ title: 'User Guide' }} />
+        <Stack.Screen name="FlightFolder" component={FlightFolderScreen} options={{ title: 'Flight Folder' }} />
         <Stack.Screen name="Assistant" component={AssistantScreen} options={{ title: 'AI Assistant' }} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: 'Feedback' }} />
         <Stack.Screen name="MasterDevice" component={MasterDeviceScreen} options={{ title: 'Master iPad' }} />
