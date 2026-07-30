@@ -32,6 +32,7 @@ import AckOverlay from './src/components/AckOverlay';
 import { SyncBlockHost } from './src/components/SyncBlock';
 import BroadcastGate from './src/components/BroadcastGate';
 import InductionGate from './src/components/InductionGate';
+import SandboxBanner from './src/components/SandboxBanner';
 import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
 
@@ -207,6 +208,7 @@ export default function App() {
     <AckOverlay navRef={navRef} />
     <BroadcastGate />
     <InductionGate />
+    <SandboxBanner />
     </View>
     </ErrorBoundary>
   );

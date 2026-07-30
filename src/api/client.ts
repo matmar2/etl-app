@@ -490,8 +490,18 @@ export async function allocateTl(reg: string): Promise<number | null> {
 
 // Release gate: the revision this iPad's channel is approved to run (null = stay on current).
 // The actual OTA apply (expo-updates) is wired once EAS + the signed build are in place.
-export const appRelease = (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string }> =>
-  api(`/app/release${device ? `?device=${encodeURIComponent(device)}` : ''}`);
+// The response's `sandbox` flag (non-aircraft iPad on the sandbox release) drives the global
+// SANDBOX banner — captured here so any screen can read it via isSandbox()/onSandbox().
+let _sandbox = false;
+const _sandboxCbs = new Set<(v: boolean) => void>();
+export function isSandbox(): boolean { return _sandbox; }
+export function onSandbox(cb: (v: boolean) => void): () => void { _sandboxCbs.add(cb); cb(_sandbox); return () => { _sandboxCbs.delete(cb); }; }
+function _setSandbox(v: boolean) { if (v !== _sandbox) { _sandbox = v; _sandboxCbs.forEach((f) => f(v)); } }
+export const appRelease = async (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string; sandbox?: boolean }> => {
+  const r = await api(`/app/release${device ? `?device=${encodeURIComponent(device)}` : ''}`);
+  _setSandbox(!!(r as any)?.sandbox);
+  return r;
+};
 
 export type MaintTask = { id: string; registration: string; title: string; description?: string; ata?: string; reference?: string; due_date?: string | null; audience: string; status: string; completed_by_name?: string | null; completed_at?: string | null; completed_note?: string | null; tlb_no?: string | null };
 export async function maintTasks(reg: string): Promise<MaintTask[]> {
