@@ -24,7 +24,7 @@ import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { fleetList, setCurrentAircraft } from '../api/client';   // ETL app hub — for the in-app "Open ETL" hand-off
-import { pullSectorList } from '../db/sectors';                  // find the Tech Log sector for this flight (platform-split)
+import { createSector, pullSectorList } from '../db/sectors';    // find/create the Tech Log sector for this flight (platform-split)
 import { ELEV, R, S, T, TY } from './theme';
 
 const st = {
@@ -130,21 +130,36 @@ async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg:
     if (Platform.OS === 'web') window.open(url, '_blank'); else Linking.openURL(url).catch(() => {});
     return;
   }
+  const date = flightDate || String(f.std || '').slice(0, 10);
+  const toDeparture = (sectorId: string) => navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId } }] });
+  const toFlightDetails = () => navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
   try {
     // Select the tail. Offline this call can't reach the server — keep whatever tail is already
     // selected rather than aborting; the Sectors/Departure screen still gets the reg via params.
+    let ac: any = null;
     try {
-      if (reg) { const a = (await fleetList()).find((x: any) => (x.registration || '').toUpperCase() === reg); if (a) await setCurrentAircraft(a); }
+      if (reg) { ac = (await fleetList()).find((x: any) => (x.registration || '').toUpperCase() === reg); if (ac) await setCurrentAircraft(ac); }
     } catch { /* offline — proceed with the current aircraft */ }
-    // pullSectorList reads the LOCAL sector mirror, so it works offline; find the started sector.
-    let s: any = null;
-    if (reg && flightNo) {
-      try { s = (await pullSectorList(reg)).find((x: any) => (x.flight_no || '').toUpperCase() === flightNo && (!flightDate || x.flight_date === flightDate)); }
-      catch { s = null; }
+    if (!(reg && flightNo)) { toFlightDetails(); return; }
+    // pullSectorList reads the LOCAL sector mirror, so it works offline.
+    let sectors: any[] = [];
+    try { sectors = await pullSectorList(reg); } catch { sectors = []; }
+    const existing = sectors.find((x: any) => (x.flight_no || '').toUpperCase() === flightNo && (!date || x.flight_date === date));
+    if (existing) { toDeparture(existing.id); return; }           // already started → its Departure
+    // Not started yet. One-open-flight rule: don't auto-create while another flight is open — send the
+    // crew to Flight Details to close the current one first.
+    const openOne = sectors.find((x: any) => ['draft', 'open', 'preflight_signed'].includes(x.status || ''));
+    if (openOne) { toFlightDetails(); setMsg(`Close ${openOne.flight_no} first, then Open ETL for ${flightNo}.`); return; }
+    // Start the sector straight from the EFF/PPS flight. EFF folders come from PPS, so ACMI / off-Leon
+    // legs (e.g. AH6940, which Leon doesn't carry) aren't in ETL's Leon list to pick — create the
+    // sector here from the briefing's own flight details so it opens directly, pre-filled.
+    if (ac) {
+      const row: any = await createSector({ aircraft_id: reg, flight_no: flightNo, flight_date: date,
+                                            dep: f.dep, arr: f.arr, std: f.std, source: 'eff' } as any);
+      toDeparture(row.id);
+      return;
     }
-    navigation.reset(s
-      ? { index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] }
-      : { index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
+    toFlightDetails();                                            // no tail resolved (offline first run) → let them pick there
   } catch (e: any) { setMsg(`Could not open the Tech Log — ${e?.message || e}`); }
 }
 
@@ -843,7 +858,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <View style={st.card}><Text style={st.h}>Electronic Tech Log</Text>
             <Text style={{ color: T.sub, fontSize: 13.5, lineHeight: 20, marginTop: 10 }}>
               Opens the Electronic Tech Log on {f.registration} at this flight — {f.flight_no} {f.date}. It goes straight to the
-              Departure page when the Tech Log for this flight is already open, otherwise to Flight Details so you can start it there.
+              Departure page, starting the sector from this briefing if it hasn&apos;t been opened yet (so ACMI legs not in Leon
+              still open directly). If another flight is already open, it takes you to Flight Details to close that one first.
             </Text>
             {tok ? (
               <TouchableOpacity style={[st.btn, { alignSelf: 'flex-start' }]}
