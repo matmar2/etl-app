@@ -195,7 +195,11 @@ export async function sessionFromEtl(): Promise<SessionExchange> {
       body: JSON.stringify({ etl_token: etl }),
     });
   } catch {
-    return { ok: false, reason: 'offline' };           // never reached the server → LoginScreen fallback
+    // Offline. We already confirmed a valid ETL session exists (the `etl` token is present above), so
+    // do NOT force a second login — proceed into the Folder on cached data. A fresh EFF token is minted
+    // on the next online open. This is what makes the Flight Folder usable with no connectivity.
+    setEtlToken(etl);
+    return { ok: true, reason: 'offline' };
   }
   if (r.status === 403) return { ok: false, reason: 'forbidden', message: (await r.text().catch(() => '')).slice(0, 200) };
   if (!r.ok) return { ok: false, reason: 'error', message: `${r.status}` };
