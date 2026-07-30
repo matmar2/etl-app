@@ -1,10 +1,10 @@
 /* EFF crew screens — Login, My Flights, Folder, Nav Log, Accept.
    Self-contained module (no external navigation lib): the tiny stack in App.tsx is replaced by
    the ETL navigator when this folder moves into the ETL app. Web-first trial build. */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'react-native';
-import { acceptFolder, api, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
+import { acceptFolder, api, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { openInduction } from './help';
@@ -91,12 +91,28 @@ export function LoginScreen({ onDone }: { onDone: (u: any) => void }) {
 
 export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: any) => void; signOut: () => void }) {
   const [rows, setRows] = useState<any[] | null>(null); const [err, setErr] = useState('');
+  const [prep, setPrep] = useState<{ done: number; total: number } | null>(null);   // offline pre-cache progress
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
   // web→native: localStorage(eff_reg) → SecureStore via the adapter (async, so the persisted tail
   // loads in an effect rather than the useState initializer).
   const [reg, setReg] = useState<string>('ALL');
   useEffect(() => { kvGet('reg').then((v) => { if (v) setReg(v); }); }, []);
   const pickReg = (r: string) => { setReg(r); kvSet('reg', r); };
-  const load = () => listFlights().then((r) => { setRows(r); purgeCaches(r.map((x: any) => x.id)); }).catch((e) => setErr(e.message));
+  const load = () => listFlights().then(async (r) => {
+    setRows(r); purgeCaches(r.map((x: any) => x.id));
+    // Offline briefing guarantee: while online, pull EVERY flight's folder + documents into the cache
+    // so any flight opens with no connectivity — not only ones already opened online (the "this page
+    // has not been cached yet" gap). Best-effort, background, sequential to stay gentle.
+    if (isOnlineSync() && r.length) {
+      if (aliveRef.current) setPrep({ done: 0, total: r.length });
+      for (let i = 0; i < r.length; i++) {
+        try { const folder = await getFolder(r[i].id); await prefetchDocs(r[i].id, folder?.docs || []); await getNavlog(r[i].id).catch(() => {}); } catch {}
+        if (aliveRef.current) setPrep({ done: i + 1, total: r.length });
+      }
+      if (aliveRef.current) setPrep(null);
+    }
+  }).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
   const regs = Array.from(new Set((rows || []).map((f) => f.registration).filter(Boolean))).sort();
   const shown = (rows || []).filter((f) => reg === 'ALL' || f.registration === reg);
@@ -113,6 +129,7 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
       <View style={{ flexDirection: 'row' }}>
         {(() => { const off = !isOnlineSync(); const n = pendingCount();   // web→native: navigator.onLine → isOnlineSync()
           return (off || n) ? <Text style={{ color: off ? '#f0d48a' : '#9fd6ae', fontSize: 12 }}>{off ? '● Offline — cached flights shown' : '● Online'}{n ? ` — ${n} queued` : ''}</Text> : null; })()}
+        {prep ? <Text style={{ color: '#9fd6ae', fontSize: 12, marginLeft: 12 }}>● Caching {prep.done}/{prep.total} flights for offline…</Text> : null}
       </View>
       <Text style={s.sub}>Folders build from Leon and fill automatically from PPS the moment dispatch files the plan.</Text>
       {err ? <Text style={{ color: T.red, marginTop: 10 }}>{err}</Text> : null}
