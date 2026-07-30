@@ -147,10 +147,45 @@ async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg:
   } catch (e: any) { setMsg(`Could not open the Tech Log — ${e?.message || e}`); }
 }
 
+// Cross-platform document picker — a select-style trigger that opens a modal list (replaces the chip
+// row). Uses Modal, which works on iOS and react-native-web, so there is no native picker module and
+// it stays OTA-safe.
+function DocDropdown({ list, shown, onPick }: { list: any[]; shown: any; onPick: (d: any) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TouchableOpacity onPress={() => setOpen(true)}
+        style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: T.line, backgroundColor: T.inBg, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, minHeight: 42, minWidth: 260, maxWidth: 460 }}>
+        <Text style={{ color: T.text, fontWeight: '700', fontSize: 13, flex: 1 }} numberOfLines={1}>
+          {shown?.title}{shown?.revision != null ? ` — rev ${shown.revision}` : ''}
+        </Text>
+        <Text style={{ color: T.sub, fontSize: 12, marginLeft: 8 }}>{list.length} ▾</Text>
+      </TouchableOpacity>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable onPress={() => setOpen(false)} style={{ flex: 1, backgroundColor: '#0009', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: T.card, borderRadius: 12, borderWidth: 1, borderColor: T.line, width: '100%', maxWidth: 520, maxHeight: '80%' as any, overflow: 'hidden' }}>
+            <Text style={{ color: T.sub, fontSize: 11.5, fontWeight: '800', letterSpacing: 0.6, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>SELECT DOCUMENT</Text>
+            <ScrollView>
+              {list.map((doc: any) => { const on = shown?.id === doc.id; return (
+                <TouchableOpacity key={doc.id} onPress={() => { onPick(doc); setOpen(false); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#1b2c49', backgroundColor: on ? '#1c3050' : undefined }}>
+                  <Text style={{ color: on ? '#fff' : T.text, fontWeight: on ? '800' : '600', fontSize: 13.5, flex: 1 }} numberOfLines={2}>{doc.title}</Text>
+                  <Text style={{ color: T.sub, fontSize: 11.5, marginLeft: 10 }}>rev {doc.revision}</Text>
+                  {on ? <Text style={{ color: T.accent, marginLeft: 8, fontWeight: '800' }}>✓</Text> : null}
+                </TouchableOpacity>); })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
 export function Workspace({ flight, back, signOut, navigation }: { flight: any; back: () => void; signOut?: () => void; navigation?: any }) {
   const [d, setD] = useState<any>(null);
   const [rep, setRep] = useState<any>({});
   const [sec, setSec] = useState('overview');
+  const [railOpen, setRailOpen] = useState(true);        // collapsible left phase-rail (more room for the OFP/charts)
   const [preTab, setPreTab] = useState<'form' | 'security' | 'gendec'>('form');
   const [briefTab, setBriefTab] = useState('ofp');
   const [wxTab, setWxTab] = useState('dep');
@@ -467,12 +502,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                 {list.length > 1 ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                     <Text style={{ color: T.sub, fontSize: 12 }}>Document</Text>
-                    {/* web→native: EFBOne-style web <select> dropdown → cross-platform chip row */}
-                    {list.map((doc: any) => { const on = shown?.id === doc.id; return (
-                      <TouchableOpacity key={doc.id} onPress={() => setViewDoc(doc)}
-                        style={{ borderWidth: 1, borderColor: on ? T.accent : T.line, backgroundColor: on ? '#1c3050' : T.card, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, minHeight: 40, justifyContent: 'center', maxWidth: 420 }}>
-                        <Text style={{ color: on ? '#fff' : T.sub, fontWeight: '700', fontSize: 12.5 }} numberOfLines={1}>{doc.title} — rev {doc.revision}</Text>
-                      </TouchableOpacity>); })}
+                    <DocDropdown list={list} shown={shown} onPick={setViewDoc} />
                     <Text style={{ color: T.sub, fontSize: 12 }}>{String(shown?.fetched_at || '').slice(0, 16)}z</Text>
                   </View>
                 ) : (
@@ -927,8 +957,12 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
 
   return (
     <View style={{ flex: 1, backgroundColor: T.bg, flexDirection: 'row' }}>
+      {railOpen ? (
       <ScrollView style={{ width: 248, minWidth: 248, maxWidth: 248, flexGrow: 0, flexShrink: 0, borderRightWidth: 1, borderRightColor: T.line, backgroundColor: '#101c33' } as any} contentContainerStyle={{ padding: 10 }}>
-        <Image source={LOGO} style={{ width: 120, height: 26, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6, marginLeft: 6, marginBottom: 6 } as any} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <Image source={LOGO} style={{ width: 120, height: 26, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6, marginLeft: 6 } as any} />
+          <TouchableOpacity onPress={() => setRailOpen(false)} style={{ padding: 6 }} accessibilityLabel="Collapse menu"><Text style={{ color: T.sub, fontSize: 18 }}>⟨</Text></TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={back}><Text style={{ color: T.accent, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 10 }}>‹ My flights</Text></TouchableOpacity>
         <OfflineBadge />
         <Text style={{ color: T.text, fontWeight: '800', paddingHorizontal: 6, fontSize: 15 }}>{f.flight_no}</Text>
@@ -971,7 +1005,14 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           </TouchableOpacity>
         ) : null}
       </ScrollView>
+      ) : null}
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingTop: 18, maxWidth: sec === 'navlog' ? undefined : 1000, width: '100%', alignSelf: 'center' } as any}>
+        {!railOpen ? (
+          <TouchableOpacity onPress={() => setRailOpen(true)} style={{ alignSelf: 'flex-start', backgroundColor: '#1c3050', borderWidth: 1, borderColor: T.line, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+            <Text style={{ color: '#fff', fontSize: 15 }}>☰</Text>
+            <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '700' }}>Menu</Text>
+          </TouchableOpacity>
+        ) : null}
         {(() => { const r = RAIL.find((x) => x.key === sec); return r && sec !== 'navlog' ? (
           <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
             <Text style={{ fontSize: 18 }}>{r.icon}</Text>
