@@ -129,7 +129,7 @@ export function startAutoFlush() {
 }
 export function stopAutoFlush() { if (_flushTimer) { clearInterval(_flushTimer); _flushTimer = null; } }
 
-export async function api(path: string, init?: RequestInit): Promise<any> {
+export async function api(path: string, init?: RequestInit, _retry = true): Promise<any> {
   const method = (init?.method || 'GET').toUpperCase();
   let r: Response;
   try {
@@ -147,7 +147,17 @@ export async function api(path: string, init?: RequestInit): Promise<any> {
     setOutbox([...outbox(), { path, method, body: init?.body as string, ts: Date.now() }]);
     return { queued: true };
   }
-  if (r.status === 401) { setToken(null); throw new Error('Session expired — sign in again'); }
+  if (r.status === 401) {
+    // The EFF token expired. The user's ETL session usually hasn't, so silently re-mint a fresh EFF
+    // token from it and retry once — no bogus "Session expired" while the ETL login is still good.
+    // Only if the re-exchange also fails (ETL token itself gone/expired) do we surface the expiry.
+    if (_retry) {
+      const ex = await sessionFromEtl();
+      if (ex.ok && ex.reason !== 'offline') return api(path, init, false);
+    }
+    setToken(null);
+    throw new Error('Session expired — sign in again');
+  }
   if (!r.ok) throw new Error((await r.text()).slice(0, 300) || `${r.status}`);
   const data = await r.json();
   if (method === 'GET') {
