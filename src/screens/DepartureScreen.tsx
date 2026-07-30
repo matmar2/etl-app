@@ -312,11 +312,16 @@ export default function DepartureScreen({ route, navigation }: any) {
       setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
     }
     catch (e: any) {
-      const em = e?.message || 'Could not accept — try again';
-      setSignMsg(em);
-      // The server enforces the admin mandatory-field matrix too — surface its rejection as the
-      // same pop-up the client-side check uses, so a blocked sign is never a silent small note.
-      if (/complete|mandatory|required/i.test(em)) notifyAction(em, 'Complete before accepting');
+      // Strip the technical "POST /path → 400:" prefix so the crew see a plain instruction.
+      const em = (e?.message || 'Could not accept — try again').replace(/^[A-Z]+\s+\/\S+\s*(?:→|->)\s*\d+:\s*/i, '').trim();
+      // The server enforces the admin mandatory-field matrix too — surface its rejection as a
+      // BLOCKING pop-up (not just a small note) so a blocked sign is never missed.
+      if (/complete|mandatory|required|before signing/i.test(em)) {
+        notifyAction(em, 'Complete the mandatory field(s) before signing');
+        setSignMsg('');   // the pop-up is the notice — don't leave a lingering red line as well
+      } else {
+        setSignMsg(em);
+      }
       return;
     }
     refresh().catch(() => {});   // a refresh hiccup must never read as a failed acceptance
