@@ -4,7 +4,7 @@
    Post-flight report, Sign post-flight. Section forms save via PUT /report (shallow merge). */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { WebView } from 'react-native-webview';         // native PDF/print viewer (in the 1.0.2 binary)
+import PdfViewer from './PdfViewer';                     // OFP/PDF viewer — platform split (native file:// WebView, web <iframe>)
 import * as Print from 'expo-print';                     // native print fallback (window.open/print on web)
 // M3 native camera — OTA crash rule (see CLAUDE.md / BarcodeScanner.tsx): expo-camera must NOT be a
 // static top-level import; a pre-1.0.2 binary lacking the native module would abort NATIVELY at load
@@ -1159,45 +1159,6 @@ function CameraCapture({ visible, onClose, onCapture, setMsg }: {
         )}
       </View>
     </Modal>
-  );
-}
-
-
-function PdfViewer({ flightId, doc, setMsg, page }: any) {
-  // web→native: the web trial turned the doc into a Blob URL and rendered it in an <iframe>/<img>,
-  // opening full view via window.open. Native has no Blob/iframe/window.open — instead the base64
-  // doc is fed straight to a WebView (react-native-webview, in the 1.0.2 binary), and "Open full /
-  // print" uses expo-print. A single WebView path also works on web (its .web build is an iframe).
-  const [full, setFull] = useState<any>(null);
-  useEffect(() => {
-    setFull(null);
-    getDoc(flightId, doc.id).then(setFull).catch((e: any) => setMsg(`Could not load ${doc.title} — ${e.message}`));
-  }, [doc.id]);
-  if (!full) return <ActivityIndicator style={{ marginTop: 20 }} />;
-  const ct = full.content_type || 'application/pdf';
-  const isPdf = ct.includes('pdf');
-  const dataUri = `data:${ct};base64,${full.data_b64 || ''}`;
-  const src = page && isPdf ? `${dataUri}#page=${page}` : dataUri;
-  const openFull = () => {
-    if (Platform.OS === 'web') { window.open(dataUri, '_blank'); return; }
-    Print.printAsync({ uri: dataUri }).catch((e: any) => setMsg(`Print failed — ${e.message}`));
-  };
-  return (
-    <View style={[st.card, { padding: 6 }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4 }}>
-        <Text style={{ color: T.sub, fontSize: 12, flex: 1 }}>{doc.title}</Text>
-        {/* iPad Safari shows only page 1 inside frames — full view opens the native viewer / print */}
-        <TouchableOpacity onPress={openFull}>
-          <Text style={{ color: T.accent, fontSize: 13 }}>⤢ Open full / print</Text></TouchableOpacity>
-      </View>
-      {isPdf ? (
-        <WebView key={src} originWhitelist={['*']} source={{ uri: src }}
-          style={{ width: '100%', height: 720, borderRadius: 8, backgroundColor: '#fff' }}
-          startInLoadingState setSupportMultipleWindows={false} />
-      ) : (
-        <Image source={{ uri: dataUri }} style={{ width: '100%', height: 720, borderRadius: 8 } as any} resizeMode="contain" />
-      )}
-    </View>
   );
 }
 
