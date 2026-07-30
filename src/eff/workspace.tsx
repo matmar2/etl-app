@@ -131,19 +131,20 @@ async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg:
     return;
   }
   try {
-    if (reg) {
-      const a = (await fleetList()).find((x: any) => (x.registration || '').toUpperCase() === reg);
-      if (a) await setCurrentAircraft(a);
-    }
+    // Select the tail. Offline this call can't reach the server — keep whatever tail is already
+    // selected rather than aborting; the Sectors/Departure screen still gets the reg via params.
+    try {
+      if (reg) { const a = (await fleetList()).find((x: any) => (x.registration || '').toUpperCase() === reg); if (a) await setCurrentAircraft(a); }
+    } catch { /* offline — proceed with the current aircraft */ }
+    // pullSectorList reads the LOCAL sector mirror, so it works offline; find the started sector.
+    let s: any = null;
     if (reg && flightNo) {
-      const s = (await pullSectorList(reg)).find((x: any) =>
-        (x.flight_no || '').toUpperCase() === flightNo && (!flightDate || x.flight_date === flightDate));
-      navigation.reset(s
-        ? { index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] }
-        : { index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
-      return;
+      try { s = (await pullSectorList(reg)).find((x: any) => (x.flight_no || '').toUpperCase() === flightNo && (!flightDate || x.flight_date === flightDate)); }
+      catch { s = null; }
     }
-    navigation.navigate('Sectors', { aircraftId: reg });
+    navigation.reset(s
+      ? { index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId: s.id } }] }
+      : { index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
   } catch (e: any) { setMsg(`Could not open the Tech Log — ${e?.message || e}`); }
 }
 
