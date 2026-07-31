@@ -131,8 +131,11 @@ async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg:
     return;
   }
   const date = flightDate || String(f.std || '').slice(0, 10);
-  const toDeparture = (sectorId: string) => navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Departure', params: { sectorId } }] });
-  const toFlightDetails = () => navigation.reset({ index: 1, routes: [{ name: 'Menu' }, { name: 'Sectors', params: { aircraftId: reg } }] });
+  // Push onto the existing stack (Menu → Flight Folder → here) rather than reset — so the ETL back
+  // arrow returns to the EFF Flight Folder the crew came from, while the Menu button still goes to the
+  // ETL main menu. (reset wiped the EFF screen, which sent Back to the ETL menu.)
+  const toDeparture = (sectorId: string) => navigation.navigate('Departure', { sectorId });
+  const toFlightDetails = () => navigation.navigate('Sectors', { aircraftId: reg });
   try {
     // Select the tail. Offline this call can't reach the server — keep whatever tail is already
     // selected rather than aborting; the Sectors/Departure screen still gets the reg via params.
