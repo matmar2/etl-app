@@ -146,7 +146,9 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
       {rows === null ? <ActivityIndicator style={{ marginTop: 30 }} /> : (() => {
         // Group rows under date headers: "Today · 29 Jul", "Tomorrow · 30 Jul", else the date.
         const pad2 = (n: number) => String(n).padStart(2, '0');
-        const iso = (dt: Date) => `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`;
+        // Flights are keyed by their UTC date (Z schedule), so "today/tomorrow" must be UTC too —
+        // otherwise a device behind UTC shows the wrong day as Today (30 Jul local vs 31 Jul UTC).
+        const iso = (dt: Date) => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
         const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const nice = (ds: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ds || ''); return m ? `${+m[3]} ${MON[+m[2] - 1]}` : (ds || ''); };
         const today = iso(new Date()); const tomorrow = iso(new Date(Date.now() + 86400000));
