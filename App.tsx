@@ -80,6 +80,22 @@ export default function App() {
   // its own guard, once the two-iPad trial proves it stable; auto-start can return then.
   useEffect(() => { /* startOnboardSync() intentionally not called at boot */ }, []);
 
+  // One-reopen OTA: expo-updates downloads a new bundle on launch but applies it on the NEXT launch by
+  // default (hence "reopen twice"). Here we check + fetch + reload so a waiting update lands on THIS
+  // launch — a brief reload instead of a second reopen. Native + production only; require() (not a
+  // static top-level import) so an installed binary that somehow lacks it can never native-abort at boot.
+  useEffect(() => {
+    if (__DEV__ || Platform.OS === 'web') return;
+    (async () => {
+      try {
+        const Updates = require('expo-updates');
+        if (!Updates.isEnabled) return;
+        const res = await Updates.checkForUpdateAsync();
+        if (res?.isAvailable) { await Updates.fetchUpdateAsync(); await Updates.reloadAsync(); }
+      } catch { /* offline / already latest / no update — carry on with the current bundle */ }
+    })();
+  }, []);
+
   // Global JS-error handler: report uncaught fatals (that the React boundary can't see — async,
   // native module) to the back office so QA/CAMO get the cause + a recommended corrective action.
   useEffect(() => {

@@ -356,7 +356,7 @@ export default function MainMenuScreen({ navigation }: any) {
           ? `Wait — preparing offline data… ${Math.round(offlineProg.frac * 100)}% (${offlineProg.label})`
           : undefined} />
       {/* aircraft + serviceability hero */}
-      <View style={[styles.hero, { borderColor: st ? (ok ? theme.green : theme.red) : theme.border }]}>
+      <View style={[styles.hero, { borderColor: st ? (ok ? theme.green : theme.red) : theme.border }, pick ? { zIndex: 9999, elevation: 24 } : null] as any}>
         <View style={styles.heroTop}>
           <View>
             <Text style={styles.heroReg}>{reg}</Text>

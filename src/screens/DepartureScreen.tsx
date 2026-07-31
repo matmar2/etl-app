@@ -343,8 +343,11 @@ export default function DepartureScreen({ route, navigation }: any) {
       <SyncBlock visible={syncing} />
       <Text style={sx.title}>Departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
-        <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
+        <Text style={sx.sub}>{s.flight_date ? `${s.flight_date} · ` : ''}STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}
+      {(s.commander_name || s.pf_name) ? (
+        <Text style={sx.sub}>Crew: {s.commander_name || '—'} (Cmdr){s.pf_name && s.pf_name !== s.commander_name ? ` · ${s.pf_name} (PF)` : ''}<EffHint on={isEff('commander_id')} /></Text>
+      ) : null}
       <ClockBanner />
       {msg ? <Text style={sx.msg}>{msg}</Text> : null}
 

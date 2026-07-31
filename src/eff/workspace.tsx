@@ -155,7 +155,7 @@ async function openEtlInApp(f: any, navigation: any, tok: string | null, setMsg:
     // sector here from the briefing's own flight details so it opens directly, pre-filled.
     if (ac) {
       const row: any = await createSector({ aircraft_id: reg, flight_no: flightNo, flight_date: date,
-                                            dep: f.dep, arr: f.arr, std: f.std, source: 'eff' } as any);
+                                            dep: f.dep, arr: f.arr, std: f.std, sta: f.sta, source: 'eff' } as any);
       toDeparture(row.id);
       return;
     }
