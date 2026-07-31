@@ -1159,7 +1159,7 @@ export async function clockOffsetSeconds(): Promise<number | null> {
 }
 
 // Quick "can we reach the server?" probe for the login screen (online vs offline).
-export async function serverReachable(timeoutMs = 4000): Promise<boolean> {
+export async function serverReachable(timeoutMs = 2500): Promise<boolean> {
   // If a real request reached the server in the last 15 s we're definitely online — skip the
   // probe. This stops the pill flipping to OFFLINE when the network is momentarily saturated
   // (e.g. during "Preparing offline data" or an OTA download) and the light probe times out.

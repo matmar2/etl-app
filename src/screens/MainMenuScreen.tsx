@@ -375,7 +375,7 @@ export default function MainMenuScreen({ navigation }: any) {
                 <Text style={[styles.svcTxt, { color: ok ? theme.green : theme.red }]}>{ok ? '● SERVICEABLE' : '▲ UNSERVICEABLE'}</Text>
               </View>
             ) : <Text style={styles.heroType}>checking…</Text>}
-            <View style={{ position: 'relative', zIndex: 50 }}>
+            <View style={{ position: 'relative', zIndex: pick ? 9999 : 50, elevation: pick ? 24 : 0 } as any}>
               <TouchableOpacity style={[styles.acChip, switchOk && styles.acChipTest]} disabled={!switchOk} onPress={() => setPick((p) => !p)}>
                 <Text style={styles.acChipTxt}>{switchOk ? `Switch aircraft  ${pick ? '▴' : '▾'}` : (ac?.type ?? '')}</Text>
               </TouchableOpacity>
