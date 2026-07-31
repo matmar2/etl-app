@@ -16,6 +16,17 @@ export async function getRef<T>(key: string): Promise<{ data: T | null; updatedA
   if (!row) return { data: null, updatedAt: null };
   try { return { data: JSON.parse(row.json), updatedAt: row.updated_at }; } catch { return { data: null, updatedAt: null }; }
 }
+// Enumerate / delete cache keys by SQL LIKE — used to prune EFF folder + doc caches that fall
+// outside the current flight window off the iPad (ref_cache keys aren't otherwise enumerable).
+export async function refKeysLike(like: string): Promise<string[]> {
+  const d = await db();
+  const rows = await d.getAllAsync<{ key: string }>('SELECT key FROM ref_cache WHERE key LIKE ?', like);
+  return rows.map((r) => r.key);
+}
+export async function delRef(key: string): Promise<void> {
+  const d = await db();
+  await d.runAsync('DELETE FROM ref_cache WHERE key = ?', key);
+}
 
 const has = (v: any, q: string) => String(v ?? '').toLowerCase().includes(q);
 

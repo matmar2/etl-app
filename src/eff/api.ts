@@ -2,7 +2,7 @@
 // ETL origin. Token + caches live in ETL's native storage layer via ./storage (SecureStore +
 // SQLite ref_cache) instead of the web trial's localStorage/IndexedDB — OTA-safe, works offline.
 import { Platform } from 'react-native';
-import { blobGet, blobSet, isOnline, isOnlineSync, jsonGet, jsonSet, kvDel, kvGet, kvSet } from './storage';
+import { blobDel, blobDelFull, blobGet, blobGetFull, blobKeysLike, blobSet, isOnline, isOnlineSync, jsonGet, jsonSet, kvDel, kvGet, kvSet } from './storage';
 // Raw ETL SecureStore (UNPREFIXED keys) — the ETL app keeps its own bearer under 'token'. This is
 // deliberately NOT the eff: adapter above (which namespaces every key) so we read ETL's real token.
 import * as ETLSecureStore from '../api/secureStore';
@@ -175,11 +175,26 @@ async function docPut(docId: string, val: any) { try { await blobSet(docId, JSON
 async function docGet(docId: string): Promise<any> {
   try { const s = await blobGet(docId); return s ? JSON.parse(s) : null; } catch { return null; }
 }
-export async function purgeCaches(_validFlightIds: string[]) {
-  // web→native: the web trial pruned IndexedDB/localStorage keys by cursor/regex. The native
-  // store (SecureStore keys aren't enumerable; ref_cache enumeration isn't exposed by the
-  // adapter) has no equivalent primitive, so retention is left to the server /flights window.
-  // No-op here (see M3 for a native ref_cache prune).
+export async function purgeCaches(validFlightIds: string[]) {
+  // Drop every cached folder / nav-log / document for a flight that has fallen OUTSIDE the server's
+  // current window (the /flights list the crew now see) — so on-device flight-plan data never
+  // outlives the window and the cache stays bounded to ~the current days, not the whole history.
+  // ref_cache is SQLite (keys enumerable by prefix); folder/navlog caches are path-keyed by flight
+  // id, and a folder's docs (keyed by docId) are read from the folder JSON before it is deleted.
+  try {
+    const valid = new Set(validFlightIds || []);
+    if (!valid.size) return;
+    const keys = await blobKeysLike('c:/flights/');        // eff:blob:c:/flights/{id}/folder|navlog
+    for (const k of keys) {
+      const m = k.match(/\/flights\/([^/]+)\//);
+      if (!m || valid.has(m[1])) continue;                 // still in the window → keep
+      if (k.endsWith('/folder')) {
+        const raw = await blobGetFull(k);
+        if (raw) { try { for (const doc of (JSON.parse(raw).docs || [])) if (doc?.id) await blobDel(doc.id); } catch {} }
+      }
+      await blobDelFull(k);
+    }
+  } catch { /* best-effort prune */ }
 }
 
 export const login = async (username: string, password: string, otp?: string) => {
