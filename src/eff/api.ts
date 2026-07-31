@@ -140,7 +140,9 @@ export async function api(path: string, init?: RequestInit, _retry = true): Prom
   } catch (e) {
     // Never reached the server. GET → serve the cached copy; mutation → queue for later.
     if (method === 'GET') {
-      const c = await jsonGet<any>('c:' + path);        // web→native: localStorage('effc:'+path) → jsonGet
+      const b = await blobGet('c:' + path);             // SQLite ref_cache — no SecureStore size cap, so the
+      if (b) { try { return JSON.parse(b); } catch {} } // 100+-flight list / big folders survive offline
+      const c = await jsonGet<any>('c:' + path);        // legacy small-payload SecureStore cache (back-compat)
       if (c) return c;
       throw new Error('Offline — this page has not been cached yet');
     }
@@ -161,7 +163,7 @@ export async function api(path: string, init?: RequestInit, _retry = true): Prom
   if (!r.ok) throw new Error((await r.text()).slice(0, 300) || `${r.status}`);
   const data = await r.json();
   if (method === 'GET') {
-    jsonSet('c:' + path, data);                         // web→native: localStorage → jsonGet/Set (docs go to blob below)
+    blobSet('c:' + path, JSON.stringify(data));         // SQLite ref_cache (not SecureStore) — lists/folders can be large
     flushOutbox();
   }
   return data;
