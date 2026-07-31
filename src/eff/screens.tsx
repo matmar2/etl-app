@@ -151,8 +151,9 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
         const iso = (dt: Date) => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
         const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const nice = (ds: string) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ds || ''); return m ? `${+m[3]} ${MON[+m[2] - 1]}` : (ds || ''); };
-        const today = iso(new Date()); const tomorrow = iso(new Date(Date.now() + 86400000));
-        const dayLabel = (ds: string) => ds === today ? `Today · ${nice(ds)}` : ds === tomorrow ? `Tomorrow · ${nice(ds)}` : nice(ds);
+        const today = iso(new Date()); const tomorrow = iso(new Date(Date.now() + 86400000)); const yesterday = iso(new Date(Date.now() - 86400000));
+        const dayLabel = (ds: string) => (ds === today ? `Today · ${nice(ds)}` : ds === yesterday ? `Yesterday · ${nice(ds)}`
+          : ds === tomorrow ? `Tomorrow · ${nice(ds)}` : nice(ds)) + ' UTC';
         const groups: { date: string; items: any[] }[] = [];
         for (const f of shown) { const g = groups.find((x) => x.date === (f.date || '')); if (g) g.items.push(f); else groups.push({ date: f.date || '', items: [f] }); }
         return groups.map((g) => { const isOpen = openDates[g.date] ?? (g.date === today); return (
