@@ -92,6 +92,7 @@ export function LoginScreen({ onDone }: { onDone: (u: any) => void }) {
 export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: any) => void; signOut: () => void }) {
   const [rows, setRows] = useState<any[] | null>(null); const [err, setErr] = useState('');
   const [prep, setPrep] = useState<{ done: number; total: number } | null>(null);   // offline pre-cache progress
+  const [openDates, setOpenDates] = useState<Record<string, boolean>>({});           // per-date collapse (today open by default)
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
   // web→native: localStorage(eff_reg) → SecureStore via the adapter (async, so the persisted tail
@@ -152,10 +153,12 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
         const dayLabel = (ds: string) => ds === today ? `Today · ${nice(ds)}` : ds === tomorrow ? `Tomorrow · ${nice(ds)}` : nice(ds);
         const groups: { date: string; items: any[] }[] = [];
         for (const f of shown) { const g = groups.find((x) => x.date === (f.date || '')); if (g) g.items.push(f); else groups.push({ date: f.date || '', items: [f] }); }
-        return groups.map((g) => (
+        return groups.map((g) => { const isOpen = openDates[g.date] ?? (g.date === today); return (
           <View key={g.date || 'undated'}>
-            <Text style={s.dateHead}>{g.date ? dayLabel(g.date) : 'Date TBA'}</Text>
-            {g.items.map((f) => {
+            <TouchableOpacity onPress={() => setOpenDates((o) => ({ ...o, [g.date]: !isOpen }))} style={{ paddingVertical: 2 }}>
+              <Text style={s.dateHead}>{isOpen ? '▾' : '▸'}  {g.date ? dayLabel(g.date) : 'Date TBA'}  · {g.items.length} flight{g.items.length === 1 ? '' : 's'}</Text>
+            </TouchableOpacity>
+            {isOpen ? g.items.map((f) => {
               const departed = f.std && new Date(f.std) < new Date();
               const [label, bg, fg] = (departed && (f.folder_status === 'empty' || f.folder_status === 'partial'))
                 ? ['DEPARTED · NO FOLDER IN EFF', '#1b2333', '#7d8ba1'] as [string, string, string]
@@ -171,9 +174,9 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
                   <View style={s.pill(bg, fg)}><Text style={{ color: fg, fontSize: 11.5, fontWeight: '700', letterSpacing: 0.4 }}>{label}</Text></View>
                 </Pressable>
               );
-            })}
+            }) : null}
           </View>
-        ));
+        ); });
       })()}
     </ScrollView>
   );
