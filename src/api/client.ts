@@ -219,8 +219,22 @@ export async function prefetchLogbooks(reg?: string): Promise<void> {
   await listClearedCabin(r).catch(() => {});        // closed cabin history — cabin crew review it offline
   await listActiveDefects(r).catch(() => {});
   await listHIL(r).catch(() => {});
-  await listChecks(r).catch(() => {});              // check-record HTML caches lazily on view (avoids a request burst)
-  await signoffsRecent(31, r).catch(() => {});      // Flight Sign Off list + sector Tech-Log/CRS docs for this tail
+  await listChecks(r).catch(() => {});
+  const soDays = await appSettings().then((s) => s.signoff_view_days || 15).catch(() => 15);
+  const so = await signoffsRecent(soDays, r).catch(() => ({ signoffs: [] as SignOff[] }));
+  // Pre-warm each sign-off's printable document so "tap to open" works offline.
+  // ~90 items per tail per month, ~65 KB each ≈ 6 MB — fits SQLite ref_cache comfortably.
+  // Batched in groups of 4 to avoid saturating the network on a flaky connection.
+  const items = (so.signoffs || []).filter((g) => g.sector_id || g.defect_id || g.check_id);
+  for (let i = 0; i < items.length; i += 4) {
+    await Promise.allSettled(items.slice(i, i + 4).map((g) => {
+      if (g.sector_id) return sectorTlHtmlCached(g.sector_id).catch(() => {});
+      if (g.oases_check && g.defect_id) return oasesCheckHtml(g.defect_id).catch(() => {});
+      if (g.defect_id) return defectCrsPreview(g.defect_id).catch(() => {});
+      if (g.check_id) return checkHtml(g.check_id).catch(() => {});
+      return Promise.resolve();
+    }));
+  }
 }
 
 // Offline login: verify the password (cached verifier) and MFA code (cached TOTP
@@ -1120,8 +1134,6 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
     const r: { days: number; signoffs: SignOff[]; categories?: string[] } = await api(`/signoffs/recent?days=${days}${reg ? `&reg=${encodeURIComponent(reg)}` : ''}`);
     setRef(key, r).catch(() => {}); setRef('signoffs', r).catch(() => {});   // per-tail + legacy (SQLite/native)
     _cacheSet(key, r).catch(() => {});                                        // localStorage so the web crew app also works offline
-    // Do NOT bulk-warm every sign-off's CRS document — the full VAW-ETL-01 pages are ~65 KB each
-    // and there can be hundreds (that overflowed storage). CRS docs cache lazily when opened.
     return r;
   } catch {
     let { data } = await getRef<{ days: number; signoffs: SignOff[]; categories?: string[] }>(key);
@@ -1721,7 +1733,7 @@ export async function prepareOffline(reg: string | undefined,
         nextTl(reg).catch(() => {}),
       ]);
     } },
-    { label: 'HIL, Cabin, sign-offs & fuel config', ms: 25000, key: 'tail', run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
+    { label: 'HIL, Cabin, sign-offs & documents', ms: 90000, key: 'tail', run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
     { label: 'Previous-leg fuel', ms: 15000, run: () => prefetchLastFuel() },
     { label: 'User guide & assistant', ms: 20000, key: 'help', run: () => prefetchHelp() },
     { label: 'Route maps', ms: 30000, run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
