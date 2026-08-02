@@ -373,6 +373,7 @@ let _devIdCache: string | null = null;
 async function _devId(): Promise<string> { if (!_devIdCache) _devIdCache = await deviceId(); return _devIdCache; }
 
 let _lastApiOk = 0;   // epoch ms of the last time a request actually reached the server (any status)
+export function lastApiOkMs(): number { return _lastApiOk; }
 
 export async function api(path: string, init: RequestInit = {}) {
   const headers = { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()), ...(init.headers ?? {}) };
@@ -1642,7 +1643,8 @@ export async function flushBroadcastAcks(): Promise<void> {
   await _cacheSet('bcast_ack_queue', left);
 }
 
-export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null };
+export type FeedbackReply = { message: string; by: string; at: string };
+export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null; replies?: FeedbackReply[] };
 // Per-user offline cache: the signed-in user's own feedback + replies survive offline,
 // keyed by login ID so a shared iPad never shows one user's feedback to another.
 export async function myFeedback(): Promise<MyFeedback[]> {

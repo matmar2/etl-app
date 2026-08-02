@@ -32,6 +32,7 @@ import AckOverlay from './src/components/AckOverlay';
 import { SyncBlockHost } from './src/components/SyncBlock';
 import BroadcastGate from './src/components/BroadcastGate';
 import InductionGate from './src/components/InductionGate';
+import MaintenanceOverlay from './src/components/MaintenanceOverlay';
 import SandboxBanner from './src/components/SandboxBanner';
 import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
@@ -200,7 +201,7 @@ export default function App() {
         <Stack.Screen name="Menu" component={MainMenuScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Sectors" component={SectorListScreen} options={{ title: 'Flight Details' }} />
         <Stack.Screen name="Sector" component={SectorWorkspaceScreen} options={{ title: 'Sector' }} />
-        <Stack.Screen name="Departure" component={DepartureScreen} options={{ title: 'Departure' }} />
+        <Stack.Screen name="Departure" component={DepartureScreen} options={{ title: 'Pre-departure' }} />
         <Stack.Screen name="Deicing" component={DeicingScreen} options={{ title: 'De-icing' }} />
         <Stack.Screen name="Arrival" component={ArrivalScreen} options={{ title: 'After Captain Sign off / Departure / Arrival' }} />
         <Stack.Screen name="Defects" component={DefectsScreen} options={{ title: 'Defects' }} />
@@ -221,6 +222,7 @@ export default function App() {
       </Stack.Navigator>
     </NavigationContainer>
     <SyncBlockHost />
+    <MaintenanceOverlay />
     <AckOverlay navRef={navRef} />
     <BroadcastGate />
     <InductionGate />

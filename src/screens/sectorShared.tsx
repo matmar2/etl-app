@@ -14,7 +14,8 @@ export const num = (v: any) => (v === '' || v == null ? null : Number(v));
 // Strip anything that isn't a number from an input value. decimals=true keeps a single '.'
 // (integer fields pass decimals=false). Use in onChangeText so numeric fields reject letters/paste.
 export const numericOnly = (v: string, decimals = true): string => {
-  let s = (v || '').replace(decimals ? /[^0-9.]/g : /[^0-9]/g, '');
+  let s = (v || '').replace(/,/g, '.');             // accept comma as decimal separator
+  s = s.replace(decimals ? /[^0-9.]/g : /[^0-9]/g, '');
   if (decimals) {                                   // keep only the first decimal point
     const i = s.indexOf('.');
     if (i >= 0) s = s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, '');

@@ -119,7 +119,14 @@ export default function FeedbackScreen() {
                 <Text style={s.cardStatus}>{f.status}</Text>
               </View>
               <Text style={s.cardMsg}>{f.message}</Text>
-              {f.reply ? (
+              {(f.replies || []).length > 0 ? (
+                (f.replies || []).map((r, i) => (
+                  <View key={i} style={s.reply}>
+                    <Text style={s.replyHead}>↩ {r.by} · {r.at ? r.at.slice(0, 16).replace('T', ' ') + 'z' : ''}</Text>
+                    <Text style={s.replyMsg}>{r.message}</Text>
+                  </View>
+                ))
+              ) : f.reply ? (
                 <View style={s.reply}>
                   <Text style={s.replyHead}>↩ Reply{f.reply_by ? ` · ${f.reply_by}` : ''}</Text>
                   <Text style={s.replyMsg}>{f.reply}</Text>

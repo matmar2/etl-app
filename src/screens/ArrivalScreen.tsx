@@ -238,6 +238,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Take-off thrust — FLEX assumed temperature (°C) or TOGA. Pilot entry; prints in the
           TL's T/O THRUST box. */}
+      {isVis('takeoff_thrust') ? <>
       <Text style={sx.section}>TO FLEX/TOGA</Text>
       <View style={sx.card}>
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -267,6 +268,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
           ) : null}
         </View>
       </View>
+      </> : null}
       </>) : null}
 
       <Text style={sx.section}>Diversion</Text>
@@ -406,7 +408,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         <Text style={{ color: theme.sub, fontSize: 10, marginTop: 6 }}>{util?.camo ? 'Baseline from OASES' : 'OASES pending — ETL baseline'} · this flight {thisLdgs} cycle(s) (1 landing{Number(ldg.touch_go) > 0 ? ` + ${Number(ldg.touch_go)} touch & go` : ''}) · leg {legFh ?? '—'} h. Posted to CAMO on close.</Text>
       </View>
 
-      {role() !== 'mechanic' ? (<>
+      {role() !== 'mechanic' && isVis('autoland') ? (<>
       <Text style={sx.section}>Autoland</Text>
       <View style={sx.card}>
         <Text style={sx.sub}>Record only when an autoland was flown to touchdown. A manual take-over (aborted autoland) is NOT recorded.</Text>

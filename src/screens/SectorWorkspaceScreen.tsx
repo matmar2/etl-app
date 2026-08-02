@@ -75,7 +75,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
     </View>
   );
 
-  const depDone = !!s.off_block;
+  const depDone = s.status === 'preflight_signed' || !!s.off_block || s.status === 'closed' || s.status === 'exported';
   const arrDone = s.status === 'closed' || !!s.on_block;
   const closed = s.status === 'closed' || s.status === 'exported';
   const isMaint = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';   // ground maintenance log — no flight
@@ -150,9 +150,9 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           whose only task on a sector is reporting cabin defects via the button above). */}
       {!isMaint && access('departure') !== 'none' ? (
       <TouchableOpacity style={[styles.card, { borderColor: depDone ? theme.green : theme.border }]} onPress={() => navigation.navigate('Departure', { sectorId })}>
-        <Text style={styles.cardTitle}>Departure  ›</Text>
-        <Text style={styles.cardSub}>Off-block, fuel, servicing, ice, PIREP defects, commander acceptance</Text>
-        <Text style={styles.cardState}>{depDone ? `Off-block ${hhmm(s.off_block)} · uplift ${s.fuel_uplift_kg ?? '—'} kg` : 'Not started'}</Text>
+        <Text style={styles.cardTitle}>Pre-departure  ›</Text>
+        <Text style={styles.cardSub}>Fuel, servicing, ice, PIREP defects, commander acceptance</Text>
+        <Text style={styles.cardState}>{depDone ? (s.off_block ? `Off-block ${hhmm(s.off_block)} · uplift ${s.fuel_uplift_kg ?? '—'} kg` : 'Accepted') : 'Not started'}</Text>
       </TouchableOpacity>
       ) : null}
 

@@ -305,7 +305,11 @@ export default function DepartureScreen({ route, navigation }: any) {
       if (!(await confirmAction(`Delayed OASES update — TESTING PHASE\n\nUnder normal circumstances the mechanic must confirm these conditions and sign the CRS FIRST:\n\n• ${list}\n\nDuring the testing phase your acceptance is allowed without it. By continuing you sign off accepting the aircraft for this flight.`, 'Testing phase — acceptance allowed'))) return;
     }
     if (testing && !s.released_at && !lagOnly) {
-      if (!(await confirmAction('The maintenance CRS is NOT signed on this Tech Log page.\n\nOnce live, maintenance completes the servicing and signs the CRS first, and the commander accepts on it. During the testing phase you may proceed — by continuing you confirm the CRS is signed and accept the aircraft for this flight.', 'CRS not signed — confirm to proceed'))) return;
+      const bd = acSt?.blocking_defects || 0;
+      const msg = bd > 0
+        ? `There ${bd === 1 ? 'is 1 open defect' : `are ${bd} open defects`} and the maintenance CRS is NOT signed on this Tech Log page.\n\nOnce live, the mechanic must rectify or defer every defect under the MEL and sign the CRS before the commander accepts. During the testing phase you may proceed — by continuing you accept the aircraft for this flight.`
+        : 'The maintenance CRS is NOT signed on this Tech Log page.\n\nOnce live, maintenance completes the servicing and signs the CRS first, and the commander accepts on it. During the testing phase you may proceed — by continuing you confirm the CRS is signed and accept the aircraft for this flight.';
+      if (!(await confirmAction(msg, bd > 0 ? 'Open defects — TESTING PHASE' : 'CRS not signed — confirm to proceed'))) return;
     }
     if (!(await confirmAction('Commander acceptance — I confirm the aircraft is SERVICEABLE: all defects are rectified or properly deferred, all due maintenance tasks and checks are completed, and the fuel and oil onboard are as required. Sign to accept the aircraft for this flight.', 'Commander acceptance'))) return;
     setAcceptSigning(true);   // open the signature pad — the drawn signature completes the acceptance
@@ -349,7 +353,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <SyncBlock visible={syncing} />
-      <Text style={sx.title}>Departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={sx.title}>Pre-departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>{s.flight_date ? `${s.flight_date} · ` : ''}STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}
@@ -664,16 +668,16 @@ export default function DepartureScreen({ route, navigation }: any) {
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel grade / type</Text>
           <TextInput editable={canFuel} style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('fuel_grade') ? 2 : 1, borderColor: badSet.has('fuel_grade') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }} value={fuel.fuel_grade ?? ''} onChangeText={(v) => setFuel({ ...fuel, fuel_grade: v })} placeholder="Jet A-1" placeholderTextColor={theme.sub} />
         </View>
-        <View style={{ width: 170, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel supplier<EffHint on={isEff('fuel_supplier')} /></Text>
+        {isVis('fuel_supplier') ? <View style={{ width: 170, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{fc.fuel_supplier?.label || 'Fuel supplier'}<EffHint on={isEff('fuel_supplier')} /></Text>
           <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_supplier') ? effInputStyle : null]}
             value={fuel.fuel_supplier ?? ''} onChangeText={(v) => { setFuel({ ...fuel, fuel_supplier: v }); pruneEff('fuel_supplier'); }} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
-        </View>
-        <View style={{ width: 140, marginBottom: 10 }}>
-          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Receipt №<EffHint on={isEff('fuel_receipt_no')} /></Text>
+        </View> : null}
+        {isVis('fuel_receipt_no') ? <View style={{ width: 140, marginBottom: 10 }}>
+          <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{fc.fuel_receipt_no?.label || 'Receipt №'}<EffHint on={isEff('fuel_receipt_no')} /></Text>
           <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_receipt_no') ? effInputStyle : null]}
             value={fuel.fuel_receipt_no ?? ''} onChangeText={(v) => { setFuel({ ...fuel, fuel_receipt_no: v }); pruneEff('fuel_receipt_no'); }} placeholder="auto from receipt" placeholderTextColor={theme.sub} />
-        </View>
+        </View> : null}
         {/* In-row, OUTSIDE any pointerEvents lock: viewing the receipt must work for every role;
             write actions stay permission-gated via readOnly. Uploading the photo also reads the
             supplier + receipt № off it server-side and fills the two fields when empty. */}
@@ -918,6 +922,11 @@ export default function DepartureScreen({ route, navigation }: any) {
                   )}
                 </View>
               ) : null}
+              {testing && acSt.blocking_defects > 0 && !allLagReasons(acSt.reasons) ? (
+                <View style={{ borderTopWidth: 1, borderTopColor: theme.border, marginTop: 10, paddingTop: 10 }}>
+                  <Text style={{ color: theme.accent, fontSize: 13, fontWeight: '700' }}>TESTING PHASE — you may sign the Commander acceptance below without clearing defects. You will be prompted to confirm.</Text>
+                </View>
+              ) : null}
               {/* CRS while unserviceable: open defects → locked. Check-lag only (delayed OASES) →
                   clickable: the Release page shows the conditions and takes the certifying staff's
                   DOUBLE confirmation before the CRS (mirror of the captain's note). */}
@@ -968,7 +977,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           ) : null}
           {s.takeoff ? <Text style={[sx.sub, { color: theme.sub, marginTop: 8 }]}>Aircraft airborne — acceptance can no longer be undone.</Text> : null}
         </>
-      ) : (acSt && !acSt.serviceable && !(((s.check_override?.mechanic_by) || lagOnlyR) && acSt.blocking_defects === 0)) ? (
+      ) : (acSt && !acSt.serviceable && !(((s.check_override?.mechanic_by) || lagOnlyR) && acSt.blocking_defects === 0) && !testing) ? (
         <Text style={sx.sub}>Available once the aircraft is serviceable and maintenance has signed the CRS above.</Text>
       ) : (
         <>
