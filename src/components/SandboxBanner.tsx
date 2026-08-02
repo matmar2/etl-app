@@ -3,11 +3,11 @@
 // returns (set in api/client via appRelease). Mounted once in App.tsx, outside the navigator.
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { onSandbox } from '../api/client';
+import { hydrateSandbox, onSandbox } from '../api/client';
 
 export default function SandboxBanner() {
   const [on, setOn] = useState(false);
-  useEffect(() => onSandbox(setOn), []);
+  useEffect(() => { hydrateSandbox(); return onSandbox(setOn); }, []);
   if (!on) return null;
   return (
     <View pointerEvents="none"

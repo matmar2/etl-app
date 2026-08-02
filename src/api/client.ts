@@ -511,6 +511,11 @@ const _sandboxCbs = new Set<(v: boolean) => void>();
 export function isSandbox(): boolean { return _sandbox; }
 export function onSandbox(cb: (v: boolean) => void): () => void { _sandboxCbs.add(cb); cb(_sandbox); return () => { _sandboxCbs.delete(cb); }; }
 function _setSandbox(v: boolean) { if (v !== _sandbox) { _sandbox = v; _sandboxCbs.forEach((f) => f(v)); } }
+// Sandbox flag must survive offline restarts — a non-aircraft iPad launched with no connectivity must
+// still show the SANDBOX banner. Same cache-and-rehydrate pattern as EFF below.
+export async function hydrateSandbox(): Promise<void> {
+  try { const { data } = await getRef<boolean>('sandbox_flag'); if (data != null) _setSandbox(!!data); } catch { /* no cache yet */ }
+}
 
 // EFF (Flight Folder) access — the server decides per user + per device (opt-in allow-lists, never on
 // aircraft iPads). Captured from the same /app/release response so the Main Menu tile can gate on it.
@@ -526,7 +531,9 @@ export async function hydrateEff(): Promise<void> {
 }
 export const appRelease = async (device?: string): Promise<{ revision: string | null; runtime_version?: string; force?: boolean; notes?: string; approved_at?: string; sandbox?: boolean; eff?: boolean }> => {
   const r = await api(`/app/release${device ? `?device=${encodeURIComponent(device)}` : ''}`);
-  _setSandbox(!!(r as any)?.sandbox);
+  const sb = !!(r as any)?.sandbox;
+  _setSandbox(sb);
+  setRef('sandbox_flag', sb).catch(() => {});     // cache for offline (hydrateSandbox at boot)
   const eff = !!(r as any)?.eff;
   _setEff(eff);
   setRef('eff_allowed', eff).catch(() => {});     // cache for offline (hydrateEff at boot)
