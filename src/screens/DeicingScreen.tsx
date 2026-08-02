@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { appSettings } from '../api/client';
 import { theme } from '../theme';
 import { confirmAction } from '../util/confirm';
 import { numericOnly, sx, useSector } from './sectorShared';
+
+type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
 
 const TYPES = ['I', 'II', 'III', 'IV'];
 const STEPS = ['One-step', 'Two-step'];
@@ -11,6 +14,14 @@ export default function DeicingScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
   const { s, save } = useSector(sectorId);
   const [d, setD] = useState<any>({});
+  const [fc, setFc] = useState<FieldConf>({});
+
+  useEffect(() => { appSettings().then((x: any) => {
+    const raw = x.field_config?.deicing;
+    if (raw) setFc(raw);
+  }).catch(() => {}); }, []);
+  const isVis = (k: string) => fc[k]?.visible !== false;
+  const fcLabel = (k: string, def: string) => fc[k]?.label || def;
 
   useEffect(() => { if (s) setD(s.deice || {}); }, [!!s]);
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
@@ -25,13 +36,17 @@ export default function DeicingScreen({ route, navigation }: any) {
     navigation.goBack();
   }
 
-  const F = ({ label, k, placeholder, kb }: any) => (
-    <View style={{ marginTop: 10 }}>
-      <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{label}</Text>
-      <TextInput style={sx2.input} value={d[k] == null ? '' : String(d[k])} onChangeText={(v) => set(k, kb === 'numeric' ? numericOnly(v) : v)}
-        placeholder={placeholder} placeholderTextColor={theme.sub} keyboardType={kb || 'default'} autoCapitalize="characters" />
-    </View>
-  );
+  const F = ({ label, k, placeholder, kb }: any) => {
+    if (!isVis(k)) return null;
+    const lbl = fcLabel(k, label) + (fc[k]?.required ? ' *' : '');
+    return (
+      <View style={{ marginTop: 10 }}>
+        <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{lbl}</Text>
+        <TextInput style={sx2.input} value={d[k] == null ? '' : String(d[k])} onChangeText={(v) => set(k, kb === 'numeric' ? numericOnly(v) : v)}
+          placeholder={placeholder} placeholderTextColor={theme.sub} keyboardType={kb || 'default'} autoCapitalize="characters" />
+      </View>
+    );
+  };
 
   return (
     <ScrollView style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>

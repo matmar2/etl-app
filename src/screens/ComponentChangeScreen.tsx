@@ -1,25 +1,31 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { can, CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
+import { appSettings, can, CcrRow, ccrInventory, ccrReport, CcrStockItem, createCcr, deleteCcr, listCcr, sendCcrReport, updateCcr } from '../api/client';
 import { printHtml } from '../print';
 import BarcodeScanner, { parsePartBarcode } from '../components/BarcodeScanner';
 import RoBanner from '../components/RoBanner';
 import { confirmAction } from '../util/confirm';
 import { theme } from '../theme';
 
-// Component Change Report (CCR) — mirrors the paper tech log component-change grid:
-// № · Description · P/N OFF · P/N ON · S/N OFF · S/N ON, plus position and the installed part's
-// EASA Form 1 / CoC certificate № with a photo of the certificate. Rows are sealed once emailed.
+type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
+
 export default function ComponentChangeScreen({ route }: any) {
   const { defectId, sectorId } = route.params || {};
   const scope = { defectId, sectorId };
-  // Component changes are a CERTIFYING-STAFF (maintenance) record. Others may only view / preview.
   const canEdit = can('defects', 'rectify') || can('maintenance');
   const [rows, setRows] = useState<CcrRow[]>([]);
-  const [editing, setEditing] = useState<CcrRow | null>(null);   // row being edited (id '' = new)
+  const [editing, setEditing] = useState<CcrRow | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [fc, setFc] = useState<FieldConf>({});
+
+  useEffect(() => { appSettings().then((x: any) => {
+    const raw = x.field_config?.ccr;
+    if (raw) setFc(raw);
+  }).catch(() => {}); }, []);
+  const isVis = (k: string) => fc[k]?.visible !== false;
+  const fcLabel = (k: string, def: string) => fc[k]?.label || def;
 
   const load = useCallback(async () => {
     try { const r = await listCcr(scope); setRows(r.items || []); }
@@ -109,12 +115,16 @@ export default function ComponentChangeScreen({ route }: any) {
     finally { setBusy(false); }
   }
 
-  // Plain function (NOT a component) — a nested component would remount its TextInput on every
-  // keystroke and drop the keyboard focus.
-  const F = (k: keyof CcrRow, ph: string, w = 150) => (
-    <TextInput style={[s.input, { width: w }]} value={(editing?.[k] as string) || ''} placeholder={ph} placeholderTextColor={theme.sub}
-      onChangeText={(t) => setEditing((e) => (e ? { ...e, [k]: t } : e))} />
-  );
+  const _FC_MAP: Record<string, string> = { pn_off: 'part_no_off', pn_on: 'part_no_on', sn_off: 'serial_off', sn_on: 'serial_on' };
+  const F = (k: keyof CcrRow, ph: string, w = 150) => {
+    const fk = _FC_MAP[k] || k;
+    if (!isVis(fk)) return null;
+    const lbl = fcLabel(fk, ph) + (fc[fk]?.required ? ' *' : '');
+    return (
+      <TextInput style={[s.input, { width: w }]} value={(editing?.[k] as string) || ''} placeholder={lbl} placeholderTextColor={theme.sub}
+        onChangeText={(t) => setEditing((e) => (e ? { ...e, [k]: t } : e))} />
+    );
+  };
 
   return (
     <ScrollView style={s.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>

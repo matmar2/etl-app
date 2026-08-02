@@ -27,7 +27,8 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const [acceptSigning, setAcceptSigning] = useState(false);   // post-flight acceptance signature pad
   const [showTlp, setShowTlp] = useState(false);
   const [gps, setGps] = useState<{ state: 'idle' | 'checking' | 'ok' | 'far' | 'nogps' | 'error'; km?: number; name?: string; msg?: string }>({ state: 'idle' });
-  const [mand, setMand] = useState<any>({});
+  type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
+  const [fc, setFc] = useState<FieldConf>({});
   const [cabinPending, setCabinPending] = useState<any[]>([]);
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [div, setDiv] = useState<{ on: boolean; airport: string }>({ on: false, airport: '' });
@@ -43,7 +44,13 @@ export default function ArrivalScreen({ route, navigation }: any) {
     setOilArr({ eng1: g('eng1'), eng2: g('eng2') });
   }).catch(() => {}); }, [sectorId]);
   const noteShown = useRef(false);
-  useEffect(() => { appSettings().then((x: any) => setMand(x.mandatory_fields?.arrival || {})).catch(() => {}); }, []);
+  useEffect(() => { appSettings().then((x: any) => {
+    const raw = x.field_config?.arrival;
+    if (raw) { setFc(raw); } else {
+      const mf = x.mandatory_fields?.arrival || {};
+      const d: FieldConf = {}; for (const [k, v] of Object.entries(mf)) d[k] = { visible: true, required: !!v }; setFc(d);
+    }
+  }).catch(() => {}); }, []);
   useEffect(() => { publicConfig().then((c: any) => setTesting(!!c.testing_mode)).catch(() => {}); }, []);
 
   async function checkGps(arr?: string) {
@@ -114,25 +121,22 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const newCsn = oasesCsn != null ? oasesCsn + thisLdgs : null;
 
   const hasV = (v: any) => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
+  const isVis = (k: string) => fc[k]?.visible !== false;
   function computeMissing() {
-    const m = mand || {}; const out: { key: string; label: string; sec: string }[] = [];
-    // force = always required to close a sector (independent of the admin mandatory-field config):
-    // you cannot close on arrival without recording that you landed and are on blocks.
-    const add = (key: string, label: string, sec: string, ok: boolean, force = false) => { if ((force || m[key]) && !ok) out.push({ key, label, sec }); };
+    const out: { key: string; label: string; sec: string }[] = [];
+    const add = (key: string, label: string, sec: string, ok: boolean, force = false) => { if ((force || fc[key]?.required) && !ok) out.push({ key, label: fc[key]?.label || label, sec }); };
     add('arr', 'Arrival airport', 'top', !!s.arr);
     add('off_block', 'OUT (off-block)', 'oooi', !!s.off_block);
     add('takeoff', 'OFF (take-off)', 'oooi', !!s.takeoff);
     add('landing', 'ON (landing)', 'oooi', !!s.landing, true);
     add('on_block', 'IN (on-block)', 'oooi', !!s.on_block, true);
     add('fuel_remaining_kg', 'Remaining fuel', 'fuel', hasV(rem));
-    // Oil quantity on arrival (read 5–30 min after shutdown per AMM) — admin-toggleable
-    // (Settings → Mandatory fields → Arrival → "Oil on arrival"); mandatory by default.
     const lmAttended = role() === 'mechanic' && (() => {
       const ia = tokenIssuedAt(); const sd = s.on_block || s.landing;
       return !!(ia && sd && ia > new Date(sd).getTime());
     })();
-    const oilLm = (m.oil_arrival_lm ?? m.oil_arrival) && lmAttended;      // legacy key → LM knob
-    const oilCrew = m.oil_arrival_crew && (role() === 'captain' || role() === 'pilot');
+    const oilLm = (fc.oil_arrival_lm?.required ?? fc.oil_arrival?.required) && lmAttended;
+    const oilCrew = fc.oil_arrival_crew?.required && (role() === 'captain' || role() === 'pilot');
     if (oilLm || oilCrew) {
       // Oil on arrival binds LINE MAINTENANCE only when the mechanic signed IN to the iPad
       // AFTER engine shutdown (LM attended this arrival). Crew — and a mechanic whose session
@@ -331,7 +335,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
           mechanic at the arrival station can fill it too. Entered in quarts, stored in litres. */}
-      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){(mand?.oil_arrival_lm ?? mand?.oil_arrival) && role() === 'mechanic' ? ' *' : mand?.oil_arrival_crew && role() !== 'mechanic' ? ' *' : ' — optional for crew; required when LM attends the arrival'}</Text>
+      <Text style={sx.section} onLayout={(e) => { secY.current['oil'] = e.nativeEvent.layout.y; }}>Oil quantity on arrival (qt){(fc.oil_arrival_lm?.required ?? fc.oil_arrival?.required) && role() === 'mechanic' ? ' *' : fc.oil_arrival_crew?.required && role() !== 'mechanic' ? ' *' : ' — optional for crew; required when LM attends the arrival'}</Text>
       <View style={sx.card}>
         <Text style={{ color: theme.accent, fontSize: 12, marginBottom: 8 }}>ⓘ Per AMM, read the oil quantity between 5 and 30 minutes after engine shutdown.</Text>
         {!canOilA ? <RoBanner text="oil on arrival is recorded by flight crew or the mechanic at the arrival station" /> : null}

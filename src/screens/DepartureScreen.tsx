@@ -97,7 +97,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [acSt, setAcSt] = useState<AircraftStatus | null>(null);
   const [cabinPending, setCabinPending] = useState<any[]>([]);
   const [depGps, setDepGps] = useState<GpsState>({ state: 'idle' });
-  const [mand, setMand] = useState<any>({});                 // admin mandatory-fields config (departure)
+  type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
+  const [fc, setFc] = useState<FieldConf>({});               // admin field_config (departure page)
   const [badSet, setBadSet] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
@@ -106,7 +107,13 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [ovEnabled, setOvEnabled] = useState(false);     // admin toggle: per-leg commander check-confirmation
   const [ovOpen, setOvOpen] = useState(false);           // conditions list expanded
   const gradeDefRef = useRef('Jet A-1');
-  useEffect(() => { appSettings().then((x: any) => { setMand(x.mandatory_fields?.departure || {}); const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
+  useEffect(() => { appSettings().then((x: any) => {
+    const raw = x.field_config?.departure;
+    if (raw) { setFc(raw); } else {
+      const mf = x.mandatory_fields?.departure || {};
+      const d: FieldConf = {}; for (const [k, v] of Object.entries(mf)) d[k] = { visible: true, required: !!v }; setFc(d);
+    }
+    const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
@@ -253,9 +260,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   }
 
   const hasV = (v: any) => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
+  const isVis = (k: string) => fc[k]?.visible !== false;
   function computeMissing() {
-    const m = mand || {}; const out: { key: string; label: string; sec: string }[] = [];
-    const add = (key: string, label: string, sec: string, ok: boolean) => { if (m[key] && !ok) out.push({ key, label, sec }); };
+    const out: { key: string; label: string; sec: string }[] = [];
+    const add = (key: string, label: string, sec: string, ok: boolean) => { if (fc[key]?.required && !ok) out.push({ key, label: fc[key]?.label || label, sec }); };
     add('dep', 'Departure airport', 'route', !!s.dep);
     add('arr', 'Arrival airport', 'route', !!s.arr);
     add('flight_type', 'Flight type', 'route', !!s.flight_type);

@@ -60,9 +60,14 @@ export default function ReportDefectScreen({ route, navigation }: any) {
 
   useEffect(() => {
     appSettings().then((s) => {
-      let req: string[] = s.defect_required_fields || ['title', 'description', 'ata_chapter'];
-      // Crew feedback 2026-07-22: pilots report the symptom — the ATA chapter is maintenance's
-      // classification, so it is NOT required for flight crew (mechanics keep it).
+      // field_config.defect is the unified source; fall back to defect_required_fields for compat
+      const dfc = s.field_config?.defect;
+      let req: string[];
+      if (dfc) {
+        req = Object.entries(dfc).filter(([, v]: any) => v?.required).map(([k]) => k);
+      } else {
+        req = s.defect_required_fields || ['title', 'description', 'ata_chapter'];
+      }
       if (role() === 'captain' || role() === 'pilot' || role() === 'cabin') req = req.filter((f) => f !== 'ata_chapter');
       setRequired(req);
     }).catch(() => {
