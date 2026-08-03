@@ -1561,13 +1561,11 @@ export async function pendingInduction(): Promise<Induction | null> {
   const ackedVer = await _cacheGet<number>('induction_acked');
   try {
     const r = await api('/induction/pending');
-    if (r && r.role) { await _cacheSet('induction', r); return r; }   // server says: still owed
-    await _cacheSet('induction', null);   // server says acknowledged/none — clear the stale cache so a
-    return null;                          // later offline/blip fallback can NEVER resurrect an old deck
+    if (r && r.role) { await setRef('induction', r).catch(() => {}); return r; }
+    await setRef('induction', null).catch(() => {});
+    return null;
   } catch {
-    // Offline → last cached, but only if NEWER than what was acknowledged (an equal/older cached
-    // version after an ack must never re-show — that caused the repeat welcome on every page).
-    const cached = await _cacheGet<Induction>('induction');
+    const cached = (await getRef<Induction>('induction')).data;
     return cached && Number(cached.version || 0) > Number(ackedVer || 0) ? cached : null;
   }
 }
@@ -1575,22 +1573,23 @@ export async function pendingInduction(): Promise<Induction | null> {
 // tile when false. Offline: treat a previously-cached induction as "exists".
 export async function inductionExists(): Promise<boolean> {
   try { const r = await api('/induction/exists'); return !!r?.exists; }
-  catch { return !!((await _cacheGet<Induction>('induction_view')) || (await _cacheGet<Induction>('induction'))); }
+  catch { return !!((await getRef<Induction>('induction_view')).data || (await getRef<Induction>('induction')).data); }
 }
-export async function viewInduction(role?: string): Promise<Induction | null> {   // re-view on demand (ignores ack); admin/CAMO may preview any role
+export async function viewInduction(role?: string): Promise<Induction | null> {
   const key = role ? `induction_view_${role}` : 'induction_view';
   try {
     const r = await api(`/induction/view${role ? `?role=${encodeURIComponent(role)}` : ''}`);
-    if (r && r.role) { await _cacheSet(key, r); return r; }
+    if (r && r.role) { await setRef(key, r).catch(() => {}); return r; }
     return null;
-  } catch { return (await _cacheGet<Induction>(key)) || (role ? null : (await _cacheGet<Induction>('induction'))) || null; }
+  } catch { return (await getRef<Induction>(key)).data || (role ? null : (await getRef<Induction>('induction')).data) || null; }
+}
+export async function prefetchInduction(): Promise<void> {
+  try { await viewInduction(); } catch { /* best-effort */ }
 }
 export async function ackInduction(version: number): Promise<void> {
-  // Only ever RAISE the local acked marker (acking a stale re-shown deck must not lower it),
-  // and drop the cached deck so the offline fallback can't re-show what was just acknowledged.
   const prev = Number((await _cacheGet<number>('induction_acked')) || 0);
   await _cacheSet('induction_acked', Math.max(prev, Number(version) || 0));
-  await _cacheSet('induction', null);
+  await setRef('induction', null).catch(() => {});
   try { await api('/induction/ack', { method: 'POST', body: JSON.stringify({ version }) }); }
   catch {
     const q = (await _cacheGet<number[]>('induction_ack_queue')) || [];
@@ -1778,6 +1777,7 @@ export async function prepareOffline(reg: string | undefined,
     { label: 'HIL, Cabin, sign-offs & documents', ms: 90000, key: 'tail', run: () => (reg ? prefetchLogbooks(reg) : Promise.resolve()) },
     { label: 'Previous-leg fuel', ms: 15000, run: () => prefetchLastFuel() },
     { label: 'User guide & assistant', ms: 20000, key: 'help', run: () => prefetchHelp() },
+    { label: 'Welcome & Quick Reference', ms: 15000, run: () => prefetchInduction() },
     { label: 'Route maps', ms: 30000, run: async () => { const f = reg ? await leonFlights(reg).catch(() => [] as LeonFlight[]) : []; await cacheRouteMaps(f); } },
   ];
 

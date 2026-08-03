@@ -9,6 +9,7 @@ import { theme } from '../theme';
 const GRACE_MS = 6000;    // wait 6s of continuous unreachability before showing
 const POLL_MS  = 4000;    // poll every 4s (fast enough to dismiss quickly on reconnect)
 const RECENT   = 90_000;  // "recently online" = last successful API call within 90s
+const MAX_MS   = 60_000;  // auto-dismiss after 60s — a real deploy takes <60s; beyond that it's genuine offline
 
 export default function MaintenanceOverlay() {
   const [show, setShow] = useState(false);
@@ -28,9 +29,10 @@ export default function MaintenanceOverlay() {
         offSince.current = 0;
         setShow(false);
       } else if (Date.now() - lastOk < RECENT || offSince.current > 0) {
-        // Server was online recently but isn't now
         if (!offSince.current) offSince.current = Date.now();
-        if (Date.now() - offSince.current >= GRACE_MS) setShow(true);
+        const elapsed = Date.now() - offSince.current;
+        if (elapsed >= GRACE_MS && elapsed < MAX_MS) setShow(true);
+        else if (elapsed >= MAX_MS) { offSince.current = 0; setShow(false); }
       }
     };
 
