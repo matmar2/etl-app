@@ -42,6 +42,7 @@ const Stack = createNativeStackNavigator();
 
 const navRef = createNavigationContainerRef<any>();
 let _lastTrackedScreen = '';
+let _trackTimer: any = null;
 
 export default function App() {
   // Auto sign-out after N minutes of iPad inactivity (configurable in the back office).
@@ -198,12 +199,16 @@ export default function App() {
     <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { resetIdle(); return false; }}>
     <NavigationContainer ref={navRef} onStateChange={() => {
         pollSvc();
-        const route = navRef.getCurrentRoute();
-        if (route && route.name !== 'Login' && route.name !== 'MfaSetup' && route.name !== _lastTrackedScreen) {
-          _lastTrackedScreen = route.name;
-          trackActivity('view', 'screen', route.name, route.name,
-            route.params ? { params: route.params } : undefined);
-        }
+        if (_trackTimer) clearTimeout(_trackTimer);
+        _trackTimer = setTimeout(() => {
+          _trackTimer = null;
+          const route = navRef.getCurrentRoute();
+          if (route && route.name !== 'Login' && route.name !== 'MfaSetup' && route.name !== _lastTrackedScreen) {
+            _lastTrackedScreen = route.name;
+            trackActivity('view', 'screen', route.name, route.name,
+              route.params ? { params: route.params } : undefined);
+          }
+        }, 500);
       }}>
       <Stack.Navigator initialRouteName="Login" screenOptions={headerOpts}>
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />

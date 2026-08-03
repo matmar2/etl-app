@@ -6,6 +6,9 @@ import { db } from './schema';
 // Rows are flushed to /activity/batch on sync and purged immediately after.
 
 const BATCH_SIZE = 200;
+const DEDUP_MS = 2000;
+let _lastKey = '';
+let _lastAt = 0;
 
 export async function trackActivity(
   action: string,
@@ -15,6 +18,11 @@ export async function trackActivity(
   metadata?: Record<string, any>,
 ): Promise<void> {
   try {
+    const key = `${action}:${entityType}:${entityId ?? ''}`;
+    const now = Date.now();
+    if (key === _lastKey && now - _lastAt < DEDUP_MS) return;
+    _lastKey = key;
+    _lastAt = now;
     const d = await db();
     await d.runAsync(
       'INSERT INTO activity_log (action, entity_type, entity_id, screen, metadata, created_at) VALUES (?,?,?,?,?,?)',
