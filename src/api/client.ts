@@ -1203,7 +1203,7 @@ export async function serverReachable(timeoutMs = 2500): Promise<boolean> {
   } catch { return false; }
 }
 
-export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string; voice_confirmations?: boolean; field_config?: Record<string, Record<string, { visible?: boolean; required?: boolean; label?: string }>>; mandatory_fields?: Record<string, Record<string, boolean>> }> =>
+export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string; voice_confirmations?: boolean; voice_languages?: string[]; field_config?: Record<string, Record<string, { visible?: boolean; required?: boolean; label?: string }>>; mandatory_fields?: Record<string, Record<string, boolean>> }> =>
   api('/admin/settings');
 
 export const deleteDefect = (id: string, approvedBy: string, force = false) =>
@@ -1563,7 +1563,7 @@ async function localAssist(question: string): Promise<AssistAnswer> {
 }
 
 // Per-role login induction — cover email + role PPTX (slide images), shown once per user.
-export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[]; slide_narrations?: string[]; voice_enabled?: boolean };
+export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[]; slide_narrations?: string[]; slide_narrations_i18n?: Record<string, string[]>; voice_enabled?: boolean };
 export async function pendingInduction(): Promise<Induction | null> {
   const ackedVer = await _cacheGet<number>('induction_acked');
   try {

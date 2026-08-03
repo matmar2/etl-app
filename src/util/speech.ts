@@ -45,7 +45,7 @@ function splitChunks(text: string): Chunk[] {
   return chunks;
 }
 
-export function speak(text: string, voice: Voice = 'female', onDone?: () => void): void {
+export function speak(text: string, voice: Voice = 'female', onDone?: () => void, lang?: string): void {
   if (!text || !_available) return;
   stop();
   _speaking = true;
@@ -56,9 +56,15 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
 
   if (Platform.OS === 'web') {
     const voices = window.speechSynthesis.getVoices();
-    const preferred = voice === 'female'
-      ? voices.find(v => /samantha|female|zira|karen|moira|tessa/i.test(v.name))
-      : voices.find(v => /daniel|male|david|alex|tom/i.test(v.name));
+    let preferred: SpeechSynthesisVoice | undefined;
+    if (lang) {
+      preferred = voices.find(v => v.lang.startsWith(lang));
+    }
+    if (!preferred) {
+      preferred = voice === 'female'
+        ? voices.find(v => /samantha|female|zira|karen|moira|tessa/i.test(v.name))
+        : voices.find(v => /daniel|male|david|alex|tom/i.test(v.name));
+    }
 
     let idx = 0;
     function speakNext() {
@@ -69,6 +75,7 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
       const u = new SpeechSynthesisUtterance(c.text);
       u.rate = 0.95;
       u.pitch = voice === 'female' ? 1.1 : 0.9;
+      if (lang) u.lang = lang;
       if (preferred) u.voice = preferred;
       u.onend = () => {
         const pause = c.pause;
@@ -91,7 +98,7 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
       }
       const c = chunks[idx];
       _Speech!.speak(c.text, {
-        language: 'en-US',
+        language: lang || 'en-US',
         pitch: voice === 'female' ? 1.1 : 0.85,
         rate: 0.95,
         onDone: () => {

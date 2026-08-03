@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ackInduction, Induction, pendingInduction, role, roleLabel, userName, viewInduction } from '../api/client';
 import { speak, speechAvailable, stop as stopSpeech } from '../util/speech';
+import { getAdminVoiceLanguages, getUserVoiceLang, langLabel, loadUserVoiceLang, setUserVoiceLang, ttsCode } from '../util/voiceConfirm';
 import { theme } from '../theme';
 
 type Phase = 'email' | 'slide' | 'ack';
@@ -32,11 +33,30 @@ export default function InductionGate() {
   const showing = useRef(false);
   const shownVer = useRef<number | null>(null);
 
-  // Voice state — default ON per user request; user can toggle off
+  // Voice state
   const [voice, setVoice] = useState<Voice>('female');
   const [playing, setPlaying] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const voiceOk = speechAvailable();
+
+  // Language state
+  const [lang, setLang] = useState('en');
+  const [langOpen, setLangOpen] = useState(false);
+  useEffect(() => { loadUserVoiceLang().then(setLang); }, []);
+
+  function availLangs(): string[] {
+    const admin = getAdminVoiceLanguages();
+    if (!ind?.slide_narrations_i18n) return admin.includes('en') ? ['en'] : admin;
+    const i18nKeys = Object.keys(ind.slide_narrations_i18n);
+    return admin.filter(c => c === 'en' || i18nKeys.includes(c));
+  }
+
+  function pickLang(code: string) {
+    setLang(code);
+    setUserVoiceLang(code);
+    setLangOpen(false);
+    stopVoice();
+  }
 
   function start(p: Induction, m: 'auto' | 'view', pr?: string | null) {
     showing.current = true; setMode(m); setPhase('email'); setI(0); setAgreed(false); setShowAgain(false);
@@ -48,21 +68,26 @@ export default function InductionGate() {
     try { p = await viewInduction(rl); } catch { /* offline */ }
     if (p && (p.slides?.length || p.email_body)) start(p, 'view', rl);
     else {
-      const msg = 'That Quick Reference isn’t available offline — open it once online to cache it.';
+      const msg = 'That Quick Reference isn\'t available offline — open it once online to cache it.';
       if (Platform.OS === 'web') { if (typeof window !== 'undefined') window.alert(msg); } else Alert.alert('Quick Reference', msg);
     }
   }
   function toRoles() { stopVoice(); setInd(null); setPreviewRole(null); }
-  function close() { stopVoice(); showing.current = false; setInd(null); setChooser(false); setPreviewRole(null); }
+  function close() { stopVoice(); showing.current = false; setInd(null); setChooser(false); setPreviewRole(null); setLangOpen(false); }
 
   // --- Voice controls ---
   function stopVoice() { stopSpeech(); setPlaying(false); }
+  function narrationForSlide(idx: number): string {
+    if (!ind) return '';
+    if (lang !== 'en' && ind.slide_narrations_i18n?.[lang]?.[idx]) return ind.slide_narrations_i18n[lang][idx];
+    return ind.slide_narrations?.[idx] || '';
+  }
   function toggleVoice() {
     if (playing) { stopVoice(); return; }
     const text = voiceText();
     if (!text) return;
     setPlaying(true);
-    speak(text, voice, () => setPlaying(false));
+    speak(text, voice, () => setPlaying(false), ttsCode(lang));
   }
   function voiceText(): string {
     if (!ind) return '';
@@ -73,10 +98,7 @@ export default function InductionGate() {
       const bodyClean = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
       return `${ind.email_subject ? ind.email_subject + '. ' : ''}${greeting} ${bodyClean}`;
     }
-    if (phase === 'slide') {
-      const narr = ind.slide_narrations?.[i];
-      return narr || '';
-    }
+    if (phase === 'slide') return narrationForSlide(i);
     return '';
   }
   // Auto-play voice on phase/slide change or when induction first loads
@@ -91,13 +113,13 @@ export default function InductionGate() {
             const b = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
             return `${ind.email_subject ? ind.email_subject + '. ' : ''}${g} ${b}`;
           })()
-        : phase === 'slide' ? (ind.slide_narrations?.[i] || '') : '';
+        : phase === 'slide' ? narrationForSlide(i) : '';
       if (!raw) return;
       setPlaying(true);
-      speak(raw, voice, () => setPlaying(false));
+      speak(raw, voice, () => setPlaying(false), ttsCode(lang));
     }, 500);
     return () => clearTimeout(t);
-  }, [phase, i, voiceOn, ind]);
+  }, [phase, i, voiceOn, ind, lang]);
 
   useEffect(() => {
     let alive = true;
@@ -159,7 +181,9 @@ export default function InductionGate() {
   const body = (ind!.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
   const showVoice = voiceOk && ind!.voice_enabled && phase !== 'ack';
   const voiceActive = showVoice && voiceOn;
-  const hasNarration = phase === 'slide' && !!(ind!.slide_narrations?.[i]);
+  const hasNarration = phase === 'slide' && !!narrationForSlide(i);
+  const langs = availLangs();
+  const showLangPicker = showVoice && langs.length > 1;
 
   function confirm() {
     if (!agreed) return;
@@ -190,6 +214,23 @@ export default function InductionGate() {
           <View style={s.headerRight}>
             {showVoice ? (
               <View style={s.voiceRow}>
+                {showLangPicker ? (
+                  <View>
+                    <TouchableOpacity onPress={() => setLangOpen(v => !v)} hitSlop={8} style={s.langBtn}>
+                      <Text style={s.langBtnTxt}>{langLabel(lang)}</Text>
+                      <Text style={s.langArrow}>{langOpen ? '▲' : '▼'}</Text>
+                    </TouchableOpacity>
+                    {langOpen ? (
+                      <View style={s.langDrop}>
+                        {langs.map(c => (
+                          <TouchableOpacity key={c} onPress={() => pickLang(c)} style={[s.langItem, c === lang && s.langItemActive]}>
+                            <Text style={[s.langItemTxt, c === lang && s.langItemTxtActive]}>{langLabel(c)}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
                 <TouchableOpacity onPress={() => { stopVoice(); setVoiceOn(v => !v); }} hitSlop={8} style={[s.voiceToggle, voiceOn && s.voiceToggleOn]}>
                   <Text style={s.voiceToggleTxt}>{voiceOn ? '🔊' : '🔇'}</Text>
                 </TouchableOpacity>
@@ -282,6 +323,14 @@ const s = StyleSheet.create({
   voiceBtn: { backgroundColor: theme.accent, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
   voiceBtnActive: { backgroundColor: theme.red },
   voiceBtnTxt: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  langBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.bg, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: theme.accent },
+  langBtnTxt: { color: theme.accent, fontWeight: '700', fontSize: 12 },
+  langArrow: { color: theme.accent, fontSize: 8 },
+  langDrop: { position: 'absolute', top: 32, right: 0, backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 8, minWidth: 140, zIndex: 100, ...Platform.select({ web: { boxShadow: '0 4px 12px rgba(0,0,0,0.4)' } as any, default: { elevation: 8 } }) },
+  langItem: { paddingVertical: 8, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
+  langItemActive: { backgroundColor: theme.accent },
+  langItemTxt: { color: theme.text, fontSize: 13, fontWeight: '600' },
+  langItemTxtActive: { color: '#fff' },
   emailContent: { padding: 22, width: '100%', maxWidth: 760, alignSelf: 'center' },
   logoWrap: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 16, alignSelf: 'flex-start', marginBottom: 16 },
   logo: { width: 200, height: 44 },

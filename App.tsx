@@ -3,7 +3,7 @@ import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Text, View } from 'react-native';
 import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, onAircraftStatus, reportDeviceError, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
-import { setAdminVoiceConfirm, loadUserVoicePref } from './src/util/voiceConfirm';
+import { setAdminVoiceConfirm, setAdminVoiceLanguages, loadUserVoicePref, loadUserVoiceLang } from './src/util/voiceConfirm';
 import { trackActivity } from './src/db/activity';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalScreen from './src/screens/ArrivalScreen';
@@ -65,10 +65,12 @@ export default function App() {
       .then((s) => {
         if (s.auto_logout_minutes) timeoutMs.current = s.auto_logout_minutes * 60 * 1000;
         setAdminVoiceConfirm(s.voice_confirmations !== false);
+        if (s.voice_languages) setAdminVoiceLanguages(s.voice_languages);
       })
       .catch(() => {})
       .finally(resetIdle);
     loadUserVoicePref();
+    loadUserVoiceLang();
     apply();
     const sub = AppState.addEventListener('change', (st) => {
       if (st === 'background' || st === 'inactive') bgAt.current = Date.now();
