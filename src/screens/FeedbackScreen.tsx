@@ -142,7 +142,7 @@ export default function FeedbackScreen() {
             <View key={f.id} style={s.card}>
               <View style={s.cardHead}>
                 <Text style={s.cardCat}>{f.category.toUpperCase()}</Text>
-                <Text style={s.cardStatus}>{f.status}</Text>
+                <View style={s.cardStatusPill}><Text style={s.cardStatusText}>{f.status}</Text></View>
               </View>
               <Text style={s.cardMsg}>{f.message}</Text>
 
@@ -228,7 +228,8 @@ const s = StyleSheet.create({
   card: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 12, marginBottom: 10 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between' },
   cardCat: { color: theme.accent, fontWeight: '800', fontSize: 11 },
-  cardStatus: { color: theme.sub, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  cardStatusPill: { backgroundColor: theme.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2 },
+  cardStatusText: { color: theme.sub, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
   cardMsg: { color: theme.text, fontSize: 14, marginTop: 4 },
   reply: { marginTop: 8, borderLeftWidth: 3, borderLeftColor: theme.green, paddingLeft: 10 },
   replyHead: { color: theme.green, fontWeight: '800', fontSize: 12 },
