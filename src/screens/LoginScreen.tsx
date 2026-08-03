@@ -216,8 +216,8 @@ export default function LoginScreen({ navigation }: any) {
       <Text style={styles.title}>Electronic Tech Log</Text>
       <Text style={styles.sub}>Fly2Sky · Sign in</Text>
       {testing ? <Text style={styles.testing}>{trialNote}</Text> : null}
-      <TextInput style={styles.input} value={u} onChangeText={setU} autoCapitalize="none"
-        placeholder="User ID" placeholderTextColor={theme.sub}
+      <TextInput style={styles.input} value={u} onChangeText={setU} autoCapitalize="none" autoCorrect={false}
+        textContentType="username" placeholder="User ID" placeholderTextColor={theme.sub}
         returnKeyType="next" onSubmitEditing={() => { if (!busy) submit(); }} blurOnSubmit={false} />
       <View style={styles.pwdRow}>
         <TextInput style={styles.pwdInput} value={p} onChangeText={setP} secureTextEntry={!showPwd}
