@@ -152,7 +152,7 @@ export default function FeedbackScreen() {
                     <Text style={[s.replyHead, { color: r.role === 'admin' ? theme.green : theme.accent }]}>
                       {r.role === 'admin' ? '↩' : '→'} {r.by}{r.role === 'admin' ? '' : ' (you)'} · {r.at ? r.at.slice(0, 16).replace('T', ' ') + 'z' : ''}
                     </Text>
-                    <Text style={s.replyMsg}>{r.text}</Text>
+                    <Text style={s.replyMsg}>{r.text || (r as any).message || ''}</Text>
                     {r.attachments && r.attachments.length > 0 ? (
                       <View style={s.attachRow}>
                         {r.attachments.map((a) => (
