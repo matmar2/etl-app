@@ -34,6 +34,7 @@ import { SyncBlockHost } from './src/components/SyncBlock';
 import BroadcastGate from './src/components/BroadcastGate';
 import InductionGate from './src/components/InductionGate';
 import SandboxBanner from './src/components/SandboxBanner';
+import MaintenanceOverlay from './src/components/MaintenanceOverlay';
 import OnlineStatus from './src/components/OnlineStatus';
 import { theme } from './src/theme';
 
@@ -231,7 +232,8 @@ export default function App() {
       </Stack.Navigator>
     </NavigationContainer>
     <SyncBlockHost />
-<AckOverlay navRef={navRef} />
+    <MaintenanceOverlay />
+    <AckOverlay navRef={navRef} />
     <BroadcastGate />
     <InductionGate />
     <SandboxBanner />

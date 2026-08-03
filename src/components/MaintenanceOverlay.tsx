@@ -3,13 +3,26 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { lastApiOkMs, serverReachable } from '../api/client';
 import { theme } from '../theme';
 
-// "Maintenance is going on... hold on..." overlay shown when the API was recently reachable
-// but becomes temporarily unreachable — typical during backend deploys. Auto-dismisses on reconnect.
-// Does NOT show on genuinely-offline sessions (device has never reached the server this session).
-const GRACE_MS = 6000;    // wait 6s of continuous unreachability before showing
-const POLL_MS  = 4000;    // poll every 4s (fast enough to dismiss quickly on reconnect)
-const RECENT   = 90_000;  // "recently online" = last successful API call within 90s
-const MAX_MS   = 60_000;  // auto-dismiss after 60s — a real deploy takes <60s; beyond that it's genuine offline
+// Shown ONLY when the iPad has internet but our server is temporarily unreachable —
+// i.e. a backend deploy is in progress. Does NOT show when the device is genuinely
+// offline (no network). We distinguish by probing Apple's captive-portal URL: if that
+// responds but our API doesn't, the server is in maintenance.
+const GRACE_MS = 8000;
+const POLL_MS  = 5000;
+const RECENT   = 60_000;
+const MAX_MS   = 120_000;
+
+async function hasInternet(): Promise<boolean> {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch('https://captive.apple.com/hotspot-detect.html', {
+      signal: ctl.signal, cache: 'no-store',
+    });
+    clearTimeout(t);
+    return r.ok;
+  } catch { return false; }
+}
 
 export default function MaintenanceOverlay() {
   const [show, setShow] = useState(false);
@@ -30,12 +43,26 @@ export default function MaintenanceOverlay() {
         offSince.current = 0;
         dismissed.current = false;
         setShow(false);
-      } else if (!dismissed.current && (Date.now() - lastOk < RECENT || offSince.current > 0)) {
-        if (!offSince.current) offSince.current = Date.now();
-        const elapsed = Date.now() - offSince.current;
-        if (elapsed >= GRACE_MS && elapsed < MAX_MS) setShow(true);
-        else if (elapsed >= MAX_MS) { dismissed.current = true; setShow(false); }
+        return;
       }
+
+      if (dismissed.current) return;
+      if (Date.now() - lastOk >= RECENT && !offSince.current) return;
+
+      const inet = await hasInternet();
+      if (!alive) return;
+      if (!inet) {
+        // device is offline — not a maintenance scenario
+        offSince.current = 0;
+        setShow(false);
+        return;
+      }
+
+      // device has internet but our server is down → maintenance
+      if (!offSince.current) offSince.current = Date.now();
+      const elapsed = Date.now() - offSince.current;
+      if (elapsed >= GRACE_MS && elapsed < MAX_MS) setShow(true);
+      else if (elapsed >= MAX_MS) { dismissed.current = true; setShow(false); }
     };
 
     const t = setInterval(check, POLL_MS);
@@ -51,7 +78,7 @@ export default function MaintenanceOverlay() {
       onMoveShouldSetResponder={() => true}
     >
       <View style={st.card}>
-        <Text style={st.title}>Maintenance is going on</Text>
+        <Text style={st.title}>Application update in progress</Text>
         <Text style={st.msg}>Hold on — the system will be back shortly.</Text>
         <ProgressBar />
       </View>
