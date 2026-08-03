@@ -1643,7 +1643,8 @@ export async function flushBroadcastAcks(): Promise<void> {
   await _cacheSet('bcast_ack_queue', left);
 }
 
-export type FeedbackReply = { message: string; by: string; at: string };
+export type FeedbackAttachment = { id: string; filename: string; content_type: string; size: number };
+export type FeedbackReply = { text: string; by: string; by_id: string; at: string; role: 'admin' | 'user'; attachments?: FeedbackAttachment[] };
 export type MyFeedback = { id: string; category: string; message: string; status: string; created_at: string; reply?: string | null; reply_by?: string | null; reply_at?: string | null; replies?: FeedbackReply[] };
 // Per-user offline cache: the signed-in user's own feedback + replies survive offline,
 // keyed by login ID so a shared iPad never shows one user's feedback to another.
@@ -1657,6 +1658,10 @@ export async function myFeedback(): Promise<MyFeedback[]> {
     if (e instanceof NetworkError) return (await _cacheGet<MyFeedback[]>(key)) || [];
     throw e;
   }
+}
+
+export async function replyToFeedback(fid: string, text: string): Promise<MyFeedback> {
+  return api(`/feedback/${fid}/replies`, { method: 'POST', body: JSON.stringify({ text }) }) as Promise<MyFeedback>;
 }
 
 // Read-only Tech Log page (what goes to OASES) + matching Leon flight-watch — crew review after close.
@@ -1678,6 +1683,27 @@ export async function flushFeedback() {
   const arr = JSON.parse(raw); const left: any[] = [];
   for (const f of arr) { try { await api('/feedback', { method: 'POST', body: JSON.stringify(f) }); } catch { left.push(f); } }
   await SecureStore.setItem('feedback_queue', JSON.stringify(left));
+}
+
+export async function feedbackUnreadCount(): Promise<number> {
+  const key = `feedback_last_seen_${_username || 'anon'}`;
+  const lastSeen = await SecureStore.getItem(key) || '1970-01-01T00:00:00Z';
+  const items = await myFeedback();
+  let count = 0;
+  for (const f of items) {
+    let unread = false;
+    for (const r of (f.replies || [])) {
+      if (r.role === 'admin' && r.at > lastSeen) { unread = true; break; }
+    }
+    if (!unread && f.reply_at && f.reply_at > lastSeen) unread = true;
+    if (unread) count++;
+  }
+  return count;
+}
+
+export async function feedbackMarkSeen(): Promise<void> {
+  const key = `feedback_last_seen_${_username || 'anon'}`;
+  await SecureStore.setItem(key, new Date().toISOString());
 }
 
 // Warm the offline help cache (guide + FAQ) on login.

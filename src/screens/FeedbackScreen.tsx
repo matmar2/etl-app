@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, authMe, myFeedback, MyFeedback, submitFeedback } from '../api/client';
+import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { appSettings, authMe, feedbackMarkSeen, myFeedback, MyFeedback, replyToFeedback, submitFeedback } from '../api/client';
 import { theme } from '../theme';
 
 const CATS: { key: string; label: string }[] = [
@@ -10,6 +10,16 @@ const CATS: { key: string; label: string }[] = [
   { key: 'question', label: 'Question' },
   { key: 'general', label: 'General' },
 ];
+
+const API_BASE = Platform.OS === 'web'
+  ? (typeof window !== 'undefined' ? (window as any).__ETL_API_BASE || '' : '')
+  : '';
+
+function fmtSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function FeedbackScreen() {
   const [category, setCategory] = useState('suggestion');
@@ -22,10 +32,14 @@ export default function FeedbackScreen() {
   const [emailCopy, setEmailCopy] = useState(true);
   const [routing, setRouting] = useState<{ recipients?: { label: string; email: string; enabled: boolean }[]; default?: string }>({});
   const [dest, setDest] = useState<string>('');
+  const [replyTo, setReplyTo] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [replying, setReplying] = useState(false);
 
   const loadMine = useCallback(() => { myFeedback().then(setMine).catch(() => {}); }, []);
   useFocusEffect(useCallback(() => {
     loadMine();
+    feedbackMarkSeen().catch(() => {});
     authMe().then((m) => { setName(m.name || m.username || ''); setEmail((e) => e || m.email || ''); }).catch(() => {});
     appSettings().then((sx: any) => {
       const r = sx.feedback_routing || {};
@@ -54,6 +68,18 @@ export default function FeedbackScreen() {
     } catch (e: any) {
       setStatus(e.message || 'Could not send.');
     } finally { setBusy(false); }
+  }
+
+  async function sendReply(fid: string) {
+    if (!replyText.trim() || replying) return;
+    setReplying(true);
+    try {
+      await replyToFeedback(fid, replyText.trim());
+      setReplyText(''); setReplyTo(null);
+      loadMine();
+    } catch (e: any) {
+      setStatus(e.message || 'Could not send reply.');
+    } finally { setReplying(false); }
   }
 
   return (
@@ -119,11 +145,27 @@ export default function FeedbackScreen() {
                 <Text style={s.cardStatus}>{f.status}</Text>
               </View>
               <Text style={s.cardMsg}>{f.message}</Text>
+
               {(f.replies || []).length > 0 ? (
                 (f.replies || []).map((r, i) => (
-                  <View key={i} style={s.reply}>
-                    <Text style={s.replyHead}>↩ {r.by} · {r.at ? r.at.slice(0, 16).replace('T', ' ') + 'z' : ''}</Text>
-                    <Text style={s.replyMsg}>{r.message}</Text>
+                  <View key={i} style={[s.reply, { borderLeftColor: r.role === 'admin' ? theme.green : theme.accent }]}>
+                    <Text style={[s.replyHead, { color: r.role === 'admin' ? theme.green : theme.accent }]}>
+                      {r.role === 'admin' ? '↩' : '→'} {r.by}{r.role === 'admin' ? '' : ' (you)'} · {r.at ? r.at.slice(0, 16).replace('T', ' ') + 'z' : ''}
+                    </Text>
+                    <Text style={s.replyMsg}>{r.text}</Text>
+                    {r.attachments && r.attachments.length > 0 ? (
+                      <View style={s.attachRow}>
+                        {r.attachments.map((a) => (
+                          <TouchableOpacity key={a.id} style={s.attachChip} onPress={() => {
+                            if (Platform.OS === 'web') {
+                              window.open(`${API_BASE}/feedback/attachments/${a.id}`, '_blank');
+                            }
+                          }}>
+                            <Text style={s.attachText}>{a.content_type?.startsWith('image/') ? '🖼 ' : '📎 '}{a.filename} ({fmtSize(a.size)})</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
                   </View>
                 ))
               ) : f.reply ? (
@@ -132,6 +174,27 @@ export default function FeedbackScreen() {
                   <Text style={s.replyMsg}>{f.reply}</Text>
                 </View>
               ) : <Text style={s.awaiting}>Awaiting a reply…</Text>}
+
+              {/* Reply form */}
+              {replyTo === f.id ? (
+                <View style={s.replyForm}>
+                  <TextInput style={s.replyInput} value={replyText} onChangeText={setReplyText}
+                    placeholder="Your reply…" placeholderTextColor={theme.sub} multiline textAlignVertical="top" />
+                  <View style={s.replyBtns}>
+                    <TouchableOpacity style={s.replyCancel} onPress={() => { setReplyTo(null); setReplyText(''); }}>
+                      <Text style={s.replyCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[s.replySend, (!replyText.trim() || replying) && { opacity: 0.5 }]}
+                      onPress={() => sendReply(f.id)} disabled={!replyText.trim() || replying}>
+                      <Text style={s.replySendText}>{replying ? 'Sending…' : 'Send'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity style={s.replyBtn} onPress={() => { setReplyTo(f.id); setReplyText(''); }}>
+                  <Text style={s.replyBtnText}>Reply</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </>
@@ -170,5 +233,17 @@ const s = StyleSheet.create({
   reply: { marginTop: 8, borderLeftWidth: 3, borderLeftColor: theme.green, paddingLeft: 10 },
   replyHead: { color: theme.green, fontWeight: '800', fontSize: 12 },
   replyMsg: { color: theme.text, fontSize: 14, marginTop: 2 },
+  attachRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  attachChip: { backgroundColor: theme.bg, borderRadius: 4, paddingHorizontal: 8, paddingVertical: 2 },
+  attachText: { color: theme.sub, fontSize: 12 },
   awaiting: { color: theme.sub, fontSize: 12, marginTop: 8, fontStyle: 'italic' },
+  replyBtn: { marginTop: 8, alignSelf: 'flex-start' },
+  replyBtnText: { color: theme.accent, fontWeight: '700', fontSize: 13 },
+  replyForm: { marginTop: 8 },
+  replyInput: { backgroundColor: theme.bg, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, color: theme.text, fontSize: 14, minHeight: 60 },
+  replyBtns: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 6 },
+  replyCancel: { paddingVertical: 6, paddingHorizontal: 12 },
+  replyCancelText: { color: theme.sub, fontWeight: '600', fontSize: 13 },
+  replySend: { backgroundColor: theme.accent, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
+  replySendText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

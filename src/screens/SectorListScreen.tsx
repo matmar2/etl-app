@@ -85,7 +85,7 @@ export default function SectorListScreen({ route, navigation }: any) {
     .slice(0, displayN);
   // Your-sectors list: default shows today's legs plus anything still in progress (never hide an
   // open sector, even from an earlier day). "List previous flights" switches to the chosen date range.
-  const inProgress = (s: Sector) => !['closed', 'exported'].includes(s.status);
+  const inProgress = (s: Sector) => !['released', 'closed', 'exported'].includes(s.status);
   // Who opened/started the sector (created_by_name lives in the synced payload; local offline-created
   // maintenance logs carry it too). Falls back to null when unknown (e.g. not yet re-pulled).
   const openerName = (s: any): string | null => {
@@ -109,7 +109,7 @@ export default function SectorListScreen({ route, navigation }: any) {
   // A flight may only be opened once the previous FLIGHT leg is closed (one open flight at a time).
   // A ground MAINTENANCE log is independent of flight dispatch, so it never blocks opening a Leon leg.
   const isMaint = (s: Sector) => (s as any).page_kind === 'maintenance_only' || s.flight_no === 'MAINT';
-  const openSector = sectors.find((s) => !isMaint(s) && !['closed', 'exported'].includes(s.status));
+  const openSector = sectors.find((s) => !isMaint(s) && !['released', 'closed', 'exported'].includes(s.status));
   const visibleSectors = (histOpen
     ? sectors.filter((s) => (s.flight_date ?? '') >= histFrom && (s.flight_date ?? '') <= histTo)
     : sectors.filter((s) => s.flight_date === today || inProgress(s)))
@@ -385,7 +385,7 @@ export default function SectorListScreen({ route, navigation }: any) {
         const delta = leonDelta(item);
         const carried = !histOpen && inProgress(item) && (item.flight_date ?? '') < today;   // still-open sector from an earlier day
         const nm = openerName(item);
-        const closed = ['closed', 'exported'].includes(item.status);   // previous flight → view-only
+        const closed = ['released', 'closed', 'exported'].includes(item.status);   // previous flight → view-only
         return (
         <View key={item.id} style={styles.row}>
           <TouchableOpacity style={styles.rowOpen} onPress={() => closed ? viewTechLog(item) : navigation.navigate('Sector', { sectorId: item.id })} onLongPress={() => removeOne(item)}>

@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, feedbackUnreadCount, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -87,6 +87,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const ddRef = useRef<ScrollView>(null);            // Switch-aircraft dropdown scroll ref (up/down arrows)
   const [pick, setPick] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
+  const [fbUnread, setFbUnread] = useState(0);
   const [ver, setVer] = useState<{ revision: string | null; approved_at?: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshedAt, setRefreshedAt] = useState('');
@@ -218,6 +219,7 @@ export default function MainMenuScreen({ navigation }: any) {
       Promise.resolve(loadPermissions()).catch(() => {}),
       Promise.resolve(refreshReference()).catch(() => {}),
       flushFeedback().catch(() => {}),               // send any feedback queued while offline
+      feedbackUnreadCount().then((n) => { if (isAlive()) setFbUnread(n); }).catch(() => {}),
       require('../push').registerPush().catch(() => {}),   // real push (APNs) token — no-op on web/old builds
       deviceId().then((d) => appRelease(d)).then((r) => { if (isAlive()) setVer(r); }).catch(() => {}),
       Promise.resolve().then(() => (Updates.isEnabled ? Updates.checkForUpdateAsync() : null)).catch(() => {}),   // probe; the useUpdates() hook drives the star (available OR downloaded-pending)
@@ -492,6 +494,7 @@ export default function MainMenuScreen({ navigation }: any) {
                     onPress={() => t.key === 'induction' ? openInduction() : (t.nav && navigation.navigate(t.nav, { aircraftId: ac?.registration ?? 'LZ-FSA' }))}>
                     <View style={[styles.iconBox, { backgroundColor: t.tint + '22', borderColor: t.tint + '66' }]}>
                       <Text style={styles.icon}>{t.icon}</Text>
+                      {t.key === 'feedback' && fbUnread > 0 ? <View style={styles.fbBadge}><Text style={styles.fbBadgeTxt}>{fbUnread}</Text></View> : null}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cardTitle}>{t.title}</Text>
@@ -525,6 +528,8 @@ const styles = StyleSheet.create({
   updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },
   updateTxt: { color: theme.onAccent, fontWeight: '800', fontSize: 13 },
   updateBadge: { position: 'absolute', top: -4, right: -4, width: 13, height: 13, borderRadius: 7, backgroundColor: theme.red, borderWidth: 2, borderColor: theme.bg },
+  fbBadge: { position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9, backgroundColor: theme.red, borderWidth: 2, borderColor: theme.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  fbBadgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800', fontVariant: ['tabular-nums'] },
   pendingBar: { backgroundColor: '#B45309', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginTop: 12 },
   pendingBarTxt: { color: '#fff', fontWeight: '700', fontSize: 13, textAlign: 'center' },
   offCard: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.accent, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 12 },
