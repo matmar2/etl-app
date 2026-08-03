@@ -26,7 +26,7 @@ export default function BarcodeScanner(props: {
       <Modal visible={props.visible} animationType="slide" onRequestClose={props.onClose} transparent>
         <View style={[s.center, { backgroundColor: 'rgba(0,0,0,0.75)' }]}>
           <View style={{ backgroundColor: theme.panel, borderRadius: 12, padding: 20, maxWidth: 420 }}>
-            <Text style={s.msg}>Barcode scanning arrives with the next app update (1.0.2) — this build doesn’t include the camera module yet. Type the Part № / Serial № manually for now.</Text>
+            <Text style={s.msg}>This build does not include the camera module — update the app to use barcode scanning. Type the Part № / Serial № manually for now.</Text>
             <TouchableOpacity style={s.btn} onPress={props.onClose}><Text style={s.btnT}>Close</Text></TouchableOpacity>
           </View>
         </View>

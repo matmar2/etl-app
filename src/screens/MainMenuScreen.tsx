@@ -10,7 +10,7 @@ import DeviceRegisterGate from '../components/DeviceRegisterGate';
 import OnlineStatus from '../components/OnlineStatus';
 import { pokeBroadcasts } from '../components/BroadcastGate';
 import { openInduction, pokeInduction } from '../components/InductionGate';
-import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, feedbackUnreadCount, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, feedbackUnreadCount, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, scheduledAircraft, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
@@ -84,6 +84,7 @@ export default function MainMenuScreen({ navigation }: any) {
   const [hasInduction, setHasInduction] = useState<boolean | null>(null);   // null = unknown (show); false = hide the tile (admin/CAMO)
   const [ac, setAc] = useState<Fleet | null>(currentAircraft());
   const [fleet, setFleet] = useState<Fleet[]>([]);
+  const [schedRegs, setSchedRegs] = useState<Set<string> | null>(null);
   const ddRef = useRef<ScrollView>(null);            // Switch-aircraft dropdown scroll ref (up/down arrows)
   const [pick, setPick] = useState(false);
   const [counts, setCounts] = useState<Record<string, string>>({});
@@ -212,6 +213,7 @@ export default function MainMenuScreen({ navigation }: any) {
     pokeBroadcasts();                                // check for admin pop-ups now (immediate on login)
     pokeInduction();                                 // check for the role induction (email + PPTX) on login
     inductionExists().then((v) => { if (isAlive()) setHasInduction(v); }).catch(() => {});   // hide the tile for roles with no induction (admin/CAMO)
+    scheduledAircraft().then((regs) => { if (isAlive()) setSchedRegs(regs.length ? new Set(regs) : null); }).catch(() => {});
     const jobs: Promise<any>[] = [
       flushBroadcastAcks().catch(() => {}),          // send any broadcast acks made while offline
       flushInductionAcks().catch(() => {}),          // send any induction acks made while offline
@@ -396,12 +398,24 @@ export default function MainMenuScreen({ navigation }: any) {
                     </TouchableOpacity>
                   ) : null}
                   <ScrollView ref={ddRef} style={{ maxHeight: ddMax }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator nestedScrollEnabled>
-                    {fleet.map((a) => (
-                      <TouchableOpacity key={a.registration} style={[styles.ddRow, a.registration === reg && styles.ddRowOn]} onPress={() => choose(a)}>
-                        <Text style={styles.ddReg}>{a.registration}</Text>
-                        <Text style={styles.ddSub}>{a.type}{a.msn ? ` · MSN ${a.msn}` : ''}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {(() => {
+                      const sorted = schedRegs
+                        ? [...fleet].sort((a, b) => {
+                            const aS = schedRegs.has(a.registration) ? 0 : 1;
+                            const bS = schedRegs.has(b.registration) ? 0 : 1;
+                            return aS - bS || a.registration.localeCompare(b.registration);
+                          })
+                        : fleet;
+                      return sorted.map((a) => {
+                        const sched = !schedRegs || schedRegs.has(a.registration);
+                        return (
+                          <TouchableOpacity key={a.registration} style={[styles.ddRow, a.registration === reg && styles.ddRowOn, !sched && { opacity: 0.4 }]} onPress={() => choose(a)}>
+                            <Text style={styles.ddReg}>{a.registration}</Text>
+                            <Text style={styles.ddSub}>{a.type}{a.msn ? ` · MSN ${a.msn}` : ''}{sched ? '' : ' · no schedule'}</Text>
+                          </TouchableOpacity>
+                        );
+                      });
+                    })()}
                   </ScrollView>
                   {scrollable ? (
                     <TouchableOpacity style={styles.ddArrow} onPress={() => ddRef.current?.scrollToEnd({ animated: true })}>

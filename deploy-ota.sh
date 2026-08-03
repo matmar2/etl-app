@@ -17,7 +17,7 @@ cd "$(dirname "$0")"
 # crash-loops and expo-updates rolls back to the embedded bundle. Risky libs may only be loaded
 # behind a requireOptionalNativeModule() registry check. Extend RISKY_LIBS when adding a new
 # native module; remove an entry only when the MINIMUM installed fleet binary includes it.
-RISKY_LIBS="expo-camera expo-notifications"
+RISKY_LIBS="expo-camera expo-notifications expo-speech"
 for lib in $RISKY_LIBS; do
   if grep -rnE "^[[:space:]]*import[^;]* from ['\"]$lib" src App.tsx 2>/dev/null; then
     echo "✗ OTA BLOCKED: static import of '$lib' found (native-abort risk on older binaries)."
@@ -29,6 +29,8 @@ grep -q "requireOptionalNativeModule('ExpoCamera')" src/components/BarcodeScanne
   || { echo "✗ OTA BLOCKED: BarcodeScanner.tsx lost its native-registry guard."; exit 1; }
 grep -q "requireOptionalNativeModule('ExpoPushTokenManager')" src/push.ts \
   || { echo "✗ OTA BLOCKED: push.ts lost its native-registry guard."; exit 1; }
+grep -q "requireOptionalNativeModule('ExpoSpeech')" src/util/speech.ts \
+  || { echo "✗ OTA BLOCKED: speech.ts lost its native-registry guard."; exit 1; }
 echo "✓ native-import gate passed (risky libs registry-gated)"
 
 # Same rule as deploy-web.sh: use the monorepo HEAD sha iff its app/ subtree == our app tree.

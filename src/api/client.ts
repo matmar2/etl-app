@@ -571,6 +571,10 @@ export type LeonFlight = {
 };
 export const leonFlights = (reg: string): Promise<LeonFlight[]> =>
   api(`/leon/flights?reg=${encodeURIComponent(reg)}`);
+export async function scheduledAircraft(): Promise<string[]> {
+  try { const r = await api('/leon/scheduled-aircraft'); return r.registrations || []; }
+  catch { return []; }
+}
 // Past Leon flights for a tail in a date window (YYYY-MM-DD) — for "List previous flights".
 // Live Leon query (online only); returns [] on error so the ETL history still renders.
 export async function leonHistory(reg: string, start: string, end: string): Promise<LeonFlight[]> {
@@ -1559,7 +1563,7 @@ async function localAssist(question: string): Promise<AssistAnswer> {
 }
 
 // Per-role login induction — cover email + role PPTX (slide images), shown once per user.
-export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[] };
+export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[]; slide_narrations?: string[]; voice_enabled?: boolean };
 export async function pendingInduction(): Promise<Induction | null> {
   const ackedVer = await _cacheGet<number>('induction_acked');
   try {
