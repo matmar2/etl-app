@@ -224,7 +224,7 @@ export default function App() {
         <Stack.Screen name="ReportDefect" component={ReportDefectScreen} options={{ title: 'Report defect' }} />
         <Stack.Screen name="ComponentChange" component={ComponentChangeScreen} options={{ title: 'Component Change (CCR)' }} />
         <Stack.Screen name="Release" component={ReleaseScreen} options={{ title: 'Release & Print' }} />
-        <Stack.Screen name="Planned" component={PlannedMaintenanceScreen} options={{ title: 'Planned Maintenance' }} />
+        <Stack.Screen name="Planned" component={PlannedMaintenanceScreen} options={{ title: '2/10-Day Checks' }} />
         <Stack.Screen name="Maintenance" component={MaintenanceScreen} options={{ title: 'Ground Maintenance' }} />
         <Stack.Screen name="Documents" component={DocumentsScreen} options={{ title: 'Documents' }} />
         <Stack.Screen name="Forms" component={FormsScreen} options={{ title: 'Forms' }} />
