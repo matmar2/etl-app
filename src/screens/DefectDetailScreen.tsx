@@ -12,6 +12,7 @@ import HilRemaining from '../components/HilRemaining';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 const INTERVALS = ['A', 'B', 'C', 'D'];
@@ -146,6 +147,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r = await addDefectAction(defectId, a);
       if (r?.queued) { await appendLocalDefectAction(defectId, a); setMsg('Saved offline — will sync ✓'); }
       else setMsg('Done ✓');
+      trackActivity(kind, 'defect', defectId, 'DefectDetail', { title: d?.title });
       setNarr(''); load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
@@ -154,6 +156,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r = await closeDefect(defectId);
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'close' }, { status: 'closed' }); setMsg('Closed offline — will sync ✓'); }
       else setMsg('Closed ✓');
+      trackActivity('close', 'defect', defectId, 'DefectDetail', { title: d?.title });
       load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
@@ -197,6 +200,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r = await workSigned(defectId, { narrative: narr, licence_no: lic.trim() || undefined, signature_image: signature, otp: workOtp.trim() || undefined });
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'work_completed', narrative: narr }, { status: 'work_done' }); setMsg('Work signed offline — will sync ✓'); }
       else setMsg('Work signed on the Tech Log — CRS pending ✓');
+      trackActivity('sign', 'work', defectId, 'DefectDetail', { title: d?.title });
       setWorkOtp(''); setWorkNeedOtp(false); setWorkRetrySig(null); load();
     } catch (e: any) {
       if (e instanceof MfaRequired) { setWorkRetrySig(signature); setWorkNeedOtp(true); setMsg('Enter your authenticator code to sign the Tech Log.'); }
@@ -213,6 +217,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         licence_no: lic.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined });
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind, narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
       else setMsg('Rectified + CRS issued ✓');
+      trackActivity('sign', 'crs', defectId, 'DefectDetail', { title: d?.title, kind });
       setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); load();
       offerChain();   // same-TL# chaining: claim this item on the open ground log + offer the next
     } catch (e: any) {
@@ -251,6 +256,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r = await addDefectAction(defectId, a);
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'double_inspection', narrative: `Double inspection · ${diName.trim()}` }); setMsg('Double inspection saved offline — will sync ✓'); }
       else setMsg('Double inspection recorded ✓');
+      trackActivity('sign', 'double_inspection', defectId, 'DefectDetail', { title: d?.title });
       setDiOpen(false); setDiName(''); setDiLic(''); load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
@@ -260,6 +266,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r: any = await reverseRectification(defectId);
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'reverse' }, { status: 'open' }); setMsg('Reversal saved offline — will sync'); }
       else setMsg('Rectification reversed — defect re-opened');
+      trackActivity('reverse', 'crs', defectId, 'DefectDetail', { title: d?.title });
       load();
     }
     catch (e: any) { setMsg(e?.message?.includes('409') ? 'Cannot reverse — defect is closed' : `Failed: ${e.message}`); }
@@ -276,6 +283,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
             const r = await acceptDispatch(defectId, ok);
             if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'dispatch', dispatchable: ok }); setMsg('Saved offline — will sync ✓'); }
             else setMsg(ok ? 'Accepted as dispatchable ✓' : 'Marked not dispatchable');
+            trackActivity('dispatch', 'defect', defectId, 'DefectDetail', { ok, title: d?.title });
             load();
           }
           catch (e: any) { setMsg(`Failed: ${e.message}`); }
@@ -291,6 +299,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       const r = await setAirworthiness(defectId, aw);
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind: 'airworthiness', airworthiness: aw }); setMsg('Saved offline — will sync ✓'); }
       else setMsg(aw ? 'Airworthiness-related — aircraft AOG' : 'Not airworthiness — commander to decide');
+      trackActivity('assess', 'airworthiness', defectId, 'DefectDetail', { airworthy: aw, title: d?.title });
       load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }

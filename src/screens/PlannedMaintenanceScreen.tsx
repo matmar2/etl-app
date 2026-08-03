@@ -7,6 +7,7 @@ import OfflineFlash from '../components/OfflineFlash';
 import { printHtml, shareHtml } from '../print';
 import SignaturePad from '../components/SignaturePad';
 import { confirmAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { clearCheckDraft, loadCheckDraft, saveCheckDraft } from '../db/checkDraft';
 import { theme } from '../theme';
 
@@ -52,7 +53,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
 
   async function doneTask(t: MaintTask) {
     if (!(await confirmAction(`Mark "${t.title}" as completed?`, 'Complete task'))) return;
-    try { await completeMaintTask(t.id, { signer_name: signer.trim() || undefined, tlb_no: tlb.trim() || undefined }); setMsg(`Task completed ✓`); loadRecent(); }
+    try { await completeMaintTask(t.id, { signer_name: signer.trim() || undefined, tlb_no: tlb.trim() || undefined }); trackActivity('complete', 'maint_task', t.id, 'PlannedMaintenance', { title: t.title, reg }); setMsg(`Task completed ✓`); loadRecent(); }
     catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
   useEffect(() => { loadRecent(); }, [reg, doneId]);
@@ -147,6 +148,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
         ? await amendCheck(reg, amendingId, { ...body, reason: amendReason.trim() })
         : await completeCheck(reg, kind, body);
       const wasQueued = !!(r as any).queued;
+      trackActivity('sign', 'check', r.id, 'PlannedMaintenance', { kind, reg, amend: wasAmend });
       setQueued(wasQueued); setDoneId(r.id); setAmendingId(null); setAmendReason('');
       clearCheckDraft(reg, kind).catch(() => {});   // signed — drop the resume draft
       setState({}); setInspSigner(''); setInspLicence(''); setInspSig('');

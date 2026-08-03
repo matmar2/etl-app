@@ -10,6 +10,7 @@ import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps } from '../util/geo';
+import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
@@ -174,6 +175,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       }
       const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId, signature_image: signature });
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
+      trackActivity('sign', 'postflight', sectorId, 'Arrival', { flight: s.flight_no, queued: !!r?.queued });
       setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
     } catch (e: any) {
       const em = e?.message || '';
@@ -332,7 +334,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
               keyboardType="decimal-pad" value={rem == null ? '' : String(rem)} onChangeText={(v) => { setRem(numericOnly(v)); pruneEff('fuel_remaining_kg'); }} />
           </View>
         </View>
-        <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) save({ fuel_remaining_kg: num(rem) }); }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>
+        <TouchableOpacity style={[sx.save, { marginTop: 4 }, (!effDep || !canFuelA) && { opacity: 0.4 }]} disabled={!effDep || !canFuelA} onPress={async () => { if (await confirmAction('Save arrival fuel?')) { save({ fuel_remaining_kg: num(rem) }); trackActivity('save', 'fuel', sectorId, 'Arrival', { flight: s.flight_no, fuel_remaining_kg: num(rem) }); } }}><Text style={sx.saveText}>Save fuel on arrival</Text></TouchableOpacity>
       </View>
 
       {/* Oil quantity on arrival — read 5–30 min after engine shutdown (AMM). Pilots record it; a
@@ -437,7 +439,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
         this_flight_ldgs: thisLdgs, ldgs_fwd: (oasesCsn || 0) + thisLdgs,
         tsn_before: oasesTsn, tsn_fwd: newTsn,
         autoland_ok: ldg.autoland === 'ok', autoland_notes: ldg.autoland === 'fail' ? (ldg.autoland_notes || '').trim() : null,
-      }); }}><Text style={sx.saveText}>Save landings</Text></TouchableOpacity>
+      }); trackActivity('save', 'landings', sectorId, 'Arrival', { flight: s.flight_no, ldgs: thisLdgs }); }}><Text style={sx.saveText}>Save landings</Text></TouchableOpacity>
 
       <Text style={sx.section}>Defects on arrival ({role() === 'mechanic' ? 'MAREP' : 'PIREP'})</Text>
       <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>

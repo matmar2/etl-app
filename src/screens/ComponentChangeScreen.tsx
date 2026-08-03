@@ -6,6 +6,7 @@ import { printHtml } from '../print';
 import BarcodeScanner, { parsePartBarcode } from '../components/BarcodeScanner';
 import RoBanner from '../components/RoBanner';
 import { confirmAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
@@ -92,6 +93,7 @@ export default function ComponentChangeScreen({ route }: any) {
         pn_off: editing.pn_off, sn_off: editing.sn_off, pn_on: editing.pn_on, sn_on: editing.sn_on,
         cert_no: editing.cert_no, cert_photo: certPhoto || undefined };
       if (editing.id) await updateCcr(editing.id, body); else await createCcr(body);
+      trackActivity('save', 'ccr', editing.id || 'new', 'ComponentChange', { description: editing.description, pn_on: editing.pn_on });
       setEditing(null); setCertPhoto(null); await load();
     } catch (e: any) { setMsg(e?.message || 'Save failed.'); }
     finally { setBusy(false); }
@@ -110,7 +112,7 @@ export default function ComponentChangeScreen({ route }: any) {
   async function send() {
     if (!(await confirmAction('Email the Component Change Report (with certificate photos) to the configured recipients?\n\nAfter sending, the rows are sealed.', 'Send report'))) return;
     setBusy(true); setMsg('');
-    try { const r = await sendCcrReport(scope); setMsg(`✓ Sent to ${r.sent_to.join(', ')}`); await load(); }
+    try { const r = await sendCcrReport(scope); trackActivity('send', 'ccr_report', sectorId || defectId, 'ComponentChange'); setMsg(`✓ Sent to ${r.sent_to.join(', ')}`); await load(); }
     catch (e: any) { setMsg(e?.message || 'Send failed.'); }
     finally { setBusy(false); }
   }

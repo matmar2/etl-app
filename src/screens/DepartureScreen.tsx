@@ -12,6 +12,7 @@ import SignatureBlock from '../components/SignatureBlock';
 import WalkaroundModal from '../components/WalkaroundModal';
 import { confirmAction, notifyAction } from '../util/confirm';
 import { checkAirportGps, GpsState } from '../util/geo';
+import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
@@ -321,6 +322,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       // so the completed sector prints its full TL # even before it syncs.
       if (!s.page_no) { const n = await allocateTl(currentAircraft()?.registration || s.aircraft_id); if (n) await save({ page_no: n }); }
       const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
+      trackActivity('sign', 'preflight', sectorId, 'Departure', { flight: s.flight_no, queued: !!r?.queued });
       setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
     }
     catch (e: any) {
@@ -346,7 +348,7 @@ export default function DepartureScreen({ route, navigation }: any) {
 
   async function undoAccept() {
     if (!(await confirmAction('Undo the commander acceptance for this departure?', 'Undo acceptance'))) return;
-    try { await revokeAcceptance(sectorId); setSignMsg('Acceptance undone'); refresh(); }
+    try { await revokeAcceptance(sectorId); trackActivity('revoke', 'preflight', sectorId, 'Departure', { flight: s.flight_no }); setSignMsg('Acceptance undone'); refresh(); }
     catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot undo — flight is airborne' : (e.message || 'Failed')); }
   }
 
@@ -413,6 +415,7 @@ export default function DepartureScreen({ route, navigation }: any) {
               if (!(await confirmAction('Save the route?'))) return;
             }
             save({ flight_no: newFlt || null, dep: newDep || null, arr: newArr || null });
+            trackActivity('save', 'route', sectorId, 'Departure', { flight: newFlt, dep: newDep, arr: newArr });
           }}><Text style={sx.saveText}>Save route</Text></TouchableOpacity>
         </>
       ) : null}
@@ -731,6 +734,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         if (!(await confirmAction('Save departure fuel figures?'))) return;
         const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier || null, fuel_receipt_no: fuel.fuel_receipt_no || null, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
         tanks.forEach((t) => (p[t.field] = num(fuel[t.field]))); save(p);
+        trackActivity('save', 'fuel', sectorId, 'Departure', { flight: s.flight_no, dep_fuel_kg: depEff });
       }}><Text style={sx.saveText}>Save departure fuel</Text></TouchableOpacity> : null}
       </View>
       </View>

@@ -8,6 +8,7 @@ import AmmPicker from '../components/AmmPicker';
 import SignaturePad from '../components/SignaturePad';
 import { createDefect } from '../db/defects';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 const REQ_LABEL: Record<string, string> = { title: 'System / Title', description: 'Defect description', ata_chapter: 'ATA chapter', reporter_licence: 'Licence / auth no.' };
@@ -105,6 +106,7 @@ export default function ReportDefectScreen({ route, navigation }: any) {
         reported_by_name: licRequired ? undefined : (repName.trim() || undefined),
         mel_ref: melRef, rect_interval: rectInterval, due_date: dueDate,
       });
+      trackActivity('raise', 'defect', sectorId, 'ReportDefect', { title: title.trim(), source, blocks, cabin });
       syncPush().catch(() => {});
       navigation.goBack();
     } finally { setBusy(false); }

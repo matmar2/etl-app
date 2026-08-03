@@ -10,6 +10,7 @@ import RoBanner from '../components/RoBanner';
 import AmmPicker from '../components/AmmPicker';
 import HilRemaining from '../components/HilRemaining';
 import { confirmAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 export default function MaintenanceScreen({ route, navigation }: any) {
@@ -79,6 +80,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
         const r = await createLocalMaintenance(reg, st, wo.trim() || undefined, note.trim() || undefined, userName() ?? undefined);   // offline → local log, TL# assigned on sync
         id = r.id;
       }
+      trackActivity('open', 'maintenance_log', id, 'Maintenance', { reg, station: st, resumed });
       navigation.navigate('Release', { sectorId: id, resumed });     // work defects + issue CRS
     } catch (e: any) { setMsg(e.message || 'Could not open the maintenance log.'); }
     finally { setBusy(false); }
@@ -89,6 +91,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     setExtBad(false); setMsg('');
     try {
       await extendDefect(id, { due_date: extDate, narrative: extNote.trim() || `Deferral extended to ${extDate}` });
+      trackActivity('extend', 'defect', id, 'Maintenance', { due_date: extDate });
       setExtId(null); setExtDate(''); setExtNote(''); load();
     } catch (e: any) { setMsg(e.message || 'Could not save the extension.'); }
   }
@@ -98,7 +101,7 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     if (!(await confirmAction(`Discard ${label}?\n\nIt was opened but not signed — this removes it entirely, including any draft work order and component-change entries on it.`, 'Discard Tech Log'))) return;
     if (!(await confirmAction('Confirm once more — permanently delete this Tech Log? This cannot be undone.', 'Confirm delete'))) return;
     setMsg('');
-    try { await deleteSector(id); load(); }
+    try { await deleteSector(id); trackActivity('discard', 'techlog', id, 'Maintenance'); load(); }
     catch (e: any) {
       setMsg(/409|released|signed|closed/i.test(e?.message || '')
         ? 'This Tech Log is already signed/closed and can no longer be discarded — ask the back office.'

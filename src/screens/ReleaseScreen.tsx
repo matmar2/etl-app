@@ -16,6 +16,7 @@ import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
 import { ammIawLine } from '../api/client';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 // Assemble the TL from the server, or fall back to the local cache when offline.
@@ -95,6 +96,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
     try {
       const r: any = await saveMaintWork(sectorId, { work_performed: workDone, wo_ref: woRef });
       setWorkSaved(workDone); setWoSaved(woRef);
+      trackActivity('save', 'work_order', sectorId, 'Release', { wo_ref: woRef });
       setMsg(r?.queued ? 'Work saved offline — will sync ✓' : 'Work order saved ✓');
     } catch (e: any) { setMsg(`Could not save: ${e.message}`); }
   }
@@ -144,7 +146,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   async function discardTL() {
     if (!(await confirmAction('Discard this maintenance Tech Log?\n\nIt was opened but not signed — this removes it entirely, including any draft work order, ticked items and component-change entries on it.', 'Discard Tech Log'))) return;
     if (!(await confirmAction('Confirm once more — permanently delete this Tech Log? This cannot be undone.', 'Confirm delete'))) return;
-    try { await deleteSector(sectorId); navigation.goBack(); }
+    try { await deleteSector(sectorId); trackActivity('discard', 'techlog', sectorId, 'Release'); navigation.goBack(); }
     catch (e: any) {
       setMsg(/409|released|signed|closed/i.test(e?.message || '')
         ? 'This Tech Log is already signed/closed and can no longer be discarded — request a CRS reset or ask the back office.'
@@ -155,6 +157,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
     if (!corr.reason.trim()) { setMsg('Enter a reason for the correction.'); return; }
     try {
       await raiseCorrection(sectorId, { field: corr.field.trim() || undefined, new_value: corr.new_value.trim() || undefined, reason: corr.reason.trim() });
+      trackActivity('raise', 'correction', sectorId, 'Release', { field: corr.field.trim() });
       setCorr({ field: '', new_value: '', reason: '' }); setShowCorr(false); setMsg('Correction raised ✓'); load();
     } catch (e: any) { setMsg(`Failed: ${e.message}`); }
   }
@@ -186,6 +189,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
     setBusy(true); setMsg('');
     try {
       const r: any = await revokeRelease(sectorId);
+      trackActivity('reset', 'crs', sectorId, 'Release');
       setMsg(r?.acceptance_voided ? 'CRS reset — commander acceptance voided; they must approve again.' : 'CRS reset — make your changes and sign again.');
       load();
     } catch (e: any) {
@@ -203,6 +207,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
         licence_no: licence.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined,
         clear_ids: Array.from(clearSel),
       });
+      trackActivity('sign', 'release', sectorId, 'Release', { maintenance_only: !!(st as any)?.maintenance_only });
       setSig(null); setOtp(''); setNeedOtp(false);
       if (r?.queued) {
         const kind = st?.deferred?.length ? 'deferred' : (st?.serviceable ? 'nil' : 'rectified');
