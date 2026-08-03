@@ -159,9 +159,12 @@ function cleanupStaleCaches() {
 export async function login(username: string, password: string, otp?: string) {
   let res: Response;
   try {
+    const tel = _appTelemetry();
     res = await fetch(`${BASE}/auth/token`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Device-Id': await deviceId() },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Device-Id': await deviceId(),
+                 ...(tel.app_version ? { 'X-App-Version': tel.app_version } : {}),
+                 ...(tel.bundle ? { 'X-Bundle': tel.bundle } : {}) },
       body: new URLSearchParams(otp ? { username, password, otp } : { username, password }).toString(),
     });
   } catch { throw new NetworkError(); }            // server unreachable -> caller tries offline
