@@ -41,6 +41,7 @@ import { theme } from './src/theme';
 const Stack = createNativeStackNavigator();
 
 const navRef = createNavigationContainerRef<any>();
+let _lastTrackedScreen = '';
 
 export default function App() {
   // Auto sign-out after N minutes of iPad inactivity (configurable in the back office).
@@ -50,7 +51,7 @@ export default function App() {
 
   function logoutNow() {
     if (navRef.isReady() && navRef.getCurrentRoute()?.name !== 'Login') {
-      logout().finally(() => navRef.reset({ index: 0, routes: [{ name: 'Login' }] }));
+      logout().finally(() => { _lastTrackedScreen = ''; navRef.reset({ index: 0, routes: [{ name: 'Login' }] }); });
     }
   }
   function resetIdle() {
@@ -198,7 +199,8 @@ export default function App() {
     <NavigationContainer ref={navRef} onStateChange={() => {
         pollSvc();
         const route = navRef.getCurrentRoute();
-        if (route && route.name !== 'Login' && route.name !== 'MfaSetup') {
+        if (route && route.name !== 'Login' && route.name !== 'MfaSetup' && route.name !== _lastTrackedScreen) {
+          _lastTrackedScreen = route.name;
           trackActivity('view', 'screen', route.name, route.name,
             route.params ? { params: route.params } : undefined);
         }
