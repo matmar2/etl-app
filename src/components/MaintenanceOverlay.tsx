@@ -14,6 +14,7 @@ const MAX_MS   = 60_000;  // auto-dismiss after 60s — a real deploy takes <60s
 export default function MaintenanceOverlay() {
   const [show, setShow] = useState(false);
   const offSince = useRef(0);
+  const dismissed = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -21,18 +22,19 @@ export default function MaintenanceOverlay() {
     const check = async () => {
       if (!alive) return;
       const lastOk = lastApiOkMs();
-      if (!lastOk) return;                              // never been online — not a maintenance scenario
+      if (!lastOk) return;
       const ok = await serverReachable(3000);
       if (!alive) return;
 
       if (ok) {
         offSince.current = 0;
+        dismissed.current = false;
         setShow(false);
-      } else if (Date.now() - lastOk < RECENT || offSince.current > 0) {
+      } else if (!dismissed.current && (Date.now() - lastOk < RECENT || offSince.current > 0)) {
         if (!offSince.current) offSince.current = Date.now();
         const elapsed = Date.now() - offSince.current;
         if (elapsed >= GRACE_MS && elapsed < MAX_MS) setShow(true);
-        else if (elapsed >= MAX_MS) { offSince.current = 0; setShow(false); }
+        else if (elapsed >= MAX_MS) { dismissed.current = true; setShow(false); }
       }
     };
 
