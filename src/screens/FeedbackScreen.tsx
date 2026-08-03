@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, authMe, feedbackMarkSeen, myFeedback, MyFeedback, replyToFeedback, submitFeedback } from '../api/client';
+import { ActivityIndicator, Alert, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { appSettings, authMe, feedbackAttachmentToken, feedbackAttachmentUrl, feedbackMarkSeen, myFeedback, MyFeedback, replyToFeedback, submitFeedback } from '../api/client';
 import { theme } from '../theme';
 
 const CATS: { key: string; label: string }[] = [
@@ -14,6 +14,35 @@ const CATS: { key: string; label: string }[] = [
 const API_BASE = Platform.OS === 'web'
   ? (typeof window !== 'undefined' ? (window as any).__ETL_API_BASE || '' : '')
   : '';
+
+async function openAttachment(
+  a: { id: string; filename: string; content_type?: string },
+  showImage: (uri: string, name: string) => void,
+) {
+  if (Platform.OS === 'web') {
+    const t = feedbackAttachmentToken();
+    window.open(`${API_BASE}/feedback/attachments/${a.id}${t ? '?t=' + encodeURIComponent(t) : ''}`, '_blank');
+    return;
+  }
+  try {
+    const FileSystem = require('expo-file-system/legacy');
+    const url = feedbackAttachmentUrl(a.id);
+    const t = feedbackAttachmentToken();
+    const dest = `${FileSystem.cacheDirectory}${a.filename}`;
+    const dl = await FileSystem.downloadAsync(url, dest, { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+    if (dl.status !== 200) { Alert.alert('Download failed', `Server returned ${dl.status}`); return; }
+    if ((a.content_type || '').startsWith('image/')) {
+      showImage(dl.uri, a.filename);
+    } else {
+      const Sharing = require('expo-sharing');
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(dl.uri, { mimeType: a.content_type || 'application/octet-stream' });
+      }
+    }
+  } catch (e: any) {
+    Alert.alert('Could not open attachment', e.message || 'Unknown error');
+  }
+}
 
 function fmtSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -35,6 +64,8 @@ export default function FeedbackScreen() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
+  const [imgView, setImgView] = useState<{ uri: string; name: string } | null>(null);
+  const [imgLoading, setImgLoading] = useState(false);
 
   const loadMine = useCallback(() => { myFeedback().then(setMine).catch(() => {}); }, []);
   useFocusEffect(useCallback(() => {
@@ -156,11 +187,7 @@ export default function FeedbackScreen() {
                     {r.attachments && r.attachments.length > 0 ? (
                       <View style={s.attachRow}>
                         {r.attachments.map((a) => (
-                          <TouchableOpacity key={a.id} style={s.attachChip} onPress={() => {
-                            if (Platform.OS === 'web') {
-                              window.open(`${API_BASE}/feedback/attachments/${a.id}`, '_blank');
-                            }
-                          }}>
+                          <TouchableOpacity key={a.id} style={s.attachChip} onPress={() => { setImgLoading(true); openAttachment(a, (uri, name) => { setImgView({ uri, name }); setImgLoading(false); }).catch(() => setImgLoading(false)); }}>
                             <Text style={s.attachText}>{a.content_type?.startsWith('image/') ? '🖼 ' : '📎 '}{a.filename} ({fmtSize(a.size)})</Text>
                           </TouchableOpacity>
                         ))}
@@ -199,6 +226,20 @@ export default function FeedbackScreen() {
           ))}
         </>
       ) : null}
+      {imgLoading ? <ActivityIndicator style={{ marginTop: 12 }} color={theme.accent} /> : null}
+
+      {/* Image viewer modal */}
+      <Modal visible={!!imgView} transparent animationType="fade" onRequestClose={() => setImgView(null)}>
+        <Pressable style={s.imgOverlay} onPress={() => setImgView(null)}>
+          <View style={s.imgHeader}>
+            <Text style={s.imgTitle} numberOfLines={1}>{imgView?.name}</Text>
+            <TouchableOpacity onPress={() => setImgView(null)} hitSlop={16}>
+              <Text style={s.imgClose}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          {imgView ? <Image source={{ uri: imgView.uri }} style={s.imgFull} resizeMode="contain" /> : null}
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -247,4 +288,9 @@ const s = StyleSheet.create({
   replyCancelText: { color: theme.sub, fontWeight: '600', fontSize: 13 },
   replySend: { backgroundColor: theme.accent, borderRadius: 6, paddingVertical: 6, paddingHorizontal: 14 },
   replySendText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  imgOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  imgHeader: { position: 'absolute', top: 40, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 2 },
+  imgTitle: { color: '#fff', fontSize: 14, flex: 1, marginRight: 16 },
+  imgClose: { color: theme.accent, fontSize: 16, fontWeight: '700' },
+  imgFull: { width: '90%', height: '75%' },
 });

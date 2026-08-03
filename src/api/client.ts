@@ -755,6 +755,8 @@ export function tokenIssuedAt(): number | null {
   } catch { return null; }
 }
 export const attachmentUrl = (id: string) => `${BASE}/attachments/${id}?t=${encodeURIComponent(_tokCache)}`;
+export const feedbackAttachmentUrl = (id: string) => `${BASE}/feedback/attachments/${id}`;
+export const feedbackAttachmentToken = () => _tokCache;
 export const deleteAttachment = (id: string): Promise<{ deleted: boolean }> =>
   api(`/attachments/${id}`, { method: 'DELETE' });
 
@@ -1453,10 +1455,15 @@ async function flushChecks() {
   }
 }
 
+async function flushActivityLog() {
+  try { const { flushActivity } = require('../db/activity'); await flushActivity(api); } catch { /* best-effort */ }
+}
+
 export async function syncPush() {
   flushAttachments().catch(() => {});         // best-effort photo upload
   flushChecks().catch(() => {});              // best-effort check replay
   syncPasswordResets().catch(() => {});       // propagate any offline password reset now we're online
+  flushActivityLog().catch(() => {});         // best-effort activity buffer upload
   await flushOutbox(api).catch(() => {});     // replay queued offline mutations (defect actions, signatures, …)
   const d = await db();
   const sectors = await d.getAllAsync<any>('SELECT payload FROM sectors WHERE dirty = 1');

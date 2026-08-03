@@ -70,6 +70,16 @@ export async function db(): Promise<SQLite.SQLiteDatabase> {
       body TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      screen TEXT,
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      synced INTEGER DEFAULT 0
+    );
   `);
   return _db;
 }

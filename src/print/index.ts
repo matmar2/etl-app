@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { TLData, cabinDefectHtml, hilHtml, techLogHtml, techLogText } from './techlog';
+import { trackActivity } from '../db/activity';
 
 // On web, expo-print renders into a single fixed iframe (clips to one page, races
 // images). Opening a real browser window gives full pagination + the logo, and the
@@ -22,6 +23,7 @@ let _printing = false;   // iOS UIPrintInteractionController allows only one at 
 // device — iPad print preview cannot paginate HTML like desktop browsers). Returns false
 // when offline / the endpoint failed, so callers fall back to the HTML path.
 export async function printServerPdf(path: string): Promise<boolean> {
+  trackActivity('print', 'document', path, undefined, { method: 'server_pdf' });
   // Fetch the PDF FIRST. Only a failure to PRODUCE the PDF (offline / endpoint down) returns false
   // so the caller may fall back to the HTML preview. Once the PDF is in hand and the preview has been
   // presented, we ALWAYS return true — a user cancelling/dismissing it must NOT trigger a second
@@ -93,9 +95,15 @@ type Doc = 'tl' | 'cabin' | 'hil';
 const RENDER: Record<Doc, (d: TLData) => string> = { tl: techLogHtml, cabin: cabinDefectHtml, hil: hilHtml };
 
 // AirPrint (incl. AirPrint-capable Bluetooth/Wi-Fi printers) — native iOS print dialog.
-export const airPrint = (data: TLData, doc: Doc = 'tl') => printHtml(RENDER[doc](data));
+export const airPrint = (data: TLData, doc: Doc = 'tl') => {
+  trackActivity('print', 'techlog', data.sector?.flight_no || doc, undefined, { doc, method: 'airprint' });
+  return printHtml(RENDER[doc](data));
+};
 // Render to a PDF and hand to the iOS share sheet (AirDrop/Files/Mail) — "transfer to another device".
-export const sharePdf = (data: TLData, doc: Doc = 'tl') => shareHtml(RENDER[doc](data));
+export const sharePdf = (data: TLData, doc: Doc = 'tl') => {
+  trackActivity('share', 'techlog', data.sector?.flight_no || doc, undefined, { doc, method: 'share_pdf' });
+  return shareHtml(RENDER[doc](data));
+};
 
 // --- Bluetooth thermal (ESC/POS) -------------------------------------------
 // Direct BLE printing needs a native module (react-native-ble-plx / a thermal

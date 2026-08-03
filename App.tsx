@@ -3,6 +3,7 @@ import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Text, View } from 'react-native';
 import { aircraftStatus, appSettings, currentAircraft, heartbeat, logout, onAircraftStatus, reportDeviceError, roleLabel, serverReachable, syncPush, userName } from './src/api/client';
+import { trackActivity } from './src/db/activity';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import ArrivalScreen from './src/screens/ArrivalScreen';
 import DefectDetailScreen from './src/screens/DefectDetailScreen';
@@ -194,7 +195,14 @@ export default function App() {
   return (
     <ErrorBoundary>
     <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { resetIdle(); return false; }}>
-    <NavigationContainer ref={navRef} onStateChange={() => pollSvc()}>
+    <NavigationContainer ref={navRef} onStateChange={() => {
+        pollSvc();
+        const route = navRef.getCurrentRoute();
+        if (route && route.name !== 'Login' && route.name !== 'MfaSetup') {
+          trackActivity('view', 'screen', route.name, route.name,
+            route.params ? { params: route.params } : undefined);
+        }
+      }}>
       <Stack.Navigator initialRouteName="Login" screenOptions={headerOpts}>
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="MfaSetup" component={MfaSetupScreen} options={{ headerShown: false }} />

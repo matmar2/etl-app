@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { DocItem, documentsList, openDocument, role } from '../api/client';
+import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
 export default function FormsScreen() {
@@ -9,6 +10,7 @@ export default function FormsScreen() {
   useEffect(() => { documentsList('form').then(setForms).catch(() => setForms([])); }, []);
 
   async function open(d: DocItem) {
+    trackActivity('open', 'form', d.id, 'Forms', { title: d.title });
     try { await openDocument(d.id); } catch (e: any) { Alert.alert(d.title, e.message); }
   }
 
