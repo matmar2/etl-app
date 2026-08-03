@@ -56,15 +56,16 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
 
   if (Platform.OS === 'web') {
     const voices = window.speechSynthesis.getVoices();
+    const langVoices = lang ? voices.filter(v => v.lang.startsWith(lang)) : voices;
+    const femaleRe = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena/i;
+    const maleRe = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan/i;
     let preferred: SpeechSynthesisVoice | undefined;
-    if (lang) {
-      preferred = voices.find(v => v.lang.startsWith(lang));
+    if (voice === 'female') {
+      preferred = langVoices.find(v => femaleRe.test(v.name)) || langVoices.find(v => !maleRe.test(v.name));
+    } else {
+      preferred = langVoices.find(v => maleRe.test(v.name)) || langVoices.find(v => !femaleRe.test(v.name));
     }
-    if (!preferred) {
-      preferred = voice === 'female'
-        ? voices.find(v => /samantha|female|zira|karen|moira|tessa/i.test(v.name))
-        : voices.find(v => /daniel|male|david|alex|tom/i.test(v.name));
-    }
+    if (!preferred && langVoices.length) preferred = langVoices[0];
 
     let idx = 0;
     function speakNext() {
