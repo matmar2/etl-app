@@ -62,7 +62,7 @@ export default function InductionGate() {
     const text = voiceText();
     if (!text) return;
     setPlaying(true);
-    speak(addPauses(text), voice, () => setPlaying(false));
+    speak(text, voice, () => setPlaying(false));
   }
   function voiceText(): string {
     if (!ind) return '';
@@ -79,9 +79,6 @@ export default function InductionGate() {
     }
     return '';
   }
-  function addPauses(text: string): string {
-    return text.replace(/\n\n+/g, '.\n\n').replace(/\n/g, '. ');
-  }
   // Auto-play voice on phase/slide change or when induction first loads
   useEffect(() => {
     stopSpeech(); setPlaying(false);
@@ -97,7 +94,7 @@ export default function InductionGate() {
         : phase === 'slide' ? (ind.slide_narrations?.[i] || '') : '';
       if (!raw) return;
       setPlaying(true);
-      speak(addPauses(raw), voice, () => setPlaying(false));
+      speak(raw, voice, () => setPlaying(false));
     }, 500);
     return () => clearTimeout(t);
   }, [phase, i, voiceOn, ind]);
