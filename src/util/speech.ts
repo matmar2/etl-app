@@ -56,7 +56,8 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
 
   if (Platform.OS === 'web') {
     const voices = window.speechSynthesis.getVoices();
-    const langVoices = lang ? voices.filter(v => v.lang.startsWith(lang)) : voices;
+    const langPrefix = lang ? lang.substring(0, 2) : '';
+    const langVoices = langPrefix ? voices.filter(v => v.lang.startsWith(langPrefix)) : voices;
     const femaleRe = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena/i;
     const maleRe = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan/i;
     let preferred: SpeechSynthesisVoice | undefined;
