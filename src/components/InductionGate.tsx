@@ -62,7 +62,7 @@ export default function InductionGate() {
     const text = voiceText();
     if (!text) return;
     setPlaying(true);
-    speak(text, voice, () => setPlaying(false));
+    speak(addPauses(text), voice, () => setPlaying(false));
   }
   function voiceText(): string {
     if (!ind) return '';
@@ -79,25 +79,28 @@ export default function InductionGate() {
     }
     return '';
   }
-  // Auto-play voice on phase/slide change
+  function addPauses(text: string): string {
+    return text.replace(/\n\n+/g, '.\n\n').replace(/\n/g, '. ');
+  }
+  // Auto-play voice on phase/slide change or when induction first loads
   useEffect(() => {
     stopSpeech(); setPlaying(false);
-    if (!voiceOn || !voiceOk) return;
+    if (!voiceOn || !voiceOk || !ind?.voice_enabled) return;
+    if (phase === 'ack') return;
     const t = setTimeout(() => {
-      if (!ind?.voice_enabled) return;
-      const text = phase === 'email'
+      const raw = phase === 'email'
         ? (() => {
             const g = previewRole ? `Dear ${roleLabel(previewRole)},` : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
             const b = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
             return `${ind.email_subject ? ind.email_subject + '. ' : ''}${g} ${b}`;
           })()
         : phase === 'slide' ? (ind.slide_narrations?.[i] || '') : '';
-      if (!text) return;
+      if (!raw) return;
       setPlaying(true);
-      speak(text, voice, () => setPlaying(false));
-    }, 400);
+      speak(addPauses(raw), voice, () => setPlaying(false));
+    }, 500);
     return () => clearTimeout(t);
-  }, [phase, i, voiceOn]);
+  }, [phase, i, voiceOn, ind]);
 
   useEffect(() => {
     let alive = true;
