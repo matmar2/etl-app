@@ -12,6 +12,7 @@ import HilRemaining from '../components/HilRemaining';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { speakDefectCleared, speakCRSSigned, speakMissingFields } from '../util/voiceConfirm';
 import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
@@ -180,7 +181,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       !amo.trim() ? '• AMO / Part-145 approval number' : null,
       !lic.trim() ? '• Licence / authorisation number' : null,
     ].filter(Boolean) as string[];
-    if (miss.length) { setMsg('Complete before the CRS: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete the rectification first'); return; }
+    if (miss.length) { setMsg('Complete before the CRS: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete the rectification first'); speakMissingFields(miss.map((m) => m.slice(2))); return; }
     if (!(await confirmAction('Issue the CRS for this rectification? You will sign and authenticate.', 'Rectify + CRS'))) return;
     setSigning(true);
   }
@@ -190,7 +191,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
       !narr.trim() ? '• Work carried out / action narrative' : null,
       !lic.trim() ? '• Licence / authorisation number' : null,
     ].filter(Boolean) as string[];
-    if (miss.length) { setMsg('Complete before signing: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete before signing the Tech Log'); return; }
+    if (miss.length) { setMsg('Complete before signing: ' + miss.map((m) => m.slice(2)).join(', ')); notifyAction(miss.join('\n'), 'Complete before signing the Tech Log'); speakMissingFields(miss.map((m) => m.slice(2))); return; }
     if (!(await confirmAction('Sign the Tech Log for this work now? No CRS is issued yet — the aircraft stays UNSERVICEABLE until the CRS (release) is signed, which needs every other open item cleared.', 'Record work + sign TL'))) return;
     setWorkSigning(true);
   }
@@ -217,6 +218,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         licence_no: lic.trim() || undefined, signature_image: signature, otp: otp.trim() || undefined });
       if (r?.queued) { await appendLocalDefectAction(defectId, { kind, narrative: narr, amo_approval_no: amo }, { status: 'rectified' }); setMsg('CRS saved offline — will sync when back online ✓'); }
       else setMsg('Rectified + CRS issued ✓');
+      speakDefectCleared();
       trackActivity('sign', 'crs', defectId, 'DefectDetail', { title: d?.title, kind });
       setNarr(''); setOtp(''); setNeedOtp(false); setCrsSig(null); load();
       offerChain();   // same-TL# chaining: claim this item on the open ground log + offer the next

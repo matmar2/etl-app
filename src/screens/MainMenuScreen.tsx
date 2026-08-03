@@ -14,6 +14,8 @@ import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisatio
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
 import { confirmAction } from '../util/confirm';
+import { voiceConfirmAvailable, loadUserVoicePref, setUserVoicePref } from '../util/voiceConfirm';
+import { speechAvailable } from '../util/speech';
 
 type Tile = { key: string; title: string; sub?: string; nav?: string; perm?: string; icon: string; group: string; tint: string };
 const TILES: Tile[] = [
@@ -135,6 +137,8 @@ export default function MainMenuScreen({ navigation }: any) {
   }
 
   const [checking, setChecking] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  useEffect(() => { loadUserVoicePref().then(setVoiceOn); }, []);
   // Light the star for BOTH states: a new OTA available to download, AND one already downloaded and
   // pending a restart. expo auto-downloads on launch, so crew almost always land in the "pending"
   // case — without it the star would essentially never show (the manual check finds nothing waiting).
@@ -314,6 +318,9 @@ export default function MainMenuScreen({ navigation }: any) {
             </TouchableOpacity>
             {updateAvail && !checking ? <View style={styles.updateBadge} /> : null}
           </View>
+          {speechAvailable() ? <TouchableOpacity onPress={() => { const v = !voiceOn; setVoiceOn(v); setUserVoicePref(v); }} style={[styles.signOut, voiceOn && { backgroundColor: theme.accent }]}>
+            <Text style={[styles.signOutTxt, voiceOn && { color: theme.onAccent }]}>{voiceOn ? '🔊 Voice ON' : '🔇 Voice OFF'}</Text>
+          </TouchableOpacity> : null}
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
       </View>

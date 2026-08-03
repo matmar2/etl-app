@@ -11,6 +11,7 @@ import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import WalkaroundModal from '../components/WalkaroundModal';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { speakPreDeparture, speakMissingFields } from '../util/voiceConfirm';
 import { checkAirportGps, GpsState } from '../util/geo';
 import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
@@ -294,6 +295,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       // Also list the gaps in a dialog — the auto-scroll moves away from where the inline
       // message renders, so the captain may otherwise never see the list.
       notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before accepting');
+      speakMissingFields(miss.map((x) => x.label));
       return;
     }
     setBadSet(new Set());
@@ -324,6 +326,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
       trackActivity('sign', 'preflight', sectorId, 'Departure', { flight: s.flight_no, queued: !!r?.queued });
       setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
+      speakPreDeparture();
     }
     catch (e: any) {
       // Strip the technical "POST /path → 400:" prefix so the crew see a plain instruction.

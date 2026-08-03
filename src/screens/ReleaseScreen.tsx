@@ -16,6 +16,7 @@ import MelPicker from '../components/MelPicker';
 import CdlPicker from '../components/CdlPicker';
 import { ammIawLine } from '../api/client';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { speakCRSSigned, speakMissingFields } from '../util/voiceConfirm';
 import { trackActivity } from '../db/activity';
 import { theme } from '../theme';
 
@@ -129,6 +130,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
           : bad.wo ? 'Enter the Work order / scope before completing.'
           : 'Enter the Work carried out before completing.');
         notifyAction(miss.join('\n'), 'Complete the Tech Log first');
+        speakMissingFields(miss.map((m) => m.slice(2)));
         return;
       }
       setMaintBad({});
@@ -137,6 +139,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
       const miss = [!signer.trim() ? '• Name' : null, !licence.trim() ? '• Licence / Part-145 auth no.' : null].filter(Boolean) as string[];
       setMsg('Enter your name and licence, then Complete.');
       notifyAction(miss.join('\n'), 'Complete before signing');
+      speakMissingFields(miss.map((m) => m.slice(2)));
       return;
     }
     sig ? submitRelease(sig) : setSigning(true);
@@ -208,6 +211,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
         clear_ids: Array.from(clearSel),
       });
       trackActivity('sign', 'release', sectorId, 'Release', { maintenance_only: !!(st as any)?.maintenance_only });
+      speakCRSSigned();
       setSig(null); setOtp(''); setNeedOtp(false);
       if (r?.queued) {
         const kind = st?.deferred?.length ? 'deferred' : (st?.serviceable ? 'nil' : 'rectified');

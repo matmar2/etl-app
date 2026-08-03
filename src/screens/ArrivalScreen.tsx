@@ -9,6 +9,7 @@ import TechLogPageModal from '../components/TechLogPageModal';
 import SignaturePad from '../components/SignaturePad';
 import SignatureBlock from '../components/SignatureBlock';
 import { confirmAction, notifyAction } from '../util/confirm';
+import { speakFlightClosed, speakMissingFields } from '../util/voiceConfirm';
 import { checkAirportGps } from '../util/geo';
 import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
@@ -159,6 +160,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       // The scroll jumps away from the sign button, so also LIST the gaps in a dialog the
       // captain sees regardless of scroll position.
       notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before signing');
+      speakMissingFields(miss.map((x) => x.label));
       return;
     }
     setBadSet(new Set());
@@ -177,6 +179,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
       trackActivity('sign', 'postflight', sectorId, 'Arrival', { flight: s.flight_no, queued: !!r?.queued });
       setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
+      speakFlightClosed();
     } catch (e: any) {
       const em = e?.message || '';
       if (/complete|mandatory|required/i.test(em)) {
