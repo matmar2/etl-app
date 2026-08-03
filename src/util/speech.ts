@@ -23,10 +23,26 @@ let _pauseTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function isSpeaking(): boolean { return _speaking; }
 
-const PAUSE_MS = 800;
+const PARA_PAUSE = 900;
+const LINE_PAUSE = 500;
 
-function splitChunks(text: string): string[] {
-  return text.split(/\n\s*\n/).map(c => c.replace(/\n/g, ' ').trim()).filter(Boolean);
+type Chunk = { text: string; pause: number };
+
+function splitChunks(text: string): Chunk[] {
+  const parts = text.split(/(\n\s*\n|\n)/);
+  const chunks: Chunk[] = [];
+  for (const p of parts) {
+    const t = p.trim();
+    if (!t) continue;
+    if (/^\n\s*\n$/.test(p)) {
+      if (chunks.length) chunks[chunks.length - 1].pause = PARA_PAUSE;
+    } else if (p === '\n') {
+      if (chunks.length) chunks[chunks.length - 1].pause = LINE_PAUSE;
+    } else {
+      chunks.push({ text: t, pause: LINE_PAUSE });
+    }
+  }
+  return chunks;
 }
 
 export function speak(text: string, voice: Voice = 'female', onDone?: () => void): void {
@@ -49,14 +65,16 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
       if (_stopped || idx >= chunks.length) {
         _speaking = false; onDone?.(); return;
       }
-      const u = new SpeechSynthesisUtterance(chunks[idx]);
+      const c = chunks[idx];
+      const u = new SpeechSynthesisUtterance(c.text);
       u.rate = 0.95;
       u.pitch = voice === 'female' ? 1.1 : 0.9;
       if (preferred) u.voice = preferred;
       u.onend = () => {
+        const pause = c.pause;
         idx++;
         if (_stopped || idx >= chunks.length) { _speaking = false; onDone?.(); return; }
-        _pauseTimer = setTimeout(speakNext, PAUSE_MS);
+        _pauseTimer = setTimeout(speakNext, pause);
       };
       u.onerror = () => { _speaking = false; onDone?.(); };
       window.speechSynthesis.speak(u);
@@ -71,14 +89,16 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
       if (_stopped || idx >= chunks.length) {
         _speaking = false; onDone?.(); return;
       }
-      _Speech!.speak(chunks[idx], {
+      const c = chunks[idx];
+      _Speech!.speak(c.text, {
         language: 'en-US',
         pitch: voice === 'female' ? 1.1 : 0.85,
         rate: 0.95,
         onDone: () => {
+          const pause = c.pause;
           idx++;
           if (_stopped || idx >= chunks.length) { _speaking = false; onDone?.(); return; }
-          _pauseTimer = setTimeout(speakNext, PAUSE_MS);
+          _pauseTimer = setTimeout(speakNext, pause);
         },
         onError: () => { _speaking = false; onDone?.(); },
       });
