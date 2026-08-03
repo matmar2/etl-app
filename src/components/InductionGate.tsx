@@ -206,49 +206,51 @@ export default function InductionGate() {
     <Modal visible animationType="slide" onRequestClose={() => mode === 'view' && (previewRole ? toRoles() : close())}>
       <View style={s.wrap}>
         <View style={s.header}>
-          <Text style={s.badge}>
-            {phase === 'email' ? (previewRole ? `✉  ${roleLabel(previewRole).toUpperCase()} — WELCOME` : '✉  WELCOME — PLEASE READ')
-              : phase === 'slide' ? `📊  QUICK REFERENCE · ${i + 1} / ${slides.length}`
-              : '✓  ACKNOWLEDGEMENT'}
-          </Text>
-          <View style={s.headerRight}>
-            {showVoice ? (
-              <View style={s.voiceRow}>
-                {showLangPicker ? (
-                  <View>
-                    <TouchableOpacity onPress={() => setLangOpen(v => !v)} hitSlop={8} style={s.langBtn}>
-                      <Text style={s.langBtnTxt}>{langLabel(lang)}</Text>
-                      <Text style={s.langArrow}>{langOpen ? '▲' : '▼'}</Text>
-                    </TouchableOpacity>
-                    {langOpen ? (
-                      <View style={s.langDrop}>
-                        {langs.map(c => (
-                          <TouchableOpacity key={c} onPress={() => pickLang(c)} style={[s.langItem, c === lang && s.langItemActive]}>
-                            <Text style={[s.langItemTxt, c === lang && s.langItemTxtActive]}>{langLabel(c)}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-                <TouchableOpacity onPress={() => { stopVoice(); setVoiceOn(v => !v); }} hitSlop={8} style={[s.voiceToggle, voiceOn && s.voiceToggleOn]}>
-                  <Text style={s.voiceToggleTxt}>{voiceOn ? '🔊' : '🔇'}</Text>
-                </TouchableOpacity>
-                {voiceActive && (phase === 'email' || hasNarration) ? (
-                  <>
-                    <TouchableOpacity onPress={() => { stopVoice(); setVoice(v => v === 'female' ? 'male' : 'female'); }} hitSlop={8} style={s.voiceGender}>
-                      <Text style={s.voiceGenderTxt}>{voice === 'female' ? '♀' : '♂'}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={toggleVoice} hitSlop={8} style={[s.voiceBtn, playing && s.voiceBtnActive]}>
-                      <Text style={s.voiceBtnTxt}>{playing ? '■ Stop' : '▶ Listen'}</Text>
-                    </TouchableOpacity>
-                  </>
-                ) : null}
-              </View>
-            ) : null}
-            {previewRole ? <TouchableOpacity onPress={toRoles} hitSlop={12}><Text style={s.close}>{'‹'} Roles</Text></TouchableOpacity>
-              : mode === 'view' ? <TouchableOpacity onPress={close} hitSlop={12}><Text style={s.close}>{'✕'} Close</Text></TouchableOpacity> : null}
+          <View style={s.headerTop}>
+            <Text style={s.badge}>
+              {phase === 'email' ? (previewRole ? `✉  ${roleLabel(previewRole).toUpperCase()} — WELCOME` : '✉  WELCOME — PLEASE READ')
+                : phase === 'slide' ? `📊  QUICK REFERENCE · ${i + 1} / ${slides.length}`
+                : '✓  ACKNOWLEDGEMENT'}
+            </Text>
+            <View style={s.headerRight}>
+              {previewRole ? <TouchableOpacity onPress={toRoles} hitSlop={12}><Text style={s.close}>{'‹'} Roles</Text></TouchableOpacity>
+                : mode === 'view' ? <TouchableOpacity onPress={close} hitSlop={12}><Text style={s.close}>{'✕'} Close</Text></TouchableOpacity> : null}
+            </View>
           </View>
+          {showVoice ? (
+            <View style={s.voiceRow}>
+              <TouchableOpacity onPress={() => { stopVoice(); setVoiceOn(v => !v); }} hitSlop={8} style={[s.voiceToggle, voiceOn && s.voiceToggleOn]}>
+                <Text style={s.voiceToggleTxt}>{voiceOn ? '🔊' : '🔇'}</Text>
+              </TouchableOpacity>
+              {showLangPicker ? (
+                <View>
+                  <TouchableOpacity onPress={() => setLangOpen(v => !v)} hitSlop={8} style={s.langBtn}>
+                    <Text style={s.langBtnTxt}>{langLabel(lang)}</Text>
+                    <Text style={s.langArrow}>{langOpen ? '▲' : '▼'}</Text>
+                  </TouchableOpacity>
+                  {langOpen ? (
+                    <View style={s.langDrop}>
+                      {langs.map(c => (
+                        <TouchableOpacity key={c} onPress={() => pickLang(c)} style={[s.langItem, c === lang && s.langItemActive]}>
+                          <Text style={[s.langItemTxt, c === lang && s.langItemTxtActive]}>{langLabel(c)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              {voiceActive && (phase === 'email' || hasNarration) ? (
+                <>
+                  <TouchableOpacity onPress={() => { stopVoice(); setVoice(v => v === 'female' ? 'male' : 'female'); }} hitSlop={8} style={s.voiceGender}>
+                    <Text style={s.voiceGenderTxt}>{voice === 'female' ? '♀' : '♂'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={toggleVoice} hitSlop={8} style={[s.voiceBtn, playing && s.voiceBtnActive]}>
+                    <Text style={s.voiceBtnTxt}>{playing ? '■ Stop' : '▶ Listen'}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : null}
+            </View>
+          ) : null}
         </View>
 
         {phase === 'email' ? (
@@ -310,11 +312,12 @@ export default function InductionGate() {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
-  header: { paddingTop: 44, paddingBottom: 12, paddingHorizontal: 18, backgroundColor: theme.panel, borderBottomWidth: 1, borderBottomColor: theme.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 44, paddingBottom: 10, paddingHorizontal: 18, backgroundColor: theme.panel, borderBottomWidth: 1, borderBottomColor: theme.border },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   badge: { color: theme.accent, fontWeight: '800', fontSize: 13, letterSpacing: 1 },
   close: { color: theme.sub, fontWeight: '700', fontSize: 14 },
-  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   voiceToggle: { backgroundColor: theme.bg, borderRadius: 14, width: 32, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border, opacity: 0.5 },
   voiceToggleOn: { opacity: 1, borderColor: theme.accent },
   voiceToggleTxt: { fontSize: 14 },
