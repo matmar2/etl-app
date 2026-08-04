@@ -97,6 +97,19 @@ export default function MainMenuScreen({ navigation }: any) {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [offlineProg, setOfflineProg] = useState<{ frac: number; label: string } | null>(_offlineProg);
+  const [offlineStalled, setOfflineStalled] = useState(false);
+  const stallFrac = useRef<number | null>(null);
+  const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!offlineProg || offlineProg.frac >= 1) { setOfflineStalled(false); if (stallTimer.current) clearTimeout(stallTimer.current); return; }
+    if (stallFrac.current !== offlineProg.frac) {
+      stallFrac.current = offlineProg.frac;
+      setOfflineStalled(false);
+      if (stallTimer.current) clearTimeout(stallTimer.current);
+      stallTimer.current = setTimeout(() => setOfflineStalled(true), 15000);
+    }
+    return () => { if (stallTimer.current) clearTimeout(stallTimer.current); };
+  }, [offlineProg]);
   const [initialSync, setInitialSync] = useState(true);   // first server refresh of the menu — block input (time-boxed)
   // The block clears inside useFocusEffect, so only gate on it while the Menu is actually the
   // focused screen. When a deep-link (EFF hand-off) lands on a child screen with the Menu mounted
@@ -351,8 +364,8 @@ export default function MainMenuScreen({ navigation }: any) {
             <View style={styles.offTrack}><View style={[styles.offFill, { width: `${pct}%` }, done && { backgroundColor: theme.green }]} /></View>
             <View style={styles.offFoot}>
               <Text style={[styles.offLabel, { flex: 1 }]}>{done ? 'Pickers, schedule, defects and maps are on this iPad. (AMM instructions open online only.)' : offlineProg.label}</Text>
-              {!done ? (
-                <TouchableOpacity style={styles.offResume} onPress={() => runOfflinePrep(currentAircraft()?.registration)}>
+              {!done && offlineStalled ? (
+                <TouchableOpacity style={styles.offResume} onPress={() => { setOfflineStalled(false); runOfflinePrep(currentAircraft()?.registration); }}>
                   <Text style={styles.offResumeTxt}>↻ Resume</Text>
                 </TouchableOpacity>
               ) : null}
