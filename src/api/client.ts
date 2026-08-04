@@ -416,14 +416,18 @@ export const listOpenDefects = (aircraftId: string) =>
 // active items, so closed/cleared history needs its own cache. Offline: cached list, then the
 // local outbox as a last resort.
 async function cachedList(key: string, fetcher: () => Promise<any[]>, localFilter: (d: any) => boolean, aircraftId: string): Promise<any[]> {
+  // Stale-while-revalidate: return cached data instantly, refresh in background for next access.
+  const cached = await _cacheGet<any[]>(key).catch(() => null) ?? (await getRef<any[]>(key).catch(() => ({ data: null }))).data;
+  if (cached) {
+    fetcher().then((r) => { _cacheSet(key, r).catch(() => {}); setRef(key, r).catch(() => {}); }).catch(() => {});
+    return cached;
+  }
   try {
     const r = await fetcher();
     _cacheSet(key, r).catch(() => {}); setRef(key, r).catch(() => {});
     return r;
   } catch (e) {
     if (!(e instanceof NetworkError)) throw e;
-    const cached = (await _cacheGet<any[]>(key)) ?? (await getRef<any[]>(key)).data;
-    if (cached) return cached;
     const { getLocalAircraftDefects } = require('../db/defects');
     const all = await getLocalAircraftDefects(aircraftId).catch(() => [] as any[]);
     return all.filter(localFilter);

@@ -14,6 +14,7 @@ import { checkAirportGps } from '../util/geo';
 import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
+import { updateSector } from '../db/sectors';
 import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
 
 export default function ArrivalScreen({ route, navigation }: any) {
@@ -74,6 +75,16 @@ export default function ArrivalScreen({ route, navigation }: any) {
     loadCabin();
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});   // OASES/CAMO CSN for total cycles
   }, [!!s]);
+  // Auto-persist arrival fuel to SQLite so data survives app restart.
+  const remReady = useRef(false);
+  const remTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { if (s && !remReady.current) { const t = setTimeout(() => { remReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
+  useEffect(() => {
+    if (!remReady.current) return;
+    if (remTimer.current) clearTimeout(remTimer.current);
+    remTimer.current = setTimeout(() => { updateSector(sectorId, { fuel_remaining_kg: num(rem) }).catch(() => {}); }, 1500);
+    return () => { if (remTimer.current) clearTimeout(remTimer.current); };
+  }, [rem]);
   // Run the landing-airport GPS check automatically the moment ON (landing) is entered,
   // and re-run it when the diversion state or airport changes — the target is the
   // destination airport, or the diversion airport when the flight diverted.
@@ -361,13 +372,11 @@ export default function ArrivalScreen({ route, navigation }: any) {
         <TouchableOpacity disabled={!canOilA} style={[sx.save, { marginTop: 4 }, !canOilA && { opacity: 0.4 }]} onPress={async () => {
           if (!oilArr.eng1 && !oilArr.eng2) { setOilMsg('Enter Eng 1 and/or Eng 2 oil quantity.'); return; }
           if (!(await confirmAction('Save oil quantity on arrival? (read 5–30 min after shutdown)', 'Oil on arrival'))) return;
+          setOilMsg('Oil on arrival saved ✓');
           const at = new Date().toISOString();
-          try {
-            for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
-              if (val) await addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at });
-            }
-            setOilMsg('Oil on arrival saved ✓');
-          } catch (e: any) { setOilMsg(e?.message || 'Could not save'); }
+          for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
+            if (val) addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at }).catch(() => {});
+          }
         }}><Text style={sx.saveText}>Save oil on arrival</Text></TouchableOpacity>
         {oilMsg ? <Text style={{ color: /saved/.test(oilMsg) ? theme.green : theme.red, fontSize: 12, marginTop: 6 }}>{oilMsg}</Text> : null}
       </View>

@@ -16,6 +16,7 @@ import { checkAirportGps, GpsState } from '../util/geo';
 import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
+import { updateSector } from '../db/sectors';
 import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
 
 // A serviceability reason the delayed-OASES bridge can cover (mirrors backend is_oases_lag_reason):
@@ -169,6 +170,24 @@ export default function DepartureScreen({ route, navigation }: any) {
       }
     }).catch(() => {});
   }, [!!s]);
+
+  // Auto-persist fuel fields to SQLite so data survives app restart (no explicit Save needed).
+  const fuelReady = useRef(false);
+  const fuelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { if (s && !fuelReady.current) { const t = setTimeout(() => { fuelReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
+  useEffect(() => {
+    if (!fuelReady.current) return;
+    if (fuelTimer.current) clearTimeout(fuelTimer.current);
+    fuelTimer.current = setTimeout(() => {
+      const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_density: num(fuel.fuel_density),
+        fuel_supplier: fuel.fuel_supplier || null, fuel_receipt_no: fuel.fuel_receipt_no || null,
+        dep_fuel_kg: num(fuel.dep_fuel_kg), taxi_fuel_kg: num(fuel.taxi_fuel_kg),
+        fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt),
+        fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids };
+      updateSector(sectorId, p).catch(() => {});
+    }, 1500);
+    return () => { if (fuelTimer.current) clearTimeout(fuelTimer.current); };
+  }, [fuel]);
 
   // Opening an ALREADY-ACCEPTED departure: offer to reset the sign off (edit + sign again) or
   // view only. Only while the flight is still open — never once airborne or closed.
@@ -797,11 +816,11 @@ export default function DepartureScreen({ route, navigation }: any) {
       {servMsg ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6 }}>{servMsg}</Text> : null}
       {canServ ? <TouchableOpacity style={sx.save} onPress={async () => {
         if (!(await confirmAction('Save servicing uplifts?'))) return;
+        setServMsg('Uplifts saved ✓');
         for (const sys of ['eng1', 'eng2', 'idg1', 'idg2', 'hyd_green', 'hyd_blue', 'hyd_yellow'] as const) {
           const up = num(serv[sys]);
-          if (up != null) try { await addServicing({ sector_id: sectorId, system: sys, uplift_lt: up }); } catch {}
+          if (up != null) addServicing({ sector_id: sectorId, system: sys, uplift_lt: up }).catch(() => {});
         }
-        setServMsg('Uplifts saved ✓');
       }}><Text style={sx.saveText}>Save servicing uplifts</Text></TouchableOpacity> : null}
       </View>
 
@@ -835,11 +854,11 @@ export default function DepartureScreen({ route, navigation }: any) {
         }
         setServBad(false);
         if (!(await confirmAction('Save total engine oil?'))) return;
+        setServTotMsg('Total oil saved ✓');
         for (const [sys, tot] of [['eng1', serv.eng1_total], ['eng2', serv.eng2_total]] as const) {
           const tqt = num(tot);
-          if (tqt != null) try { await addServicing({ sector_id: sectorId, system: sys, depart_lt: +(tqt * QT_L).toFixed(2) }); } catch {}
+          if (tqt != null) addServicing({ sector_id: sectorId, system: sys, depart_lt: +(tqt * QT_L).toFixed(2) }).catch(() => {});
         }
-        setServTotMsg('Total oil saved ✓');
       }}><Text style={sx.saveText}>Save total oil</Text></TouchableOpacity> : null}
       </View>
 

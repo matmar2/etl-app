@@ -32,7 +32,7 @@ export default function DefectsScreen({ route, navigation }: any) {
 
   const load = useCallback(async () => {
     setNote('Loading…');
-    await syncPush().catch(() => {});                 // push any locally-created defects up first
+    syncPush().catch(() => {});                       // push locally-created defects in background — don't block the list
     try {
       const [a, h] = await Promise.all([listActiveDefects(aircraftId), listHIL(aircraftId)]);
       setActive(a); setHil(h); setNote('');
