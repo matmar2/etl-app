@@ -1563,7 +1563,7 @@ async function localAssist(question: string): Promise<AssistAnswer> {
 }
 
 // Per-role login induction — cover email + role PPTX (slide images), shown once per user.
-export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[]; slide_narrations?: string[]; slide_narrations_i18n?: Record<string, string[]>; voice_enabled?: boolean };
+export type Induction = { role: string; version: number; email_subject?: string; email_body?: string; slides: string[]; slide_narrations?: string[]; slide_narrations_i18n?: Record<string, string[]>; email_subject_i18n?: Record<string, string>; email_body_i18n?: Record<string, string>; voice_enabled?: boolean };
 export async function pendingInduction(): Promise<Induction | null> {
   const ackedVer = await _cacheGet<number>('induction_acked');
   try {

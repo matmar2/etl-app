@@ -72,6 +72,18 @@ export default function InductionGate() {
   function toRoles() { stopVoice(); setInd(null); setPreviewRole(null); }
   function close() { stopVoice(); showing.current = false; setInd(null); setChooser(false); setPreviewRole(null); setLangOpen(false); }
 
+  // --- Translated email content ---
+  function emailSubject(): string {
+    if (!ind) return '';
+    if (lang !== 'en' && ind.email_subject_i18n?.[lang]) return ind.email_subject_i18n[lang];
+    return ind.email_subject || '';
+  }
+  function emailBody(): string {
+    if (!ind) return '';
+    if (lang !== 'en' && ind.email_body_i18n?.[lang]) return ind.email_body_i18n[lang];
+    return ind.email_body || '';
+  }
+
   // --- Voice controls ---
   function stopVoice() { stopSpeech(); setPlaying(false); }
   function narrationForSlide(idx: number): string {
@@ -79,24 +91,21 @@ export default function InductionGate() {
     if (lang !== 'en' && ind.slide_narrations_i18n?.[lang]?.[idx]) return ind.slide_narrations_i18n[lang][idx];
     return ind.slide_narrations?.[idx] || '';
   }
+  function emailVoiceText(): string {
+    if (!ind) return '';
+    const greeting = previewRole
+      ? `Dear ${roleLabel(previewRole)},`
+      : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
+    const body = emailBody().replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
+    const subj = emailSubject();
+    return `${subj ? subj + '. ' : ''}${greeting} ${body}`;
+  }
   function toggleVoice() {
     if (playing) { stopVoice(); return; }
-    const text = voiceText();
+    const text = phase === 'email' ? emailVoiceText() : phase === 'slide' ? narrationForSlide(i) : '';
     if (!text) return;
     setPlaying(true);
     speak(text, voice, () => setPlaying(false), ttsCode(lang));
-  }
-  function voiceText(): string {
-    if (!ind) return '';
-    if (phase === 'email') {
-      const greeting = previewRole
-        ? `Dear ${roleLabel(previewRole)},`
-        : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
-      const bodyClean = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
-      return `${ind.email_subject ? ind.email_subject + '. ' : ''}${greeting} ${bodyClean}`;
-    }
-    if (phase === 'slide') return narrationForSlide(i);
-    return '';
   }
   // Auto-play voice on phase/slide change or when induction first loads
   useEffect(() => {
@@ -104,12 +113,7 @@ export default function InductionGate() {
     if (!voiceOn || !voiceOk || !ind?.voice_enabled) return;
     if (phase === 'ack') return;
     const t = setTimeout(() => {
-      const raw = phase === 'email'
-        ? (() => {
-            const g = previewRole ? `Dear ${roleLabel(previewRole)},` : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
-            const b = (ind.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
-            return `${ind.email_subject ? ind.email_subject + '. ' : ''}${g} ${b}`;
-          })()
+      const raw = phase === 'email' ? emailVoiceText()
         : phase === 'slide' ? narrationForSlide(i) : '';
       if (!raw) return;
       setPlaying(true);
@@ -175,7 +179,7 @@ export default function InductionGate() {
   const greeting = previewRole
     ? `Dear ${roleLabel(previewRole)},`
     : `Dear ${roleLabel()}${userName() ? ` ${userName()}` : ''},`;
-  const body = (ind!.email_body || '').replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
+  const body = emailBody().replace(/^\s*Dear[^\n]*,?\s*\n+/i, '');
   const showVoice = voiceOk && ind!.voice_enabled && phase !== 'ack';
   const voiceActive = showVoice && voiceOn;
   const hasNarration = phase === 'slide' && !!narrationForSlide(i);
@@ -220,7 +224,7 @@ export default function InductionGate() {
                 <Text style={s.voiceToggleTxt}>{voiceOn ? '🔊' : '🔇'}</Text>
               </TouchableOpacity>
               {showLangPicker ? (
-                <View>
+                <View style={{ zIndex: 200 }}>
                   <TouchableOpacity onPress={() => setLangOpen(v => !v)} hitSlop={8} style={s.langBtn}>
                     <Text style={s.langBtnTxt}>{langLabel(lang)}</Text>
                     <Text style={s.langArrow}>{langOpen ? '▲' : '▼'}</Text>
@@ -259,7 +263,7 @@ export default function InductionGate() {
               <Text style={s.mailLine}><Text style={s.mailLbl}>From: </Text>ETL Administrator</Text>
               <Text style={s.mailLine}><Text style={s.mailLbl}>To: </Text>{previewRole ? `${roleLabel(previewRole)} (preview)` : (userName() || 'You')}</Text>
             </View>
-            {ind!.email_subject ? <Text style={s.subject}>{ind!.email_subject}</Text> : null}
+            {emailSubject() ? <Text style={s.subject}>{emailSubject()}</Text> : null}
             <Text style={s.greeting}>{greeting}</Text>
             <Text style={s.email}>{body}</Text>
           </ScrollView>
@@ -309,12 +313,12 @@ export default function InductionGate() {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: theme.bg },
-  header: { paddingTop: 44, paddingBottom: 10, paddingHorizontal: 18, backgroundColor: theme.panel, borderBottomWidth: 1, borderBottomColor: theme.border },
+  header: { paddingTop: 44, paddingBottom: 10, paddingHorizontal: 18, backgroundColor: theme.panel, borderBottomWidth: 1, borderBottomColor: theme.border, zIndex: 10 },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   badge: { color: theme.accent, fontWeight: '800', fontSize: 13, letterSpacing: 1 },
   close: { color: theme.sub, fontWeight: '700', fontSize: 14 },
-  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  voiceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, zIndex: 10 },
   voiceToggle: { backgroundColor: theme.bg, borderRadius: 14, width: 32, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.border, opacity: 0.5 },
   voiceToggleOn: { opacity: 1, borderColor: theme.accent },
   voiceToggleTxt: { fontSize: 14 },
