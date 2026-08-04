@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { syncPush } from '../api/client';
 import { getSector, pullSector, updateSector } from '../db/sectors';
@@ -44,8 +44,8 @@ export function useSector(sectorId: string) {
   const [msg, setMsg] = useState('');
   const [syncing, setSyncing] = useState(true);   // initial server pull in flight — screens block input
 
-  async function reload() { setS(await getSector(sectorId)); }                 // local (instant)
-  async function refresh() { setS(await pullSector(sectorId)); }               // pull-on-open (server-authoritative)
+  const reload = useCallback(async () => { setS(await getSector(sectorId)); }, [sectorId]);
+  const refresh = useCallback(async () => { setS(await pullSector(sectorId)); }, [sectorId]);
   useEffect(() => {
     let alive = true;
     reload();

@@ -172,11 +172,13 @@ export default function DepartureScreen({ route, navigation }: any) {
   }, [!!s]);
 
   // Auto-persist fuel fields to SQLite so data survives app restart (no explicit Save needed).
+  // Web skips this — web has no SQLite; saves go directly to the server via useSector.save().
+  const isWeb = require('react-native').Platform.OS === 'web';
   const fuelReady = useRef(false);
   const fuelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { if (s && !fuelReady.current) { const t = setTimeout(() => { fuelReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
+  useEffect(() => { if (!isWeb && s && !fuelReady.current) { const t = setTimeout(() => { fuelReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
   useEffect(() => {
-    if (!fuelReady.current) return;
+    if (isWeb || !fuelReady.current) return;
     if (fuelTimer.current) clearTimeout(fuelTimer.current);
     fuelTimer.current = setTimeout(() => {
       const p: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_density: num(fuel.fuel_density),

@@ -76,11 +76,13 @@ export default function ArrivalScreen({ route, navigation }: any) {
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});   // OASES/CAMO CSN for total cycles
   }, [!!s]);
   // Auto-persist arrival fuel to SQLite so data survives app restart.
+  // Web skips this — web has no SQLite; saves go directly to the server via useSector.save().
+  const isWeb = require('react-native').Platform.OS === 'web';
   const remReady = useRef(false);
   const remTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => { if (s && !remReady.current) { const t = setTimeout(() => { remReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
+  useEffect(() => { if (!isWeb && s && !remReady.current) { const t = setTimeout(() => { remReady.current = true; }, 2000); return () => clearTimeout(t); } }, [!!s]);
   useEffect(() => {
-    if (!remReady.current) return;
+    if (isWeb || !remReady.current) return;
     if (remTimer.current) clearTimeout(remTimer.current);
     remTimer.current = setTimeout(() => { updateSector(sectorId, { fuel_remaining_kg: num(rem) }).catch(() => {}); }, 1500);
     return () => { if (remTimer.current) clearTimeout(remTimer.current); };
