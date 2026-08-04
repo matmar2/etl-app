@@ -45,10 +45,7 @@ export default function InductionGate() {
   useEffect(() => { loadUserVoiceLang().then(setLang); }, []);
 
   function availLangs(): string[] {
-    const admin = getAdminVoiceLanguages();
-    if (!ind?.slide_narrations_i18n) return admin.includes('en') ? ['en'] : admin;
-    const i18nKeys = Object.keys(ind.slide_narrations_i18n);
-    return admin.filter(c => c === 'en' || i18nKeys.includes(c));
+    return getAdminVoiceLanguages();
   }
 
   function pickLang(code: string) {
