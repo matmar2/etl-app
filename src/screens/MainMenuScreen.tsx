@@ -322,8 +322,9 @@ export default function MainMenuScreen({ navigation }: any) {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <OnlineStatus />
-          <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.refreshBtn, refreshing && { opacity: 0.6 }]}>
-            {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.refreshTxt}>⟳ Refresh</Text>}
+          <TouchableOpacity onPress={manualRefresh} disabled={refreshing} style={[styles.iconBtn, refreshing && { opacity: 0.6 }]}
+            accessibilityLabel="Refresh" accessibilityHint="Sync data with server">
+            {refreshing ? <ActivityIndicator size="small" color={theme.accent} /> : <Text style={styles.iconBtnTxt}>⟳</Text>}
           </TouchableOpacity>
           <View>
             <TouchableOpacity onPress={checkForUpdate} disabled={checking} style={[styles.updateBtn, checking && { opacity: 0.6 }]}>
@@ -331,8 +332,10 @@ export default function MainMenuScreen({ navigation }: any) {
             </TouchableOpacity>
             {updateAvail && !checking ? <View style={styles.updateBadge} /> : null}
           </View>
-          {speechAvailable() ? <TouchableOpacity onPress={() => { const v = !voiceOn; setVoiceOn(v); setUserVoicePref(v); }} style={[styles.signOut, voiceOn && { backgroundColor: theme.accent }]}>
-            <Text style={[styles.signOutTxt, voiceOn && { color: theme.onAccent }]}>{voiceOn ? '🔊 Voice ON' : '🔇 Voice OFF'}</Text>
+          {speechAvailable() ? <TouchableOpacity onPress={() => { const v = !voiceOn; setVoiceOn(v); setUserVoicePref(v); }}
+            style={[styles.iconBtn, voiceOn && { backgroundColor: theme.accent, borderColor: theme.accent }]}
+            accessibilityLabel={voiceOn ? 'Voice ON' : 'Voice OFF'} accessibilityHint="Toggle voice narration">
+            <Text style={[styles.iconBtnTxt, voiceOn && { color: theme.onAccent }]}>{voiceOn ? '🔊' : '🔇'}</Text>
           </TouchableOpacity> : null}
           <TouchableOpacity onPress={signOut} style={styles.signOut}><Text style={styles.signOutTxt}>⎋ Sign out</Text></TouchableOpacity>
         </View>
@@ -557,6 +560,8 @@ const styles = StyleSheet.create({
   appVer: { color: theme.sub, fontSize: 11, marginTop: 2 },
   signOut: { borderWidth: 1, borderColor: theme.border, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13 },
   signOutTxt: { color: theme.sub, fontWeight: '700', fontSize: 13 },
+  iconBtn: { borderWidth: 1, borderColor: theme.border, borderRadius: 9, width: 38, height: 38, alignItems: 'center', justifyContent: 'center' } as any,
+  iconBtnTxt: { color: theme.accent, fontSize: 18 },
   refreshBtn: { borderWidth: 1, borderColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 88, alignItems: 'center' },
   refreshTxt: { color: theme.accent, fontWeight: '700', fontSize: 13 },
   updateBtn: { backgroundColor: theme.accent, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 13, minWidth: 82, alignItems: 'center' },

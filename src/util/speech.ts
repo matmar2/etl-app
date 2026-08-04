@@ -15,6 +15,32 @@ try {
 
 const _available = Platform.OS === 'web' ? typeof window !== 'undefined' && 'speechSynthesis' in window : !!_Speech;
 
+// Native voice cache — resolved once per language.  Avoids repeated async lookups mid-speech.
+const _nativeVoiceCache: Record<string, { female?: string; male?: string }> = {};
+const _femaleNames = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena|nicky|sin-ji|ioana|sara|luciana|milena|damayanti|lekha/i;
+const _maleNames = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan|aaron|rishi|fred|grandpa|junior/i;
+
+async function _resolveNativeVoice(lang: string, gender: Voice): Promise<string | undefined> {
+  const key = lang.substring(0, 2);
+  if (_nativeVoiceCache[key]) return _nativeVoiceCache[key][gender];
+  if (!_Speech) return undefined;
+  try {
+    const all = await _Speech.getAvailableVoicesAsync();
+    const matching = all.filter((v: any) => v.language?.startsWith(key));
+    const entry: { female?: string; male?: string } = {};
+    // Pick a distinctly-named voice for each gender so they actually sound different.
+    const pickFemale = matching.find((v: any) => _femaleNames.test(v.name || v.identifier));
+    const pickMale = matching.find((v: any) => _maleNames.test(v.name || v.identifier));
+    if (pickFemale) entry.female = pickFemale.identifier;
+    if (pickMale) entry.male = pickMale.identifier;
+    // Fallback: if only one name matched, use the other end of the list for the opposite gender.
+    if (!entry.female && matching.length) entry.female = matching[0].identifier;
+    if (!entry.male && matching.length > 1) entry.male = matching[matching.length - 1].identifier;
+    _nativeVoiceCache[key] = entry;
+    return entry[gender];
+  } catch { return undefined; }
+}
+
 export function speechAvailable(): boolean { return _available; }
 
 let _speaking = false;
@@ -93,26 +119,33 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
   }
 
   if (_Speech) {
-    let idx = 0;
-    function speakNext() {
-      if (_stopped || idx >= chunks.length) {
-        _speaking = false; onDone?.(); return;
+    const language = lang || 'en-US';
+    // Resolve a real OS voice for the requested gender, then start speaking.
+    _resolveNativeVoice(language, voice).then((voiceId) => {
+      if (_stopped) { _speaking = false; onDone?.(); return; }
+      let idx = 0;
+      function speakNext() {
+        if (_stopped || idx >= chunks.length) {
+          _speaking = false; onDone?.(); return;
+        }
+        const c = chunks[idx];
+        const opts: any = {
+          language,
+          pitch: voice === 'female' ? 1.1 : 0.85,
+          rate: 0.95,
+          onDone: () => {
+            const pause = c.pause;
+            idx++;
+            if (_stopped || idx >= chunks.length) { _speaking = false; onDone?.(); return; }
+            _pauseTimer = setTimeout(speakNext, pause);
+          },
+          onError: () => { _speaking = false; onDone?.(); },
+        };
+        if (voiceId) opts.voice = voiceId;
+        _Speech!.speak(c.text, opts);
       }
-      const c = chunks[idx];
-      _Speech!.speak(c.text, {
-        language: lang || 'en-US',
-        pitch: voice === 'female' ? 1.1 : 0.85,
-        rate: 0.95,
-        onDone: () => {
-          const pause = c.pause;
-          idx++;
-          if (_stopped || idx >= chunks.length) { _speaking = false; onDone?.(); return; }
-          _pauseTimer = setTimeout(speakNext, pause);
-        },
-        onError: () => { _speaking = false; onDone?.(); },
-      });
-    }
-    speakNext();
+      speakNext();
+    }).catch(() => { _speaking = false; onDone?.(); });
   }
 }
 
