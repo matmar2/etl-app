@@ -137,10 +137,9 @@ export default function DepartureScreen({ route, navigation }: any) {
   async function decideCabin(id: string, ok: boolean) { try { await acceptDispatch(id, ok); refreshStatus(); } catch { /* offline */ } }
   useFocusEffect(useCallback(() => {           // refresh serviceability, cabin decisions + GPS each time
     refreshStatus();
-    // Re-pull the sector so a maintenance CRS signed on the Release screen (or another iPad) shows
-    // here immediately — otherwise the commander sees a stale "CRS not signed" and the release
-    // button lingers. Safe: the fuel form only resets on first load ([!!s]), not on this refresh.
-    refresh();
+    // iPad: no server pull on focus — local SQLite is kept current by the 30 s syncPush cycle.
+    // Web: re-pull the sector so a maintenance CRS signed elsewhere shows here immediately.
+    if (require('react-native').Platform.OS === 'web') refresh();
     if (s?.dep && !s?.off_block) checkAirportGps(s.dep).then(setDepGps).catch(() => {});   // confirm departure airport before push-back
   }, [refreshStatus, refresh, s?.dep, s?.off_block]));
 

@@ -483,16 +483,14 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       <Text style={sx.section}>Acceptance (post-flight)</Text>
       {(() => {
-        const missing = canAct ? computeMissing() : [];         // required arrival fields still empty
-        const canSign = canAct && missing.length === 0;
+        // Button is always tappable when the user has permission and departure is accepted —
+        // accept() shows a popup listing any missing fields instead of silently disabling.
         return (
           <>
-            <TouchableOpacity disabled={!canSign} style={[sx.save, { backgroundColor: theme.accent, opacity: canSign ? 1 : 0.4 }]} onPress={accept}>
+            <TouchableOpacity disabled={!canAct} style={[sx.save, { backgroundColor: theme.accent, opacity: canAct ? 1 : 0.4 }]} onPress={accept}>
               <Text style={[sx.saveText, { color: theme.onAccent }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : 'Sign — close sector (arrival)'}</Text>
             </TouchableOpacity>
-            {canAct && missing.length ? (
-              <Text style={{ color: theme.sub, fontSize: 12, marginTop: 6 }}>Complete before signing: {missing.map((x) => x.label).join(', ')}</Text>
-            ) : signMsg ? (
+            {signMsg ? (
               <Text style={{ color: /Complete|Could not/.test(signMsg) ? theme.red : theme.sub, fontSize: 12, marginTop: 6 }}>{signMsg}</Text>
             ) : null}
           </>

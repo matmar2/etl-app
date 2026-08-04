@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import HilRemaining from '../components/HilRemaining';
 import { getSector, pullSector } from '../db/sectors';
@@ -20,12 +20,22 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [defs, setDefs] = useState<any[] | null>(null);   // active defects for the MAINT-log summary
   const [st, setSt] = useState<AircraftStatus | null>(null);   // serviceability — gates Release & Print
 
+  const loadLocal = useCallback(async () => {
+    setErr('');
+    try {
+      const local = await getSector(sectorId);
+      if (local) { setS(local); setTl(local.page_no ?? null); }
+      else setErr('Sector not found.');
+    } catch (e: any) {
+      setErr(`Could not load sector — ${e?.message || 'unknown error'}`);
+    }
+  }, [sectorId]);
   const refresh = useCallback(async () => {
     setErr('');
     try {
       const local = await getSector(sectorId);
-      if (local) setS(local);                                 // show local instantly
-      const row = await pullSector(sectorId);                 // then pull server-authoritative status/signatures
+      if (local) setS(local);
+      const row = await pullSector(sectorId);
       if (!row) { if (!local) setErr('Sector not found.'); return; }
       setS(row);
       setTl(row.page_no ?? null);
@@ -34,12 +44,18 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
     }
   }, [sectorId]);
   useEffect(() => {
-    const unsub = navigation.addListener('focus', refresh);
     const done = () => setSyncing(false);
-    const t = setTimeout(done, 6000);                        // never trap the crew (offline/slow)
-    refresh().then(done).catch(done).finally(() => clearTimeout(t));
+    if (Platform.OS === 'web') {
+      const unsub = navigation.addListener('focus', refresh);
+      const t = setTimeout(done, 6000);
+      refresh().then(done).catch(done).finally(() => clearTimeout(t));
+      return () => { unsub(); clearTimeout(t); };
+    }
+    // iPad: read local SQLite only — no server pull on screen entry.
+    const unsub = navigation.addListener('focus', loadLocal);
+    loadLocal().then(done).catch(done);
     return unsub;
-  }, [navigation, refresh]);
+  }, [navigation, refresh, loadLocal]);
   useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
     const isM = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';
     if (s?.aircraft_id) aircraftStatus(s.aircraft_id).then(setSt).catch(() => setSt(null));

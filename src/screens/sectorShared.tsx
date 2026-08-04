@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { syncPush } from '../api/client';
 import { getSector, pullSector, updateSector } from '../db/sectors';
 import { theme } from '../theme';
 import { confirmAction } from '../util/confirm';
+
+const isWeb = Platform.OS === 'web';
 
 export const hhmm = (iso?: string) => (iso ? new Date(iso).toISOString().slice(11, 16) + 'z' : '—');
 // minutes -> h:mm (flight/block hours)
@@ -48,13 +50,17 @@ export function useSector(sectorId: string) {
   const refresh = useCallback(async () => { setS(await pullSector(sectorId)); }, [sectorId]);
   useEffect(() => {
     let alive = true;
-    reload();
-    // Block interaction until the server copy lands — but never trap the crew: an offline/failed
-    // pull releases immediately and a slow one is time-boxed (6 s), then the pull continues silently.
     const done = () => { if (alive) setSyncing(false); };
-    const t = setTimeout(done, 6000);
-    refresh().then(done).catch(done).finally(() => clearTimeout(t));
-    return () => { alive = false; clearTimeout(t); };
+    if (isWeb) {
+      // Web has no local SQLite — must fetch from server.
+      const t = setTimeout(done, 6000);
+      refresh().then(done).catch(done).finally(() => clearTimeout(t));
+      return () => { alive = false; clearTimeout(t); };
+    }
+    // iPad: read local SQLite only — no server call on screen entry.
+    // Data was synced at login; the 30 s syncPush cycle keeps it current.
+    reload().then(done).catch(done);
+    return () => { alive = false; };
   }, [sectorId]);
 
   async function save(patch: any) {
@@ -118,6 +124,50 @@ export function NumField({ label, value, onChange, bad, eff, onLayout, decimals 
   );
 }
 
+// Controlled OOOI time input — auto-formats as HH:MM, auto-saves on valid 4-digit entry.
+// The old uncontrolled input (defaultValue + onEndEditing) silently lost manual times when the
+// keyboard wasn't dismissed — the sign button stayed disabled because the sector record was never
+// updated. This controlled version saves as soon as 4 valid digits are entered.
+function OOOITimeInput({ field, sector, setManual, disabled, isEff, onEdit }: {
+  field: string; sector: any; setManual: (f: string, t: string) => void;
+  disabled?: boolean; isEff?: boolean; onEdit?: () => void;
+}) {
+  const saved = sector[field] ? hhmm(sector[field]).replace('z', '') : '';
+  const [text, setText] = useState(saved);
+  const lastSaved = useRef(saved);
+  // Sync displayed text when the saved value changes externally (stamp, sync, clear).
+  useEffect(() => { if (saved !== lastSaved.current) { setText(saved); lastSaved.current = saved; } }, [saved]);
+
+  function handleChange(raw: string) {
+    const digits = raw.replace(/[^0-9]/g, '').slice(0, 4);
+    let fmt = digits;
+    if (digits.length > 2) fmt = digits.slice(0, 2) + ':' + digits.slice(2);
+    setText(fmt);
+    if (digits.length === 4) {
+      const hh = parseInt(digits.slice(0, 2), 10);
+      const mm = parseInt(digits.slice(2), 10);
+      if (hh <= 23 && mm <= 59) {
+        lastSaved.current = fmt;          // prevent the useEffect from clobbering during save
+        if (onEdit) onEdit();
+        setManual(field, fmt);
+      }
+    }
+  }
+
+  return (
+    <TextInput
+      style={[styles.oooiInput, disabled && { opacity: 0.4 }, isEff ? effInputStyle : null]}
+      editable={!disabled}
+      keyboardType="numbers-and-punctuation"
+      value={text}
+      placeholder="hh:mm"
+      placeholderTextColor={theme.sub}
+      onChangeText={handleChange}
+      maxLength={5}
+    />
+  );
+}
+
 // OOOI stamp tiles + manual inputs for the given fields.
 // effSet/onEdit: OOOI times imported from EFF render blue; stamping or typing one prunes it (onEdit).
 export function OOOISection({ s, fields, stamp, setManual, clear, disabled, effSet, onEdit }: any) {
@@ -136,12 +186,11 @@ export function OOOISection({ s, fields, stamp, setManual, clear, disabled, effS
       </View>
       <View style={styles.oooiRow}>
         {fields.map((f: string) => (
-          <TextInput key={`${f}-${s[f]}`} style={[styles.oooiInput, disabled && { opacity: 0.4 }, isEff(f) ? effInputStyle : null]} editable={!disabled} keyboardType="numbers-and-punctuation"
-            defaultValue={s[f] ? hhmm(s[f]).replace('z', '') : ''} placeholder="hh:mm" placeholderTextColor={theme.sub}
-            onEndEditing={(e) => { edit(f); setManual(f, e.nativeEvent.text); }} />
+          <OOOITimeInput key={f} field={f} sector={s} setManual={setManual} disabled={disabled}
+            isEff={isEff(f)} onEdit={() => edit(f)} />
         ))}
       </View>
-      {!disabled ? <Text style={styles.sub}>Tap to stamp now{clear ? ' · long-press to clear (return to stand)' : ''} · or type the UTC time to correct.</Text> : null}
+      {!disabled ? <Text style={styles.sub}>Tap to stamp now{clear ? ' · long-press to clear (return to stand)' : ''} · or type UTC time (auto-formats hh:mm).</Text> : null}
     </>
   );
 }
