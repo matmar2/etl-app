@@ -108,8 +108,11 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
       }
       const c = chunks[idx];
       const u = new SpeechSynthesisUtterance(c.text);
+      // Lower pitch for non-English: the compact iOS voices sound nasal ("bad cold")
+      // at higher pitch; 1.0 keeps the voice natural until enhanced voices are downloaded.
+      const isEn = !lang || lang.startsWith('en');
       u.rate = 0.95;
-      u.pitch = voice === 'female' ? 1.1 : 0.9;
+      u.pitch = voice === 'female' ? (isEn ? 1.1 : 1.0) : (isEn ? 0.9 : 0.85);
       if (lang) u.lang = lang;
       if (preferred) u.voice = preferred;
       u.onend = () => {
@@ -138,7 +141,10 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
         const c = chunks[idx];
         const opts: any = {
           language,
-          pitch: voice === 'female' ? 1.1 : 0.85,
+          // Lower pitch for non-English compact voices (sound nasal at higher pitch)
+          pitch: voice === 'female'
+            ? (language.startsWith('en') ? 1.1 : 1.0)
+            : (language.startsWith('en') ? 0.85 : 0.8),
           rate: 0.95,
           onDone: () => {
             const pause = c.pause;
