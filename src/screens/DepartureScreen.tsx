@@ -817,6 +817,8 @@ export default function DepartureScreen({ route, navigation }: any) {
       {servMsg ? <Text style={{ color: theme.red, fontSize: 12, marginTop: 6 }}>{servMsg}</Text> : null}
       {canServ ? <TouchableOpacity style={sx.save} onPress={async () => {
         if (!(await confirmAction('Save servicing uplifts?'))) return;
+        // Persist the nil_oils_fluids flag on the sector so the release endpoint sees it
+        save({ nil_oils_fluids: !!fuel.nil_oils_fluids });
         setServMsg('Uplifts saved ✓');
         for (const sys of ['eng1', 'eng2', 'idg1', 'idg2', 'hyd_green', 'hyd_blue', 'hyd_yellow'] as const) {
           const up = num(serv[sys]);

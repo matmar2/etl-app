@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, saveMaintWork, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
+import { aircraftStatus, can, CheckStatus, closedDefects, ClosingItem, Correction, currentAircraft, DefectBrief, listCorrections, MfaRequired, raiseCorrection, ReleaseStatus, releaseSector, releaseStatus, requestCrsReset, revokeRelease, saveMaintWork, saveReleaseNote, sectorDetail, setClosedDefects, sectorTlHtml, sectorTlHtmlCached, userLicence, userName, sectorCheckOverrideMechanic } from '../api/client';
 import { finalizeServiceable } from '../util/finalize';
 import RoBanner from '../components/RoBanner';
 import OfflineFlash from '../components/OfflineFlash';
@@ -80,6 +80,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
   const load = useCallback(() => {
     releaseStatus(sectorId).then((r) => {
       setSt(r); const w = (r as any).work_performed || ''; setWorkDone(w); setWorkSaved(w); const o = (r as any).wo_ref || ''; setWoRef(o); setWoSaved(o);
+      setNote((prev) => prev || (r as any).release?.note || '');   // hydrate draft note (don't overwrite unsaved edits)
       if ((r as any).checks) setChecks((r as any).checks);   // sector-scoped; shows 2/10-day currency even when current
       // Fold locally-signed (offline) checks using the sector's OWN tail — not currentAircraft, which is
       // unset when the Sign-off is opened straight from Your Sectors.
@@ -489,7 +490,8 @@ export default function ReleaseScreen({ route, navigation }: any) {
         <>
           <TextInput style={s.input} value={signer} onChangeText={setSigner} placeholder="Mechanic name *" placeholderTextColor={theme.sub} />
           <TextInput style={s.input} value={licence} onChangeText={setLicence} placeholder="Licence / Part-145 auth no. *" placeholderTextColor={theme.sub} autoCapitalize="characters" />
-          <TextInput style={s.input} value={note} onChangeText={setNote} placeholder="Release note (optional)…" placeholderTextColor={theme.sub} multiline />
+          <TextInput style={s.input} value={note} onChangeText={setNote} placeholder="Release note (optional)…" placeholderTextColor={theme.sub} multiline
+            onBlur={() => { if (note.trim()) saveReleaseNote(sectorId, note.trim()).catch(() => {}); }} />
           <Text style={s.sub}>A CRS release requires the mechanic name, licence, a signature and MFA. The licence must match your registered licence on file.</Text>
           {needOtp ? (
             <TextInput style={s.input} value={otp} onChangeText={setOtp} keyboardType="number-pad"
