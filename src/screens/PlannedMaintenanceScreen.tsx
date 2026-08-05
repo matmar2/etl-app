@@ -350,7 +350,7 @@ export default function PlannedMaintenanceScreen({ route, navigation }: any) {
               </View>
             </View>
           ) : null}
-          {(queued || /offline|will sync|synced when|recorded on this iPad/i.test(msg)) && msg ? <OfflineFlash message={msg} /> : (msg ? <Text style={s.msg}>{msg}</Text> : null)}
+          {(queued || /offline|will sync|synced when|recorded on this iPad/i.test(msg)) && msg ? <OfflineFlash message={msg} /> : (msg ? <Text style={[s.msg, /fail|error|could not|cannot/i.test(msg) && { color: theme.red }]}>{msg}</Text> : null)}
           {doneId && !queued ? (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
               <TouchableOpacity style={[s.btn, { flex: 1, backgroundColor: theme.tile }]} onPress={() => output('print')}>

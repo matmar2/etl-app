@@ -517,7 +517,7 @@ export default function ReleaseScreen({ route, navigation }: any) {
           </View>
         </View>
       ) : null}
-      {/offline|will sync|queued/i.test(msg) ? <OfflineFlash message={msg} /> : (msg ? <Text style={s.msg}>{msg}</Text> : null)}
+      {/offline|will sync|queued/i.test(msg) ? <OfflineFlash message={msg} /> : (msg ? <Text style={[s.msg, /fail|error|could not|cannot|enter |confirm /i.test(msg) && { color: theme.red }]}>{msg}</Text> : null)}
 
       <SignaturePad visible={signing} title="Sign maintenance release (CRS)"
         onClose={() => setSigning(false)}

@@ -345,7 +345,7 @@ export default function DefectDetailScreen({ route, navigation }: any) {
         <SignatureBlock label={`${(d.source || 'report').toUpperCase()} — reported & signed`}
           sig={{ signer_name: d.reported_by_name, licence_no: d.reporter_licence, signed_at: d.raised_at, signature_image: d.reporter_signature }} />
       ) : null}
-      {msg ? <Text style={styles.msg}>{msg}</Text> : null}
+      {msg ? <Text style={[styles.msg, /fail|error|could not|cannot/i.test(msg) && { color: theme.red }]}>{msg}</Text> : null}
 
       {/* Once the CRS is signed (rectified/closed) the photos are part of the signed record — view only, no re-take/library. */}
       <PhotoCapture defectId={defectId} kind="damage" label="Damage / receipt photos" readOnly={d.status === 'closed' || d.status === 'rectified'} />
