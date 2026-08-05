@@ -273,6 +273,14 @@ export default function InductionGate() {
             <TouchableOpacity activeOpacity={0.97} onPress={next}>
               <Image source={{ uri: slides[i] }} style={{ width: '100%', aspectRatio: 16 / 9 }} resizeMode="contain" />
             </TouchableOpacity>
+            {/* When a non-English language is selected, show the translated narration as readable
+                text below the slide image — the PNG is baked in English and can't be translated. */}
+            {lang !== 'en' && narrationForSlide(i) ? (
+              <View style={s.translatedBox}>
+                <Text style={s.translatedLabel}>{langLabel(lang)}</Text>
+                <Text style={s.translatedText}>{narrationForSlide(i)}</Text>
+              </View>
+            ) : null}
           </ScrollView>
         ) : (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={s.ackContent}>
@@ -348,6 +356,9 @@ const s = StyleSheet.create({
   opt: { color: theme.sub, fontSize: 12, fontWeight: '400' },
   slideArea: { flex: 1, backgroundColor: theme.bg },
   slideScroll: { flexGrow: 1, justifyContent: 'center', padding: 10, maxWidth: 1100, width: '100%', alignSelf: 'center' },
+  translatedBox: { backgroundColor: theme.panel, borderWidth: 1, borderColor: theme.border, borderRadius: 10, padding: 16, marginTop: 12 },
+  translatedLabel: { color: theme.accent, fontWeight: '800', fontSize: 11, letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' },
+  translatedText: { color: theme.text, fontSize: 14, lineHeight: 22 },
   ackContent: { padding: 24, width: '100%', maxWidth: 620, alignSelf: 'center', flexGrow: 1, justifyContent: 'center' },
   ackTitle: { color: theme.text, fontSize: 22, fontWeight: '800', marginBottom: 8 },
   ackSub: { color: theme.sub, fontSize: 14, lineHeight: 21, marginBottom: 22 },
