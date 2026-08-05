@@ -198,14 +198,14 @@ export default function DepartureScreen({ route, navigation }: any) {
     // Decide ONCE, on the first load of the sector — so signing during this session (draft →
     // preflight_signed) can never bounce the crew straight back into the reset prompt.
     acceptPrompted.current = true;
-    if (s.status !== 'preflight_signed' || s.takeoff || !can('departure', 'acceptance')) return;
+    if (s.status !== 'preflight_signed' || s.status === 'closed' || s.status === 'exported' || !can('departure', 'acceptance')) return;
     (async () => {
       const reset = await confirmAction(
-        'This departure is already signed (Commander acceptance).\n\nReset the sign off to make changes — you must sign again before flight — or keep it view-only?\n\nOK = Reset sign off · Cancel = View only',
+        'This departure is already signed (Commander acceptance).\n\nReset the sign off to make changes — you must sign again before closing the flight — or keep it view-only?\n\nOK = Reset sign off · Cancel = View only',
         'Flight already accepted');
       if (!reset) return;
       try { await revokeAcceptance(sectorId); setSignMsg('Sign off reset — make your changes, then sign again.'); refresh(); }
-      catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot reset — flight is airborne' : (e?.message || 'Could not reset')); }
+      catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot reset — flight is closed' : (e?.message || 'Could not reset')); }
     })();
   }, [!!s]);
 
@@ -371,8 +371,8 @@ export default function DepartureScreen({ route, navigation }: any) {
 
   async function undoAccept() {
     if (!(await confirmAction('Undo the commander acceptance for this departure?', 'Undo acceptance'))) return;
-    try { await revokeAcceptance(sectorId); trackActivity('revoke', 'preflight', sectorId, 'Departure', { flight: s.flight_no }); setSignMsg('Acceptance undone'); refresh(); }
-    catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot undo — flight is airborne' : (e.message || 'Failed')); }
+    try { await revokeAcceptance(sectorId); trackActivity('revoke', 'preflight', sectorId, 'Departure', { flight: s.flight_no }); setSignMsg('Acceptance undone — make your changes, then sign again.'); refresh(); }
+    catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot undo — flight is closed' : (e.message || 'Failed')); }
   }
 
   return (
@@ -997,12 +997,11 @@ export default function DepartureScreen({ route, navigation }: any) {
             <Text style={[sx.saveText, { color: theme.onAccent }]}>Accepted ✓</Text>
           </TouchableOpacity>
           <SignatureBlock label="Commander acceptance — signed" sig={(s as any).signatures?.find((g: any) => g.kind === 'preflight')} />
-          {isCrew && !s.takeoff ? (
+          {isCrew ? (
             <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 8 }]} onPress={undoAccept}>
-              <Text style={[sx.saveText, { color: theme.red }]}>Undo acceptance (before take-off)</Text>
+              <Text style={[sx.saveText, { color: theme.red }]}>Undo acceptance (modify pre-departure)</Text>
             </TouchableOpacity>
           ) : null}
-          {s.takeoff ? <Text style={[sx.sub, { color: theme.sub, marginTop: 8 }]}>Aircraft airborne — acceptance can no longer be undone.</Text> : null}
         </>
       ) : (acSt && !acSt.serviceable && !(((s.check_override?.mechanic_by) || lagOnlyR) && acSt.blocking_defects === 0) && !testing) ? (
         <Text style={sx.sub}>Available once the aircraft is serviceable and maintenance has signed the CRS above.</Text>

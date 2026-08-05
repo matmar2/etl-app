@@ -17,8 +17,12 @@ const _available = Platform.OS === 'web' ? typeof window !== 'undefined' && 'spe
 
 // Native voice cache — resolved once per language.  Avoids repeated async lookups mid-speech.
 const _nativeVoiceCache: Record<string, { female?: string; male?: string }> = {};
-const _femaleNames = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena|nicky|sin-ji|ioana|sara|luciana|milena|damayanti|lekha/i;
-const _maleNames = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan|aaron|rishi|fred|grandpa|junior/i;
+
+// iOS/macOS voice names by gender across all supported languages.  Apple assigns a
+// personal name to each voice; these lists cover every built-in iOS 17/18 voice so
+// non-English languages (Bulgarian Daria, German Anna/Markus, etc.) match too.
+const _femaleNames = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena|nicky|sin-ji|ioana|sara|luciana|milena|damayanti|lekha|daria|anna|petra|amelie|marie|alice|federica|carmela|paola|kyoko|yuna|meijia|sinji|tian-tian|tingting|lana|katya|milena|zosia|zuzana|iveta|mariska|laura|ellen|lesya|kanya|linh|carmit|joana|monica|paulina|soledad|sara|melina|yelda|nora|sandy|claire/i;
+const _maleNames = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan|aaron|rishi|fred|grandpa|junior|markus|hattori|otoya|lee|lisheng|wobao|maged|majed|xander|filiz|albert|maxim|mikko|oskar|anders|krzysztof|nicolas|jacques|lekso|henrik|carlos|diego|enrique|reed|rocko|evan/i;
 
 async function _resolveNativeVoice(lang: string, gender: Voice): Promise<string | undefined> {
   const key = lang.substring(0, 2);
@@ -36,6 +40,8 @@ async function _resolveNativeVoice(lang: string, gender: Voice): Promise<string 
     // Fallback: if only one name matched, use the other end of the list for the opposite gender.
     if (!entry.female && matching.length) entry.female = matching[0].identifier;
     if (!entry.male && matching.length > 1) entry.male = matching[matching.length - 1].identifier;
+    // If still only one voice for this language, rely on pitch to differentiate.
+    if (!entry.male && matching.length === 1) entry.male = matching[0].identifier;
     _nativeVoiceCache[key] = entry;
     return entry[gender];
   } catch { return undefined; }
@@ -84,8 +90,9 @@ export function speak(text: string, voice: Voice = 'female', onDone?: () => void
     const voices = window.speechSynthesis.getVoices();
     const langPrefix = lang ? lang.substring(0, 2) : '';
     const langVoices = langPrefix ? voices.filter(v => v.lang.startsWith(langPrefix)) : voices;
-    const femaleRe = /samantha|female|zira|karen|moira|tessa|fiona|victoria|allison|ava|susan|helena/i;
-    const maleRe = /daniel|male|david|alex|tom|jorge|thomas|oliver|luca|yuri|ivan/i;
+    // Reuse the same comprehensive name lists so web and native match the same voices.
+    const femaleRe = _femaleNames;
+    const maleRe = _maleNames;
     let preferred: SpeechSynthesisVoice | undefined;
     if (voice === 'female') {
       preferred = langVoices.find(v => femaleRe.test(v.name)) || langVoices.find(v => !maleRe.test(v.name));

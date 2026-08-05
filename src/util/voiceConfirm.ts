@@ -107,10 +107,15 @@ export function voiceConfirmAvailable(): boolean {
   return speechAvailable() && _adminEnabled;
 }
 
-async function canSpeak(): Promise<boolean> {
+// Synchronous gate — Safari/WebKit requires speechSynthesis.speak() in the same
+// synchronous task as a user gesture; an `await` (even on an already-resolved
+// promise) pushes it to the microtask queue and the browser silently blocks it.
+// The preference is loaded once at app boot via loadUserVoicePref(); after that
+// _userEnabled is always cached so the sync check is authoritative.
+function canSpeakSync(): boolean {
   if (!speechAvailable() || !_adminEnabled) return false;
-  await loadUserVoicePref();
-  return !!_userEnabled;
+  // If the pref hasn't loaded yet, default to enabled (same as loadUserVoicePref).
+  return _userEnabled !== null ? _userEnabled : true;
 }
 
 function nameForSpeech(): string {
@@ -125,8 +130,8 @@ function roleTitle(): string {
   return '';
 }
 
-export async function speakPreDeparture(): Promise<void> {
-  if (!(await canSpeak())) return;
+export function speakPreDeparture(): void {
+  if (!canSpeakSync()) return;
   const title = roleTitle();
   const name = nameForSpeech();
   const msg = title
@@ -135,8 +140,8 @@ export async function speakPreDeparture(): Promise<void> {
   speak(msg);
 }
 
-export async function speakFlightClosed(): Promise<void> {
-  if (!(await canSpeak())) return;
+export function speakFlightClosed(): void {
+  if (!canSpeakSync()) return;
   const title = roleTitle();
   const name = nameForSpeech();
   const msg = title
@@ -145,20 +150,20 @@ export async function speakFlightClosed(): Promise<void> {
   speak(msg);
 }
 
-export async function speakDefectCleared(): Promise<void> {
-  if (!(await canSpeak())) return;
+export function speakDefectCleared(): void {
+  if (!canSpeakSync()) return;
   const name = nameForSpeech();
   speak(`Thanks ${name}. You cleared the defect.`);
 }
 
-export async function speakCRSSigned(): Promise<void> {
-  if (!(await canSpeak())) return;
+export function speakCRSSigned(): void {
+  if (!canSpeakSync()) return;
   const name = nameForSpeech();
   speak(`Thanks ${name}. You signed the CRS.`);
 }
 
-export async function speakMissingFields(fields: string[]): Promise<void> {
-  if (!(await canSpeak())) return;
+export function speakMissingFields(fields: string[]): void {
+  if (!canSpeakSync()) return;
   if (!fields.length) return;
   const list = fields.join(', ');
   speak(`Please enter the following before signing: ${list}.`);
