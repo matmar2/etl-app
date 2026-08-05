@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { ammIawLine, ammRevision, can, createMaintenance, currentAircraft, extendDefect, listActiveDefects, listHIL, NetworkError, serverSectors, syncPush, userName } from '../api/client';
+import { aircraftStatus, ammIawLine, ammRevision, can, CheckStatus, createMaintenance, currentAircraft, extendDefect, listActiveDefects, listHIL, NetworkError, serverSectors, syncPush, userName } from '../api/client';
 import { createLocalMaintenance, deleteSector } from '../db/sectors';
 import { fmtTl } from '../util/tl';
 import CdlPicker from '../components/CdlPicker';
@@ -29,7 +29,9 @@ export default function MaintenanceScreen({ route, navigation }: any) {
     ammRevision().then(setAmmRev).catch(() => {});
   }, []);
   const [active, setActive] = useState<any[]>([]);
+  const [cabin, setCabin] = useState<any[]>([]);
   const [hil, setHil] = useState<any[]>([]);
+  const [checks, setChecks] = useState<CheckStatus[]>([]);
   const [openLogs, setOpenLogs] = useState<any[]>([]);   // open (not-closed) maintenance Tech Logs to resume
   // inline "extend deferral"
   const [extId, setExtId] = useState<string | null>(null);
@@ -41,8 +43,12 @@ export default function MaintenanceScreen({ route, navigation }: any) {
 
   const load = useCallback(async () => {
     await syncPush().catch(() => {});                 // push locally-created defects up first
-    listActiveDefects(reg).then((d: any[]) => setActive(d || [])).catch(() => setActive([]));
+    listActiveDefects(reg).then((d: any[]) => {
+      setActive((d || []).filter((x) => x.area !== 'cabin'));
+      setCabin((d || []).filter((x) => x.area === 'cabin'));
+    }).catch(() => { setActive([]); setCabin([]); });
     listHIL(reg).then((d: any[]) => setHil(d || [])).catch(() => setHil([]));
+    aircraftStatus(reg).then((st) => setChecks(st.checks || [])).catch(() => {});
     serverSectors(reg).then((secs: any[]) => setOpenLogs((secs || [])
       .filter((x) => x.page_kind === 'maintenance_only' && !['closed', 'exported'].includes(x.status))
       .sort((a, b) => String(b.flight_date || '').localeCompare(String(a.flight_date || ''))))).catch(() => setOpenLogs([]));
@@ -196,12 +202,46 @@ export default function MaintenanceScreen({ route, navigation }: any) {
         </>
       ) : null}
 
+      {/* 2/10-day checks — overdue or due-soon checks need attention during ground maintenance */}
+      {checks.length > 0 ? (
+        <>
+          <Text style={s.section}>Maintenance checks ({checks.length})</Text>
+          {checks.map((c) => {
+            const pending = !c.last && !c.baseline;
+            const color = (pending || c.expired) ? theme.red : (c.days_left != null && c.days_left <= 1 ? '#ffb84d' : theme.green);
+            return (
+              <TouchableOpacity key={c.kind} style={[s.row, { borderLeftWidth: 4, borderLeftColor: color }]}
+                onPress={() => navigation.navigate('Planned', { kind: c.kind, aircraftId: reg })}>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rowTitle}>{c.label}</Text>
+                  <Text style={[s.sub, { color }]}>
+                    {pending ? 'Pending — not yet recorded' : c.expired ? `OVERDUE · was due ${(c.due || '').slice(0, 10)}` : `Due ${(c.due || '').slice(0, 10)} · ${c.days_left}d ${c.hours_left != null ? `${Math.round((c.hours_left % 24))}h` : ''} left`}
+                  </Text>
+                </View>
+                <Text style={s.rectify}>open ›</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </>
+      ) : null}
+
       <Text style={s.section}>Open defects — to rectify ({active.length})</Text>
       {active.length === 0 ? <Text style={s.sub}>No open defects.</Text> : active.map((d) => (
         <TouchableOpacity key={d.id} style={s.row} onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}>
           <View style={{ flex: 1 }}>
             <Text style={s.rowTitle}>{d.title || d.description}</Text>
             <Text style={s.sub}>{d.ata_chapter ? `ATA ${d.ata_chapter} · ` : ''}{(d.source || '').toUpperCase()} · {d.status}{d.mel_ref ? ` · ${d.mel_ref}` : ''}</Text>
+          </View>
+          <Text style={s.rectify}>rectify ›</Text>
+        </TouchableOpacity>
+      ))}
+
+      <Text style={s.section}>Cabin defects ({cabin.length})</Text>
+      {cabin.length === 0 ? <Text style={s.sub}>No open cabin defects.</Text> : cabin.map((d) => (
+        <TouchableOpacity key={d.id} style={s.row} onPress={() => navigation.navigate('DefectDetail', { defectId: d.id })}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.rowTitle}>{d.title || d.description}</Text>
+            <Text style={s.sub}>{d.ata_chapter ? `ATA ${d.ata_chapter} · ` : ''}{(d.source || '').toUpperCase()} · {d.status}{d.airworthiness ? ' · AOG' : ''}</Text>
           </View>
           <Text style={s.rectify}>rectify ›</Text>
         </TouchableOpacity>
