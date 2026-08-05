@@ -105,7 +105,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={editTl}><Text style={styles.tlEdit}>Change</Text></TouchableOpacity>
         </View>
       ) : null}
-      <Text style={styles.title}>{s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={styles.title}>{s.aircraft_id ? `${s.aircraft_id} · ` : ''}{s.flight_no} · {s.dep} → {s.arr}</Text>
       <View style={styles.subRow}>
         <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
         {s.dep && s.arr && s.dep !== s.arr ? (

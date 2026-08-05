@@ -8,7 +8,12 @@ import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
 import { generateTotp, sha1Hex, verifyTotp } from '../util/totp';
 
-const BASE = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? 'http://localhost:8000';
+// On the web, auto-detect sandbox: when loaded from /sandbox-app/, talk to /sandbox-api/
+// instead of the prod /api/. iPads always use the baked-in prod URL from app.json.
+const _configBase = (Constants.expoConfig?.extra as any)?.apiBaseUrl ?? 'http://localhost:8000';
+const BASE = (typeof window !== 'undefined' && window.location?.pathname?.startsWith('/sandbox-app'))
+  ? window.location.origin + '/sandbox-api'
+  : _configBase;
 
 let _role: string | null = null;
 export const role = () => _role;
