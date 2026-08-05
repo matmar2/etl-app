@@ -439,8 +439,6 @@ export default function ReleaseScreen({ route, navigation }: any) {
             <Text style={[s.sub, { color: theme.red, marginTop: 8 }]}>CRS reset request was rejected by CAMO{st.reset_request.review_note ? ` — ${st.reset_request.review_note}` : ''}. The CRS stands.</Text>
           ) : isMech && !(st as any).departed ? (
             <View style={{ marginTop: 10 }}>
-              {/* BEFORE DEPARTURE: certifying staff may reset their own CRS to correct + re-sign.
-                  This voids any commander acceptance — the commander must approve again. */}
               <Text style={s.sub}>Need to change something? <Text style={{ fontWeight: '800' }}>Reset the CRS</Text> to correct the release and sign again. If the commander has already accepted, their acceptance is voided and they must approve again.</Text>
               <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, marginTop: 8 }]} onPress={resetReleaseBeforeDep}>
                 <Text style={[s.btnTxt, { color: theme.red }]}>↺ Reset CRS (before departure)</Text>
@@ -448,7 +446,6 @@ export default function ReleaseScreen({ route, navigation }: any) {
             </View>
           ) : isMech ? (
             <View style={{ marginTop: 10 }}>
-              {/* AFTER DEPARTURE: a CRS correction is admin/CAMO-governed — request via Feedback. */}
               <Text style={s.sub}>The aircraft has departed on this CRS. A correction is now made by the <Text style={{ fontWeight: '800' }}>administrator only</Text> — send the request (flight, TL # and full reason) via <Text style={{ fontWeight: '800' }}>Feedback</Text>.</Text>
               <TouchableOpacity style={[s.btn, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Feedback')}>
                 <Text style={s.btnTxt}>Request a correction via Feedback ›</Text>

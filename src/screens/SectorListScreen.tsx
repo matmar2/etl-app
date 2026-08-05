@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings, cacheRouteMaps, LeonFlight, leonFlights, leonHistory, role, sectorTlHtmlCached, syncPush } from '../api/client';
+import { appSettings, cacheRouteMaps, can, LeonFlight, leonFlights, leonHistory, role, revokeRelease, sectorTlHtmlCached, syncPush } from '../api/client';
+import { notifyAction } from '../util/confirm';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
@@ -404,6 +405,39 @@ export default function SectorListScreen({ route, navigation }: any) {
             {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
             {closed ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700', marginTop: 3 }}>Tap to view Tech Log ›</Text> : null}
+            {item.status === 'released' ? (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                {/* Captain / pilot: open the sector to enter departure / arrival data before closure */}
+                {(role() === 'captain' || role() === 'pilot' || role() === 'admin') ? (
+                  <TouchableOpacity style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 6, paddingVertical: 5, paddingHorizontal: 10 }}
+                    onPress={(e) => { e.stopPropagation?.(); navigation.navigate('Sector', { sectorId: item.id }); }}>
+                    <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>Open sector ›</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {/* Mechanic: view / reset CRS, open sector */}
+                {can('release', 'crs') ? (
+                  <>
+                    <TouchableOpacity style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 6, paddingVertical: 5, paddingHorizontal: 10 }}
+                      onPress={(e) => { e.stopPropagation?.(); navigation.navigate('Release', { sectorId: item.id }); }}>
+                      <Text style={{ color: theme.text, fontSize: 11, fontWeight: '700' }}>View release ›</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red, borderRadius: 6, paddingVertical: 5, paddingHorizontal: 10 }}
+                      onPress={async (e) => {
+                        e.stopPropagation?.();
+                        if (!(await confirmAction('Reset the CRS so you can amend and re-sign?\n\nAny commander acceptance is voided.', 'Reset CRS'))) return;
+                        try { await revokeRelease(item.id); notifyAction('CRS reset — open the sector to amend and re-sign.'); pull(); refresh(); }
+                        catch (err: any) { notifyAction(err?.message || 'Could not reset the CRS.'); }
+                      }}>
+                      <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700' }}>↺ Reset CRS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.accent, borderRadius: 6, paddingVertical: 5, paddingHorizontal: 10 }}
+                      onPress={(e) => { e.stopPropagation?.(); navigation.navigate('Sector', { sectorId: item.id }); }}>
+                      <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>Open sector ›</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
           </TouchableOpacity>
           <TouchableOpacity onPress={() => removeOne(item)} hitSlop={10} style={styles.delBtn}><Text style={styles.del}>✕</Text></TouchableOpacity>
         </View>

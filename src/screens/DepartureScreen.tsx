@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, signRecord, Tank, userName, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -913,9 +913,14 @@ export default function DepartureScreen({ route, navigation }: any) {
       {s.status !== 'preflight_signed' ? (
         <>
           <Text style={sx.section}>Maintenance release (CRS)</Text>
-          {s.check_override ? (
+          {s.check_override?.mechanic_by ? (
             <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
-              ✓ Commander confirmed for this leg by {s.check_override.by} at {String(s.check_override.at).slice(0, 16)}z — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
+              ✓ Certified staff ({s.check_override.mechanic_by}) confirmed conditions for this leg{s.check_override.mechanic_at ? ` at ${String(s.check_override.mechanic_at).slice(0, 16)}z` : ''} — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
+            </Text>
+          ) : null}
+          {s.check_override?.by ? (
+            <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
+              ✓ Commander confirmed for this leg by {s.check_override.by}{s.check_override.at ? ` at ${String(s.check_override.at).slice(0, 16)}z` : ''} — {(s.check_override.conditions || []).join('; ')} (delayed OASES update)
             </Text>
           ) : null}
           {(acSt && !acSt.serviceable && !(s.check_override && acSt.blocking_defects === 0)) ? (
@@ -984,9 +989,25 @@ export default function DepartureScreen({ route, navigation }: any) {
               ) : null}
             </View>
           ) : (
-            <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>
-              ✓ Maintenance release (CRS) signed{s.release_kind === 'nil' ? ' · NIL' : ''}
-            </Text>
+            <>
+              <Text style={{ color: theme.green, fontSize: 12, fontWeight: '700' }}>
+                ✓ Maintenance release (CRS) signed{s.release_kind === 'nil' ? ' · NIL' : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                <TouchableOpacity style={[sx.save, { flex: 1, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border }]} onPress={() => navigation.navigate('Release', { sectorId })}>
+                  <Text style={sx.saveText}>View release ›</Text>
+                </TouchableOpacity>
+                {can('release', 'crs') ? (
+                  <TouchableOpacity style={[sx.save, { flex: 1, backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.red }]} onPress={async () => {
+                    if (!(await confirmAction('Reset the CRS so you can amend and re-sign?\n\nAny commander acceptance is voided.', 'Reset CRS'))) return;
+                    try { await revokeRelease(sectorId); notifyAction('CRS reset — amend and re-sign on the Release page.'); refresh(); refreshStatus(); }
+                    catch (e: any) { notifyAction(e?.message || 'Could not reset the CRS.'); }
+                  }}>
+                    <Text style={[sx.saveText, { color: theme.red }]}>↺ Reset CRS</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            </>
           )}
         </>
       ) : null}
