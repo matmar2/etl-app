@@ -657,7 +657,7 @@ export async function releaseSector(sectorId: string, body: { note?: string; sig
   try {
     res = await fetch(`${BASE}/sectors/${sectorId}/release`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await authHeader()) },
+      headers: { 'Content-Type': 'application/json', 'X-Device-Id': await _devId(), ...(await authHeader()) },
       body: JSON.stringify(body),
     });
   } catch {                                             // offline → queue the CRS with an offline flag
