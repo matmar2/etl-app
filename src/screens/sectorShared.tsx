@@ -12,6 +12,8 @@ export const hhmm = (iso?: string) => (iso ? new Date(iso).toISOString().slice(1
 export const hm = (min?: number | null) => (min == null ? '—' : `${Math.floor(min / 60)}:${String(Math.round(min % 60)).padStart(2, '0')}`);
 const mins = (a?: string, b?: string) =>
   a && b ? Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : undefined;
+// Add one calendar day to a YYYY-MM-DD string (cross-midnight OOOI).
+const nextDay = (d: string) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
 export const num = (v: any) => (v === '' || v == null ? null : Number(v));
 // Strip anything that isn't a number from an input value. decimals=true keeps a single '.'
 // (integer fields pass decimals=false). Use in onChangeText so numeric fields reject letters/paste.
@@ -76,8 +78,26 @@ export function useSector(sectorId: string) {
   function setManual(field: string, t: string) {
     const m = /^(\d{1,2}):?(\d{2})$/.exec(t.trim());
     if (!m || !s) return;
-    const date = s.flight_date || new Date().toISOString().slice(0, 10);
-    setTime(field, `${date}T${m[1].padStart(2, '0')}:${m[2]}:00Z`);
+    // Cross-midnight: if the typed HH:MM is earlier than the preceding OOOI event, the flight
+    // crossed midnight → add one day.  The OOOI sequence is OUT → OFF → ON → IN; each event's
+    // date is anchored to the immediately preceding event's timestamp.  For OFF (the first event)
+    // the anchor is STD — a flight delayed past midnight (STD 2300, actual OUT 0030) rolls over.
+    const OOOI = ['off_block', 'takeoff', 'landing', 'on_block'] as const;
+    const idx = OOOI.indexOf(field as any);
+    let anchor: string | undefined;
+    for (let i = idx - 1; i >= 0; i--) { if ((s as any)[OOOI[i]]) { anchor = (s as any)[OOOI[i]]; break; } }
+    if (!anchor && s.std) anchor = s.std;          // OFF with no preceding OOOI → use STD
+    const hh = m[1].padStart(2, '0'), mm = m[2];
+    const newMin = parseInt(hh) * 60 + parseInt(mm);
+    let date: string;
+    if (anchor) {
+      const aDate = anchor.slice(0, 10);
+      const aMin = parseInt(anchor.slice(11, 13)) * 60 + parseInt(anchor.slice(14, 16));
+      date = newMin < aMin ? nextDay(aDate) : aDate;
+    } else {
+      date = s.flight_date || new Date().toISOString().slice(0, 10);
+    }
+    setTime(field, `${date}T${hh}:${mm}:00Z`);
   }
   // Clear an OOOI time (e.g. return-to-stand: clear Off-blocks and re-stamp on the next push-back).
   async function clearTime(field: string) {
