@@ -3,7 +3,7 @@ import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 import { appSettings, currentAircraft } from '../api/client';
 import { theme } from '../theme';
 import { confirmAction } from '../util/confirm';
-import { hhmm, numericOnly, sx, useSector } from './sectorShared';
+import { hhmm, numericOnly, RefreshButton, sx, useSector } from './sectorShared';
 
 type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
 
@@ -12,7 +12,7 @@ const STEPS = ['One-step', 'Two-step'];
 
 export default function DeicingScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
-  const { s, save } = useSector(sectorId);
+  const { s, msg, syncing, save, syncRefresh } = useSector(sectorId);
   const [d, setD] = useState<any>({});
   const [fc, setFc] = useState<FieldConf>({});
 
@@ -50,8 +50,12 @@ export default function DeicingScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <Text style={sx.title}>De-icing / Anti-icing · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={[sx.title, { flex: 1 }]}>De-icing / Anti-icing · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+        <RefreshButton onRefresh={syncRefresh} syncing={syncing} />
+      </View>
       <Text style={sx.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
+      {msg ? <Text style={sx.msg}>{msg}</Text> : null}
 
       <Text style={sx.section}>Procedure</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>

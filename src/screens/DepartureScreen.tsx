@@ -17,7 +17,7 @@ import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { updateSector } from '../db/sectors';
-import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, round1, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, RefreshButton, round1, schedule, sx, useSector } from './sectorShared';
 
 // A serviceability reason the delayed-OASES bridge can cover (mirrors backend is_oases_lag_reason):
 // 2/10-day check currency OR an overdue hold item. Never open technical / cabin defects.
@@ -26,7 +26,7 @@ const allLagReasons = (reasons?: string[]) => (reasons || []).length > 0 && (rea
 
 export default function DepartureScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
-  const { s, msg, syncing, save, stamp, setManual, clearTime, refresh } = useSector(sectorId);
+  const { s, msg, syncing, save, stamp, setManual, clearTime, refresh, syncRefresh } = useSector(sectorId);
   const [fuel, setFuel] = useState<any>({});
   // Fields on this sector still holding the value imported from the EFF flight folder (rendered blue).
   // Seeded from sector.eff_fields; editing a field prunes its key (→ normal style) and persists the
@@ -378,7 +378,10 @@ export default function DepartureScreen({ route, navigation }: any) {
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <SyncBlock visible={syncing} />
-      <Text style={sx.title}>Pre-departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={[sx.title, { flex: 1 }]}>Pre-departure · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+        <RefreshButton onRefresh={syncRefresh} syncing={syncing} />
+      </View>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}

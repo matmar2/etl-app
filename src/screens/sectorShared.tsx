@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { syncPush } from '../api/client';
+import { appSettings, syncPush } from '../api/client';
 import { getSector, pullSector, updateSector } from '../db/sectors';
 import { theme } from '../theme';
 import { confirmAction } from '../util/confirm';
@@ -112,7 +112,29 @@ export function useSector(sectorId: string) {
     const n = { ...s, [field]: null };
     await save({ [field]: null, block_time_min: mins(n.off_block, n.on_block), flight_time_min: mins(n.takeoff, n.landing) });
   }
-  return { s, msg, syncing, save, stamp, setManual, clearTime, reload, refresh };
+  // Explicit refresh (user-initiated via a Refresh button).  Syncs with the server using the
+  // admin-configurable timeout (default 10 s).  If the server doesn't respond in time, shows
+  // "Internet not reliable" and continues with cached data.
+  async function syncRefresh() {
+    setSyncing(true); setMsg('');
+    const timeoutMs = await appSettings().then(s => (s.sync_timeout_seconds ?? 10) * 1000).catch(() => 10000);
+    try {
+      const result = await Promise.race([
+        refresh().then(() => 'ok' as const),
+        new Promise<'timeout'>(r => setTimeout(() => r('timeout'), timeoutMs)),
+      ]);
+      if (result === 'timeout') {
+        setMsg('Internet not reliable — continuing offline');
+      } else {
+        setMsg('Refreshed ✓');
+      }
+    } catch {
+      setMsg('Internet not reliable — continuing offline');
+    } finally {
+      setSyncing(false);
+    }
+  }
+  return { s, msg, syncing, save, stamp, setManual, clearTime, reload, refresh, syncRefresh };
 }
 
 // Schedule / ETA: ETA = STA shifted by the departure delay (actual off-block vs STD).
@@ -137,6 +159,17 @@ export function EffHint({ on }: { on?: boolean }) {
 export function EffLegend({ show }: { show?: boolean }) {
   if (!show) return null;
   return <Text style={{ color: theme.eff, fontSize: 11, fontWeight: '600', marginTop: 2, marginBottom: 4 }}>● Blue = imported from EFF (editable)</Text>;
+}
+
+// Small refresh button for sector screen headers — calls syncRefresh with the admin-configurable
+// timeout.  Crew can tap it to pull the latest from the server; if the server doesn't respond
+// within the timeout, shows "Internet not reliable" and continues offline.
+export function RefreshButton({ onRefresh, syncing }: { onRefresh: () => void; syncing?: boolean }) {
+  return (
+    <TouchableOpacity onPress={onRefresh} disabled={syncing} style={{ paddingHorizontal: 8, paddingVertical: 4, opacity: syncing ? 0.4 : 1 }}>
+      <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>{syncing ? '↻ Syncing…' : '↻ Refresh'}</Text>
+    </TouchableOpacity>
+  );
 }
 
 export function NumField({ label, value, onChange, bad, eff, onLayout, decimals = true }: any) {

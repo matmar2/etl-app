@@ -1214,7 +1214,7 @@ export async function serverReachable(timeoutMs = 2500): Promise<boolean> {
   } catch { return false; }
 }
 
-export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string; voice_confirmations?: boolean; voice_languages?: string[]; field_config?: Record<string, Record<string, { visible?: boolean; required?: boolean; label?: string }>>; mandatory_fields?: Record<string, Record<string, boolean>> }> =>
+export const appSettings = (): Promise<{ defect_required_fields: string[]; check_view_days?: number; signoff_view_days?: number; auto_logout_minutes?: number; leon_offline_flights?: number; amm_revision?: string; voice_confirmations?: boolean; voice_languages?: string[]; field_config?: Record<string, Record<string, { visible?: boolean; required?: boolean; label?: string }>>; mandatory_fields?: Record<string, Record<string, boolean>>; sync_timeout_seconds?: number }> =>
   api('/admin/settings');
 
 export const deleteDefect = (id: string, approvedBy: string, force = false) =>

@@ -70,6 +70,8 @@ function fmtLeft(c: CheckStatus): string {
   if (!c.due) return c.expired ? 'OVERDUE' : '—';
   const ms = new Date(c.due).getTime() - Date.now();
   if (ms <= 0) return 'OVERDUE';
+  // 48h/10-day checks count from the ACTUAL completion time (WO/TL timestamp).
+  // Show precise countdown so crew know exactly when the next check is due.
   const totalMin = Math.floor(ms / 60000);
   const d = Math.floor(totalMin / 1440);
   const h = Math.floor((totalMin % 1440) / 60);

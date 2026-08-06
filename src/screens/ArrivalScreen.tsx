@@ -15,11 +15,11 @@ import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { updateSector } from '../db/sectors';
-import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, RefreshButton, schedule, sx, useSector } from './sectorShared';
 
 export default function ArrivalScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
-  const { s, msg, syncing, save, stamp, setManual, clearTime } = useSector(sectorId);
+  const { s, msg, syncing, save, stamp, setManual, clearTime, syncRefresh } = useSector(sectorId);
   const [ldg, setLdg] = useState<any>({});
   // Fields still holding their EFF-imported value (rendered blue). Seeded from sector.eff_fields;
   // editing one prunes its key and persists the pruned list so it stays manual after reload.
@@ -207,7 +207,10 @@ export default function ArrivalScreen({ route, navigation }: any) {
   return (
     <ScrollView ref={scrollRef} style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
       <SyncBlock visible={syncing} />
-      <Text style={sx.title}>After Captain Sign off / Departure / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={[sx.title, { flex: 1 }]}>After Captain Sign off / Departure / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+        <RefreshButton onRefresh={syncRefresh} syncing={syncing} />
+      </View>
       {(() => { const sc = schedule(s); return (
         <Text style={sx.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}

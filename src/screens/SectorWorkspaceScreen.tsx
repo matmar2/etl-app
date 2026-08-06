@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, AircraftStatus, aircraftStatus, currentAircraft, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, appSettings, currentAircraft, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import HilRemaining from '../components/HilRemaining';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml, printServerPdf } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
-import { hhmm, schedule } from './sectorShared';
+import { hhmm, RefreshButton, schedule } from './sectorShared';
 import { fmtTl, parseTl } from '../util/tl';
 
 export default function SectorWorkspaceScreen({ route, navigation }: any) {
@@ -16,7 +16,10 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   const [tl, setTl] = useState<number | null>(null);
   const [err, setErr] = useState('');
   const [mapOpen, setMapOpen] = useState(false);
-  const [syncing, setSyncing] = useState(true);   // first server pull — block input (time-boxed)
+  // SyncBlock: iPad never blocks (SQLite read is instant); web shows overlay only after 800ms
+  // grace — same pattern as useSector().  Crew must never see a blocking overlay during active use.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
   const [defs, setDefs] = useState<any[] | null>(null);   // active defects for the MAINT-log summary
   const [st, setSt] = useState<AircraftStatus | null>(null);   // serviceability — gates Release & Print
 
@@ -44,17 +47,20 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
     }
   }, [sectorId]);
   useEffect(() => {
-    const done = () => setSyncing(false);
+    let alive = true;
+    const done = () => { if (alive) setSyncing(false); };
     if (Platform.OS === 'web') {
+      // Grace period: only show the blocking overlay if the fetch takes > 800 ms.
+      const grace = setTimeout(() => { if (alive) setSyncing(true); }, 800);
       const unsub = navigation.addListener('focus', refresh);
       const t = setTimeout(done, 6000);
-      refresh().then(done).catch(done).finally(() => clearTimeout(t));
-      return () => { unsub(); clearTimeout(t); };
+      refresh().then(done).catch(done).finally(() => { clearTimeout(t); clearTimeout(grace); });
+      return () => { alive = false; unsub(); clearTimeout(t); clearTimeout(grace); };
     }
-    // iPad: read local SQLite only — no server pull on screen entry.
+    // iPad: read local SQLite only — no server call on screen entry.  Never blocks.
     const unsub = navigation.addListener('focus', loadLocal);
-    loadLocal().then(done).catch(done);
-    return unsub;
+    loadLocal().catch(() => {});
+    return () => { alive = false; unsub(); };
   }, [navigation, refresh, loadLocal]);
   useEffect(() => {   // inline defects summary for ground-maintenance logs (no Preview needed)
     const isM = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';
@@ -63,6 +69,19 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
       .then(([a, h]: any[]) => { const seen = new Set((a || []).map((x: any) => x.id)); setDefs([...(a || []), ...(h || []).filter((x: any) => !seen.has(x.id))]); })
       .catch(() => setDefs(null));
   }, [s?.aircraft_id, s?.page_kind]);
+  // Explicit user-initiated refresh with admin-configurable timeout (default 10 s).
+  async function syncRefresh() {
+    setSyncing(true); setSyncMsg('');
+    const timeoutMs = await appSettings().then(s => (s.sync_timeout_seconds ?? 10) * 1000).catch(() => 10000);
+    try {
+      const result = await Promise.race([
+        refresh().then(() => 'ok' as const),
+        new Promise<'timeout'>(r => setTimeout(() => r('timeout'), timeoutMs)),
+      ]);
+      setSyncMsg(result === 'timeout' ? 'Internet not reliable — continuing offline' : 'Refreshed ✓');
+    } catch { setSyncMsg('Internet not reliable — continuing offline'); }
+    finally { setSyncing(false); }
+  }
 
   async function previewTl() {
     try {
@@ -105,7 +124,10 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={editTl}><Text style={styles.tlEdit}>Change</Text></TouchableOpacity>
         </View>
       ) : null}
-      <Text style={styles.title}>{(currentAircraft()?.registration || s.aircraft_id) ? `${currentAircraft()?.registration || s.aircraft_id} · ` : ''}{s.flight_no} · {s.dep} → {s.arr}</Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={[styles.title, { flex: 1 }]}>{(currentAircraft()?.registration || s.aircraft_id) ? `${currentAircraft()?.registration || s.aircraft_id} · ` : ''}{s.flight_no} · {s.dep} → {s.arr}</Text>
+        <RefreshButton onRefresh={syncRefresh} syncing={syncing} />
+      </View>
       <View style={styles.subRow}>
         {(() => { const sc = schedule(s); return (
           <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
@@ -115,6 +137,7 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
         ) : null}
       </View>
       <Text style={[styles.status, { color: s.status === 'closed' ? theme.green : theme.accent }]}>{(s.status || 'draft').toUpperCase()}</Text>
+      {syncMsg ? <Text style={{ color: syncMsg.includes('✓') ? theme.green : theme.accent, marginTop: 4 }}>{syncMsg}</Text> : null}
 
       <RouteMapModal visible={mapOpen} sector={s} onClose={() => setMapOpen(false)} />
 
