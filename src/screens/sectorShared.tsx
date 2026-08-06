@@ -46,7 +46,11 @@ const OOOI_LABEL: Record<string, string> = {
 export function useSector(sectorId: string) {
   const [s, setS] = useState<any>(null);
   const [msg, setMsg] = useState('');
-  const [syncing, setSyncing] = useState(true);   // initial server pull in flight — screens block input
+  // SyncBlock only on web (no local cache) AND only after a grace period — crew should never
+  // see a blocking overlay when navigating between screens during active use.  iPad reads from
+  // SQLite (instant) and never blocks.  Web shows the overlay only if the server hasn't
+  // responded within 800 ms, so fast loads are seamless.
+  const [syncing, setSyncing] = useState(false);
 
   const reload = useCallback(async () => { setS(await getSector(sectorId)); }, [sectorId]);
   const refresh = useCallback(async () => { setS(await pullSector(sectorId)); }, [sectorId]);
@@ -55,13 +59,16 @@ export function useSector(sectorId: string) {
     const done = () => { if (alive) setSyncing(false); };
     if (isWeb) {
       // Web has no local SQLite — must fetch from server.
+      // Grace period: only show the blocking overlay if the fetch takes > 800 ms.
+      const grace = setTimeout(() => { if (alive) setSyncing(true); }, 800);
       const t = setTimeout(done, 6000);
-      refresh().then(done).catch(done).finally(() => clearTimeout(t));
-      return () => { alive = false; clearTimeout(t); };
+      refresh().then(done).catch(done).finally(() => { clearTimeout(t); clearTimeout(grace); });
+      return () => { alive = false; clearTimeout(t); clearTimeout(grace); };
     }
     // iPad: read local SQLite only — no server call on screen entry.
     // Data was synced at login; the 30 s syncPush cycle keeps it current.
-    reload().then(done).catch(done);
+    // Never blocks — SQLite read is synchronous-fast.
+    reload().catch(() => {});
     return () => { alive = false; };
   }, [sectorId]);
 
