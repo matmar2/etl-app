@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { appSettings } from '../api/client';
+import { appSettings, currentAircraft } from '../api/client';
 import { theme } from '../theme';
 import { confirmAction } from '../util/confirm';
-import { numericOnly, sx, useSector } from './sectorShared';
+import { hhmm, numericOnly, sx, useSector } from './sectorShared';
 
 type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
 
@@ -50,8 +50,8 @@ export default function DeicingScreen({ route, navigation }: any) {
 
   return (
     <ScrollView style={sx.wrap} contentContainerStyle={{ padding: 16, width: '100%', maxWidth: 860, alignSelf: 'center' }} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-      <Text style={sx.title}>De-icing / Anti-icing · {s.flight_no}</Text>
-      <Text style={sx.sub}>Record the de/anti-icing applied at departure. The anti-icing code is printed on the Tech Log.</Text>
+      <Text style={sx.title}>De-icing / Anti-icing · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={sx.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
 
       <Text style={sx.section}>Procedure</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>

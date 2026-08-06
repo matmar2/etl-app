@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { access, AircraftStatus, aircraftStatus, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
+import { access, AircraftStatus, aircraftStatus, currentAircraft, listActiveDefects, listHIL, sectorTlHtmlCached, setTlNumber } from '../api/client';
 import HilRemaining from '../components/HilRemaining';
 import { getSector, pullSector } from '../db/sectors';
 import { printHtml, printServerPdf } from '../print';
 import RouteMapModal from '../components/RouteMapModal';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
-import { hhmm } from './sectorShared';
+import { hhmm, schedule } from './sectorShared';
 import { fmtTl, parseTl } from '../util/tl';
 
 export default function SectorWorkspaceScreen({ route, navigation }: any) {
@@ -105,9 +105,11 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={editTl}><Text style={styles.tlEdit}>Change</Text></TouchableOpacity>
         </View>
       ) : null}
-      <Text style={styles.title}>{s.aircraft_id ? `${s.aircraft_id} · ` : ''}{s.flight_no} · {s.dep} → {s.arr}</Text>
+      <Text style={styles.title}>{(currentAircraft()?.registration || s.aircraft_id) ? `${currentAircraft()?.registration || s.aircraft_id} · ` : ''}{s.flight_no} · {s.dep} → {s.arr}</Text>
       <View style={styles.subRow}>
-        <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}</Text>
+        {(() => { const sc = schedule(s); return (
+          <Text style={styles.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
+        ); })()}
         {s.dep && s.arr && s.dep !== s.arr ? (
           <TouchableOpacity onPress={() => setMapOpen(true)} hitSlop={8}><Text style={styles.mapBtn}>🗺  Map view</Text></TouchableOpacity>
         ) : null}
