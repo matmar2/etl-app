@@ -209,7 +209,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <SyncBlock visible={syncing} />
       <Text style={sx.title}>After Captain Sign off / Departure / Arrival · {currentAircraft()?.registration || s.aircraft_id} · {s.flight_no} · {s.dep} → {s.arr}</Text>
       {(() => { const sc = schedule(s); return (
-        <Text style={sx.sub}>STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
+        <Text style={sx.sub}>{s.flight_date} · STD {hhmm(s.std)} · STA {hhmm(s.sta)}{sc.eta ? ` · ${sc.arrived ? 'ATA' : 'ETA'} ${hhmm(sc.eta)}` : ''}{sc.delayMin > 0 ? `  (delay +${sc.delayMin}′)` : ''}</Text>
       ); })()}
       {msg ? <Text style={sx.msg}>{msg}</Text> : null}
       <ClockBanner />
