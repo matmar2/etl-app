@@ -232,7 +232,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
       <EffLegend show={anyEffArr} />
       <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} effSet={effFields} onEdit={pruneEff} />
       <Text style={sx.sub}>{(() => {
-        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; const t = (x: string) => { const d = new Date(x); return d.getUTCHours() * 60 + d.getUTCMinutes(); }; return ((t(b) - t(a)) % 1440 + 1440) % 1440; };
+        const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; return Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)); };
         return `Block ${hm(mm(s.off_block, s.on_block) ?? s.block_time_min)} · Flight ${hm(mm(s.takeoff, s.landing) ?? s.flight_time_min)} (h:mm)`;
       })()}</Text>
 
