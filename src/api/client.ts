@@ -782,7 +782,7 @@ export const listServicing = (sectorId: string): Promise<any[]> => api(`/servici
 export const lastArrivalOil = (reg: string): Promise<any> => api(`/servicing/last-arrival-oil?reg=${encodeURIComponent(reg)}`);
 
 export type Fleet = { registration: string; type: string; msn?: string };
-export const fleetList = (): Promise<Fleet[]> => api('/aircraft');
+export const fleetList = (): Promise<Fleet[]> => cachedJson<Fleet[]>('fleet_list', '/aircraft');
 
 // Currently-selected aircraft (replaces the old hardcoded LZ-FSA), persisted.
 let _aircraft: Fleet | null = null;
