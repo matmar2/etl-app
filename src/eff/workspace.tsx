@@ -210,6 +210,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [wxTab, setWxTab] = useState('dep');
   const [wxCat, setWxCat] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [wxBusy, setWxBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<any[] | null>(null);
@@ -229,6 +230,12 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
     prefetchDocs(flight.id, x.docs || []);              // briefing PDFs → IndexedDB for offline
   }).catch((e) => { if (/session expired/i.test(e.message) && signOut) { signOut(); return; } setMsg(e.message); });
   useEffect(() => { load(); }, []);
+  const doWxRefresh = useCallback(async () => {
+    setWxBusy(true); setMsg('');
+    try { await wxRefresh(flight.id); load(); }
+    catch (e: any) { setMsg(e.message); }
+    finally { setWxBusy(false); }
+  }, [flight.id, load]);
   const f = d?.flight || flight;
 
   // Post-sign amend window (admin-set minutes). While open, the crew may still edit; after it, the
@@ -271,15 +278,19 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   }, [flight.id]);
   // Stable identity (useCallback []) → React keeps the same TextInput instance across renders, so
   // focus survives typing. Value comes from repRef (latest), not a stale closure.
-  const F = useCallback(({ s: section, k, label, ph, kb, w, time }: any) => (
+  const F = useCallback(({ s: section, k, label, ph, kb, w, time }: any) => {
+    const isReq = requiredFor(section).some((f) => f.key === k);
+    const val = repRef.current?.[section]?.[k];
+    const empty = val === undefined || val === null || val === '';
+    return (
     <View style={{ width: w || 220, minWidth: 100, maxWidth: '100%', marginRight: 16 }}>
-      <Text style={st.lbl}>{label}</Text>
-      <TextInput style={[st.input, lockedRef.current ? { opacity: 0.55 } : null]} editable={!lockedRef.current}
+      <Text style={st.lbl}>{isReq ? <Text style={{ color: T.red }}>* </Text> : null}{label}</Text>
+      <TextInput style={[st.input, lockedRef.current ? { opacity: 0.55 } : null, isReq && empty ? { borderColor: T.red } : null]} editable={!lockedRef.current}
         placeholder={ph || ''} placeholderTextColor="#4a5f80" keyboardType={time ? 'numeric' : kb}
-        value={String(repRef.current?.[section]?.[k] ?? '')} maxLength={time ? 5 : undefined}
+        value={String(val ?? '')} maxLength={time ? 5 : undefined}
         onChangeText={(v) => set(section, k, time ? _hhmm(v) : v)} onBlur={() => persist(section, k)} />
-    </View>
-  ), [set, persist]);
+    </View>);
+  }, [set, persist]);
   const YN = ({ s: section, k, label }: any) => {
     const v = rep?.[section]?.[k];
     return (
@@ -443,8 +454,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             }}>
               <Text style={{ color: T.accent, fontWeight: '700' }}>{refreshing ? '⟳ Updating…' : '⟳ Update flight plan'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ paddingVertical: 10, paddingHorizontal: 4 }} onPress={async () => { try { await wxRefresh(flight.id); load(); } catch (e: any) { setMsg(e.message); } }}>
-              <Text style={{ color: T.accent, fontWeight: '700' }}>⟳ Live wx</Text></TouchableOpacity>
+            <TouchableOpacity style={{ paddingVertical: 10, paddingHorizontal: 4 }} disabled={wxBusy} onPress={doWxRefresh}>
+              <Text style={{ color: T.accent, fontWeight: '700' }}>{wxBusy ? '⟳ Fetching…' : '⟳ Live wx'}</Text></TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
             {BRIEF_TABS.map(([k, label]) => {
@@ -613,7 +624,13 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
         };
         const wxSubCap = { color: T.sub, fontSize: 10.5, letterSpacing: 0.5, textTransform: 'uppercase' as const };
         const wxCard = (a: any) => (a.metar || a.taf) ? (
-          <View style={st.card}><Text style={st.h}>Weather — {a.icao}</Text>
+          <View style={st.card}>
+            <View style={st.hRow}>
+              <Text style={st.hIn}>Weather — {a.icao}</Text><View style={{ flex: 1 }} />
+              <TouchableOpacity style={{ paddingVertical: 6, paddingHorizontal: 4 }} disabled={wxBusy} onPress={doWxRefresh}>
+                <Text style={{ color: T.accent, fontWeight: '700', fontSize: 13 }}>{wxBusy ? '⟳ Fetching…' : '⟳ Refresh WX'}</Text>
+              </TouchableOpacity>
+            </View>
             {a.metar ? (
               <View style={{ marginTop: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
@@ -643,6 +660,13 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             <View>
               {a.additional ? <Text style={{ color: T.amber, fontSize: 12, marginTop: 12, lineHeight: 18 }}>Additional / planning alternate — not a destination alternate. The plan carries routing only; weather is shown from live data and airport NOTAMs are covered by the FIR tab.</Text> : null}
               {wxCard(a)}
+              {!a.metar && !a.taf ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                  <Text style={{ color: T.sub, fontSize: 13 }}>No live weather for {a.icao} yet.</Text>
+                  <TouchableOpacity disabled={wxBusy} onPress={doWxRefresh}>
+                    <Text style={{ color: T.accent, fontWeight: '700', fontSize: 13 }}>{wxBusy ? '⟳ Fetching…' : '⟳ Refresh WX'}</Text>
+                  </TouchableOpacity>
+                </View>) : null}
             </View>
           ) : (
             <Text style={{ color: T.sub, marginTop: 14 }}>No {wxTab.toUpperCase()} alternate in this flight plan.</Text>);
@@ -651,9 +675,23 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
         const counts: Record<string, number> = {};
         for (const n of items) counts[cat(n)] = (counts[cat(n)] || 0) + 1;
         const shown = items.filter((n) => wxCat === 'all' || cat(n) === wxCat);
-        if (!wn.dep && !wn.dest) return <Text style={{ color: T.sub, marginTop: 14 }}>WX & NOTAMs arrive with the PPS flight plan — none received for this flight yet.</Text>;
+        if (!wn.dep && !wn.dest) return (
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ color: T.sub }}>WX & NOTAMs arrive with the PPS flight plan — none received for this flight yet.</Text>
+            <TouchableOpacity style={{ marginTop: 12, paddingVertical: 10, paddingHorizontal: 4 }} disabled={wxBusy} onPress={doWxRefresh}>
+              <Text style={{ color: T.accent, fontWeight: '700', fontSize: 14 }}>{wxBusy ? '⟳ Fetching weather…' : '⟳ Refresh WX now'}</Text>
+            </TouchableOpacity>
+          </View>);
         return (
           <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#1c3050', borderRadius: 999, borderWidth: 1, borderColor: T.accent, opacity: wxBusy ? 0.6 : 1 }}
+                disabled={wxBusy} onPress={doWxRefresh}>
+                {wxBusy ? <ActivityIndicator size="small" color={T.accent} /> : null}
+                <Text style={{ color: T.accent, fontWeight: '800', fontSize: 13 }}>{wxBusy ? 'Fetching weather…' : '⟳ Refresh WX'}</Text>
+              </TouchableOpacity>
+            </View>
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
               {TABS.map(([k, label, n]) => { const on = wxTab === k;
                 return (
@@ -742,7 +780,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                     const t = new Date().toISOString().slice(11, 16); set('security', 'signed_time', t);
                     try { await saveReport(flight.id, 'security', { signed_time: t }); } catch {}
                   }}><Text style={st.btnSecTxt}>now</Text></TouchableOpacity>
-                  <CodeCombo label="3-letter code" width={150}
+                  <CodeCombo label="3-letter code" width={150} required
                     value={String(rep?.security?.code3 ?? '')}
                     options={Array.from(new Set((f.crew || []).map((c: any) => c.code).filter(Boolean)))}
                     onSet={(v: string) => set('security', 'code3', v)}
@@ -945,19 +983,22 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               };
               return (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {(['pf', 'pm'] as const).map((k2) => (
+              {(['pf', 'pm'] as const).map((k2) => {
+                const picked = rep?.post?.[k2];
+                const missing = !picked;
+                return (
                 <View key={k2} style={{ marginRight: 18 }}>
-                  <Text style={st.lbl}>{k2 === 'pf' ? 'Pilot flying' : 'Pilot monitoring'}</Text>
+                  <Text style={st.lbl}>{missing ? <Text style={{ color: T.red }}>* </Text> : null}{k2 === 'pf' ? 'Pilot flying' : 'Pilot monitoring'}</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                     {pilots.map((c: any) => (
                       <TouchableOpacity key={c.code + c.role} onPress={() => pick(k2, c)}
-                        style={{ borderWidth: 1, borderColor: rep?.post?.[k2] === idOf(c) ? T.accent : T.line, backgroundColor: rep?.post?.[k2] === idOf(c) ? '#1c3050' : T.inBg, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, minHeight: 40, justifyContent: 'center' }}>
-                        <Text style={{ color: rep?.post?.[k2] === idOf(c) ? '#fff' : T.sub, fontSize: 13, fontWeight: '700' }}>{c.role} {c.code || ''}</Text>
+                        style={{ borderWidth: 1, borderColor: picked === idOf(c) ? T.accent : missing ? T.red : T.line, backgroundColor: picked === idOf(c) ? '#1c3050' : T.inBg, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, minHeight: 40, justifyContent: 'center' }}>
+                        <Text style={{ color: picked === idOf(c) ? '#fff' : T.sub, fontSize: 13, fontWeight: '700' }}>{c.role} {c.code || ''}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
-                </View>
-              ))}
+                </View>);
+              })}
               <F s="post" k="landings" label="Landings" kb="numeric" ph="1" w={100} />
               <F s="post" k="diversion" label="Diversion (or NIL)" ph="NIL" w={150} />
             </View>); })()}
@@ -1061,14 +1102,15 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
 }
 
 // 3-letter code combo — pick a crew member's code from the dropdown or type any other code.
-function CodeCombo({ label, width, value, options, onSet, onSave }: any) {
+function CodeCombo({ label, width, value, options, onSet, onSave, required }: any) {
   const [open, setOpen] = useState(false);
+  const empty = required && (!value || !value.trim());
   const opts: string[] = Array.from(new Set(options || [])).filter(Boolean) as string[];
   return (
     <View style={{ width: width || 150, marginRight: 16, zIndex: 20 }}>
-      <Text style={st.lbl}>{label}</Text>
+      <Text style={st.lbl}>{required ? <Text style={{ color: T.red }}>* </Text> : null}{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'stretch' }}>
-        <TextInput style={[st.input, { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
+        <TextInput style={[st.input, { flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }, empty ? { borderColor: T.red } : null]}
           value={value} placeholder="e.g. TLC" placeholderTextColor="#4a5f80" autoCapitalize="characters"
           onChangeText={(v) => onSet((v || '').toUpperCase())} onBlur={() => onSave(value)} />
         <TouchableOpacity onPress={() => setOpen((o) => !o)} disabled={!opts.length}
@@ -1102,7 +1144,7 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any
       <Text style={{ color: T.sub, fontSize: 13.5, lineHeight: 20 }}>By signing I acknowledge I have familiarised myself with the briefing(s), including Cat B/C aerodromes intended for this flight.</Text>
       {kind === 'preflight' ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 10 }}>
-          <CodeCombo label="3-letter code" width={150}
+          <CodeCombo label="3-letter code" width={150} required
             value={String(rep?.signpre?.code3 ?? '')}
             options={Array.from(new Set((flight.crew || []).map((c: any) => c.code).filter(Boolean)))}
             onSet={(v: string) => setRep?.((p: any) => ({ ...p, signpre: { ...(p.signpre || {}), code3: v } }))}

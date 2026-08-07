@@ -335,8 +335,8 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
         <ScrollView horizontal style={{ marginTop: 12 }}>
           <View>
             <View style={{ flexDirection: 'row', backgroundColor: T.panel, borderTopLeftRadius: 8, borderTopRightRadius: 8, borderBottomWidth: 1, borderBottomColor: T.line }}>
-              {['WPT', 'AWY', 'FL', 'MT', 'TAS/GS', 'W/V', 'LEG/ACC', 'FOB PLAN', 'MREQ', 'ATO ✎', 'FOB ACTUAL ✎', 'Δ FUEL', 'REMARK ✎'].map((h, i) => (
-                <Text key={h} style={[head, { width: [86, 64, 46, 46, 78, 72, 84, 76, 70, 84, 100, 66, 200][i], color: h.includes('✎') ? T.entry : T.sub }]}>{h}</Text>
+              {['WPT', 'AWY', 'FL', 'MT', 'TAS/GS', 'W/V', 'LEG/ACC', 'FOB PLAN', 'MREQ', 'ATO ✎', 'FOB ACTUAL ✎', 'Δ FUEL'].map((h, i) => (
+                <Text key={h} style={[head, { width: [86, 64, 46, 46, 78, 72, 84, 76, 70, 84, 100, 66][i], color: h.includes('✎') ? T.entry : T.sub }]}>{h}</Text>
               ))}
             </View>
             {W.map((w: any, i: number) => {
@@ -345,8 +345,10 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
               const delta = fobA && w.fob_plan ? Math.round(fobA - w.fob_plan) : null;
               const below = fobA && w.mreq && fobA < w.mreq;
               const apt = i === 0 || i === W.length - 1;
+              const rmk = String(dv.remark ?? e.remark ?? '');
               return (
-                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: 1, borderBottomColor: '#1b2c49' }}>
+                <View key={i}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: rmk || isMain ? 0 : 1, borderBottomColor: '#1b2c49' }}>
                   <Text style={[cell, { width: 86, fontWeight: '700' }]}>{w.wpt}</Text>
                   <Text style={[cell, { width: 64, color: T.sub }]}>{w.awy ?? ''}</Text>
                   <Text style={[cell, { width: 46 }]}>{w.fl ?? ''}</Text>
@@ -359,7 +361,16 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
                   <View style={{ width: 84, padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'ato', 74, '--:--')}{(() => { const eto = planEto(w); return eto ? planChip(eto, () => acceptPlan(i, 'ato', eto)) : null; })()}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
                   <View style={{ width: 100, padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'fob_kg', 90, 'kg', 'numeric')}{w.fob_plan != null ? planChip(String(w.fob_plan), () => acceptPlan(i, 'fob_kg', w.fob_plan)) : null}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
                   <Text style={[cell, { width: 66, color: delta == null ? T.sub : delta >= 0 ? T.entry : '#f0a3a3' }]}>{delta == null ? '—' : (delta > 0 ? `+${delta}` : `${delta}`)}</Text>
-                  <View style={{ width: 200, padding: 3 }}>{isMain ? entry(i, 'remark', 190, 'Write a remark…') : <Text style={[cell, { color: T.sub }]}></Text>}</View>
+                </View>
+                {isMain ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 8, paddingBottom: 4, paddingTop: 2, borderBottomWidth: 1, borderBottomColor: '#1b2c49', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined }}>
+                    <Text style={{ color: T.sub, fontSize: 10.5, fontWeight: '700', marginRight: 8, width: 54 }}>REMARK</Text>
+                    <TextInput style={{ backgroundColor: T.inBg, borderColor: T.inBorder, borderWidth: 1, borderRadius: 8, color: T.entry, flex: 1, minHeight: 32, paddingVertical: 4, paddingHorizontal: 7, fontSize: 13, maxWidth: 700 }} multiline
+                      placeholder="Write a remark…" placeholderTextColor="#4a5f80" value={rmk}
+                      onChangeText={(v) => setDraft((p) => ({ ...p, [i]: { ...p[i], remark: v } }))}
+                      onBlur={() => { const v = draft[i]?.remark; if (v !== undefined) save(i, { remark: v }); }} />
+                  </View>
+                ) : null}
                 </View>
               );
             })}

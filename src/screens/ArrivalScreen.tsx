@@ -164,6 +164,10 @@ export default function ArrivalScreen({ route, navigation }: any) {
     add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport, div.on);   // required when diverted
     return out;
   }
+  // Proactive red borders: highlight empty mandatory fields immediately, not only on sign-off failure.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
+    [fc, s?.arr, s?.off_block, s?.takeoff, s?.landing, s?.on_block, s?.ice_protect, rem, oilArr, div]);
   async function accept() {
     const miss = computeMissing();
     if (miss.length) {
