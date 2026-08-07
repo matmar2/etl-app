@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as SecureStore from './secureStore';
 import { flushAttachments } from '../db/attachments';
-import { setCachedFlights } from '../db/flights';
+import { getCachedFlights, setCachedFlights } from '../db/flights';
 import { getApt, getRef, getTile, hasTile, localAmm, localAmmFilters, localCdl, localMel, setApt, setRef, setTile } from '../db/reference';
 import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
@@ -578,8 +578,17 @@ export type LeonFlight = {
   dep?: string; arr?: string; alternate?: string; std?: string; sta?: string; commander?: string; airborne: boolean;
   flight_type?: string; cancelled?: boolean;
 };
-export const leonFlights = (reg: string): Promise<LeonFlight[]> =>
-  api(`/leon/flights?reg=${encodeURIComponent(reg)}`);
+export async function leonFlights(reg: string): Promise<LeonFlight[]> {
+  try {
+    const r: LeonFlight[] = await api(`/leon/flights?reg=${encodeURIComponent(reg)}`);
+    setCachedFlights(reg, r).catch(() => {});
+    return r;
+  } catch (e) {
+    if (!(e instanceof NetworkError)) throw e;
+    const c = await getCachedFlights(reg);
+    return c.flights;
+  }
+}
 export async function scheduledAircraft(): Promise<string[]> {
   try { const r = await api('/leon/scheduled-aircraft'); return r.registrations || []; }
   catch { return []; }
