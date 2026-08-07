@@ -4,7 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 import { appSettings, cacheRouteMaps, can, LeonFlight, leonFlights, leonHistory, role, revokeRelease, sectorTlHtmlCached, syncPush } from '../api/client';
 import { notifyAction } from '../util/confirm';
 import { getCachedFlights, setCachedFlights } from '../db/flights';
-import { printHtml } from '../print';
+import { beginPrint, finishPrint, printHtml } from '../print';
 import IcaoHint from '../components/IcaoHint';
 import { createSector, dedupeSectors, deleteSector, hiddenSectorIds, hideSectorFromList, listSectors, pullSectorList, sectorExists, unhideSectorFromList, Sector } from '../db/sectors';
 import { confirmAction } from '../util/confirm';
@@ -222,10 +222,17 @@ export default function SectorListScreen({ route, navigation }: any) {
     catch { setStatus('Offline — queued'); }
   }
   // A previous (closed / exported) flight is VIEW-ONLY — open its Tech Log document, not the editor.
+  const [tlLoading, setTlLoading] = useState<string | null>(null);   // sector id currently loading
   async function viewTechLog(s: Sector) {
+    setTlLoading(s.id);
     setStatus('Opening Tech Log…');
-    try { const { html } = await sectorTlHtmlCached(s.id); await printHtml(html); setStatus(''); }
-    catch (e: any) { setStatus(/cached|offline|network/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the Tech Log.')); }
+    const win = beginPrint();                                      // open window NOW (Safari blocks after await)
+    try { const { html } = await sectorTlHtmlCached(s.id); await finishPrint(win, html); setStatus(''); }
+    catch (e: any) {
+      try { win?.close?.(); } catch {}
+      setStatus(/cached|offline|network/i.test(e?.message || '') ? 'Open this Tech Log once online to view it offline.' : (e?.message || 'Could not open the Tech Log.'));
+    }
+    finally { setTlLoading(null); }
   }
 
   // Per-device list-hide — pointless for the one OPEN flight (the list always keeps the blocking
@@ -404,7 +411,12 @@ export default function SectorListScreen({ route, navigation }: any) {
             ) : null}
             {delta ? <Text style={{ color: theme.red, fontSize: 11, fontWeight: '700', marginTop: 3 }}>{delta}</Text> : null}
             <Text style={[styles.badge, item.status === 'signed' && styles.signed]}>{item.status}</Text>
-            {closed ? <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700', marginTop: 3 }}>Tap to view Tech Log ›</Text> : null}
+            {closed ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                {tlLoading === item.id ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+                <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '700' }}>{tlLoading === item.id ? 'Opening Tech Log…' : 'Tap to view Tech Log ›'}</Text>
+              </View>
+            ) : null}
             {item.status === 'released' ? (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
                 {/* Captain / pilot: open the sector to enter departure / arrival data before closure */}

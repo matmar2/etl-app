@@ -1,7 +1,12 @@
 // Aircraft Technical Log page — HTML in the same layout as the paper TL (TFLB),
 // rendered to PDF for AirPrint / share, or to ESC/POS text for a Bluetooth printer.
+import { getLogoSync } from '../api/client';
 import { FLY2SKY_LOGO } from './logo';
 import { fmtTl } from '../util/tl';
+
+// Admin-uploaded logo or bundled default. getLogoSync() returns the cached value
+// (populated when the login/header fetches it); falls back to the hardcoded base64.
+const LOGO = () => getLogoSync() || FLY2SKY_LOGO;
 
 export type TLData = {
   sector: any;
@@ -87,7 +92,7 @@ export function techLogHtml(data: TLData): string {
   </style></head><body>
     <div class="hdr">
       <div style="display:flex;align-items:center;gap:10px">
-        <img src="${FLY2SKY_LOGO}" style="height:30px"/>
+        <img src="${LOGO()}" style="height:30px"/>
         <div><h1>AIRCRAFT TECHNICAL LOG</h1><div class="sub">${OPERATOR}</div></div>
       </div>
       <div class="sub" style="text-align:right">

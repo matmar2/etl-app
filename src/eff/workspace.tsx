@@ -17,8 +17,8 @@ if (Platform.OS !== 'web' && requireOptionalNativeModule('ExpoCamera')) {
   try { ExpoCamera = require('expo-camera'); } catch { ExpoCamera = null; }
 }
 const cameraAvailable = !!(ExpoCamera && ExpoCamera.CameraView);
-import { LOGO } from './screens';
-import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
+import { LOGO, useLogo } from './screens';
+import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
 import { HelpPage, openInduction } from './help';
 import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
@@ -216,6 +216,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [goPage, setGoPage] = useState<number | null>(null);
   const [viewDoc, setViewDoc] = useState<any>(null);
   const [msg, setMsg] = useState('');
+  const logoSrc = useLogo();
   const load = () => getFolder(flight.id).then((x) => {
     const rep0 = x.report || {};
     // Density defaults to 0.785 (accepted unless the crew changes it) so it satisfies the sign
@@ -226,7 +227,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
     }
     setD(x); setRep(rep0);
     prefetchDocs(flight.id, x.docs || []);              // briefing PDFs → IndexedDB for offline
-  }).catch((e) => setMsg(e.message));
+  }).catch((e) => { if (/session expired/i.test(e.message) && signOut) { signOut(); return; } setMsg(e.message); });
   useEffect(() => { load(); }, []);
   const f = d?.flight || flight;
 
@@ -308,6 +309,19 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                       td: { color: T.text, fontSize: 15, paddingVertical: 7 } };
         return (
           <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 10 }}>
+              <Text style={{ color: T.sub, fontSize: 12 }}>
+                Plan updated {f.pps_plan_ts ? `${String(f.pps_plan_ts).slice(0, 16).replace('T', ' ')}z` : '—'}
+              </Text>
+              <TouchableOpacity disabled={refreshing} onPress={async () => {
+                setRefreshing(true); setMsg('');
+                try { await ppsRefresh(flight.id); load(); setMsg('Flight data refreshed from PPS.'); }
+                catch (e: any) { setMsg(e.message); }
+                finally { setRefreshing(false); }
+              }} style={{ paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: T.accent, borderRadius: 999, opacity: refreshing ? 0.5 : 1 }}>
+                <Text style={{ color: T.accent, fontWeight: '700', fontSize: 13 }}>{refreshing ? '⟳ Refreshing…' : '⟳ Refresh from PPS'}</Text>
+              </TouchableOpacity>
+            </View>
             <View style={st.card}><Text style={st.h}>Schedule (Leon)</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 <Fld label="Flight" value={f.flight_no} />
@@ -710,7 +724,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                   </View>
                 ))}
               </View>
-              <View style={st.card}><Text style={st.h}>Aircraft security search</Text>
+              <View style={[st.card, { zIndex: 30 }]}><Text style={st.h}>Aircraft security search</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
                   {['Security Search performed', 'Not performed'].map((o) => (
                     <TouchableOpacity key={o} onPress={async () => { set('security', 'search_type', o); try { await saveReport(flight.id, 'security', { search_type: o }); } catch {} }}
@@ -740,23 +754,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </View>
             </View>
           ) : preTab === 'gendec' ? (
-            <View style={st.card}><Text style={st.h}>General Declaration Report</Text>
-              <Text style={{ color: T.sub, marginTop: 6, fontSize: 13 }}>Auto-filled from Leon — print or photograph the signed copy if the station requires one.</Text>
-              <Text style={{ color: T.text, marginTop: 10, fontWeight: '700' }}>{f.flight_no} · {f.dep} → {f.arr} · {f.date} · {f.registration}</Text>
-              {(f.crew || []).map((c: any, i2: number) => (
-                <Text key={i2} style={{ color: T.text, marginTop: 3 }}>{i2 + 1}.  <Text style={{ color: T.accent, fontWeight: '700' }}>{c.role}</Text>  {c.code || ''}  {c.name}</Text>
-              ))}
-              <TouchableOpacity style={[st.btn, { alignSelf: 'flex-start' }]} onPress={() => {
-                const rows = (f.crew || []).map((c: any, i2: number) => `<tr><td>${i2 + 1}</td><td>${c.role}</td><td>${c.code || ''}</td><td>${c.name}</td></tr>`).join('');
-                const html = `<h2>GENERAL DECLARATION</h2><p><b>${f.flight_no}</b> · ${f.dep} → ${f.arr} · ${f.date} · ${f.registration} · Operator: Fly2Sky (VAW)</p>
-                  <table border=1 cellpadding=6 style="border-collapse:collapse"><tr><th>#</th><th>Duty</th><th>Code</th><th>Name</th></tr>${rows}</table>
-                  <p style="margin-top:30px">Signature of authorised agent / crew member: ____________________</p>`;
-                // web→native: window.open + document.write + print → expo-print printAsync on native
-                if (Platform.OS === 'web') { const w = window.open('', '_blank'); if (!w) return; w.document.write(html); w.print(); }
-                else { Print.printAsync({ html }).catch((e: any) => setMsg(e.message)); }
-              }}><Text style={st.btnTxt}>🖨 Print GEN DEC</Text></TouchableOpacity>
-              <PhotoBox flight={f} d={d} reload={load} setRep={setRep} setMsg={setMsg} signed={locked} kind="gendec" label="Signed GEN DEC photo (if required)" />
-            </View>
+            <GendecTab flight={f} d={d} load={load} setRep={setRep} setMsg={setMsg} locked={locked} />
           ) : (
           <View>
           <View style={st.card}><Text style={st.h}>Alternates</Text>
@@ -768,15 +766,17 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <View style={st.card}><Text style={st.h}>Planned fuel (kg) — from the OFP</Text>
             <Text style={{ color: T.sub, fontSize: 12, marginTop: 4 }}>Auto-filled once the PPS briefing connects; until then dispatch/crew may type from the OFP.</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              <F s="planned" k="taxi" label="Taxi" kb="numeric" w={110} />
               <F s="planned" k="trip" label="Trip" kb="numeric" w={110} />
               <F s="planned" k="contingency" label="Contingency" kb="numeric" w={120} />
               <F s="planned" k="alt1" label="Primary alternate" kb="numeric" w={140} />
               <F s="planned" k="alt2" label="Secondary alternate" kb="numeric" w={150} />
               <F s="planned" k="final_res" label="Final reserve" kb="numeric" w={120} />
               <F s="planned" k="additional" label="Additional" kb="numeric" w={110} />
+              <F s="planned" k="extra" label="Extra" kb="numeric" w={110} />
               <F s="planned" k="discretionary" label="Discretionary" kb="numeric" w={125} />
+              <F s="planned" k="taxi" label="Taxi" kb="numeric" w={110} />
               <F s="planned" k="block" label="Planned block" kb="numeric" w={130} />
+              <F s="planned" k="min_req_land" label="Min req land" kb="numeric" w={130} />
             </View></View>
           <View style={st.card}><Text style={st.h}>Fuel</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -882,7 +882,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <F s="atisdep" k="clearance" label="ATC clearance" w={640} />
           <F s="atisdep" k="notes" label="Notes" w={640} />
         </View>);
-      case 'signpre': return <SignCard kind="preflight" flight={f} done={d?.acceptance} rep={rep} secs={['pre', 'atisdep']} onDone={load} setMsg={setMsg} />;
+      case 'signpre': return <SignCard kind="preflight" flight={f} done={d?.acceptance} rep={rep} secs={['pre', 'atisdep']} onDone={load} setMsg={setMsg} setRep={setRep} />;
       case 'offblock': return (
         <View>
           <View style={st.card}><Text style={st.h}>Times (UTC)</Text>
@@ -980,7 +980,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
       {railOpen ? (
       <ScrollView style={{ width: 248, minWidth: 248, maxWidth: 248, flexGrow: 0, flexShrink: 0, borderRightWidth: 1, borderRightColor: T.line, backgroundColor: '#101c33' } as any} contentContainerStyle={{ padding: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Image source={LOGO} style={{ width: 120, height: 26, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6, marginLeft: 6 } as any} />
+          <Image source={logoSrc} style={{ width: 120, height: 26, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6, marginLeft: 6 } as any} />
           <TouchableOpacity onPress={() => setRailOpen(false)} style={{ padding: 6 }} accessibilityLabel="Collapse menu"><Text style={{ color: T.sub, fontSize: 18 }}>⟨</Text></TouchableOpacity>
         </View>
         <TouchableOpacity onPress={back}><Text style={{ color: T.accent, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 10 }}>‹ My flights</Text></TouchableOpacity>
@@ -1091,15 +1091,24 @@ function CodeCombo({ label, width, value, options, onSet, onSave }: any) {
   );
 }
 
-function SignCard({ kind, flight, done, rep, secs, onDone, setMsg }: any) {
+function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any) {
   // web→native: the web trial signed into a raw <canvas> (DOM PointerEvents, toDataURL) absent on
   // native. Replaced with ETL's cross-platform SignaturePad returning the same base64 PNG data URI.
   const [signing, setSigning] = useState(false);
   if (done) return <View style={st.card}><Text style={{ color: T.entry, fontWeight: '700' }}>✓ Signed — {done.signer_name}{done.licence_no ? ` · ${done.licence_no}` : ''} · {(done.signed_at || '').slice(0, 16)}z</Text></View>;
   const gaps = secs.flatMap((s2: string) => missing(rep, s2));
   return (
-    <View style={st.card}>
+    <View style={[st.card, { zIndex: 20 }]}>
       <Text style={{ color: T.sub, fontSize: 13.5, lineHeight: 20 }}>By signing I acknowledge I have familiarised myself with the briefing(s), including Cat B/C aerodromes intended for this flight.</Text>
+      {kind === 'preflight' ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 10 }}>
+          <CodeCombo label="3-letter code" width={150}
+            value={String(rep?.signpre?.code3 ?? '')}
+            options={Array.from(new Set((flight.crew || []).map((c: any) => c.code).filter(Boolean)))}
+            onSet={(v: string) => setRep?.((p: any) => ({ ...p, signpre: { ...(p.signpre || {}), code3: v } }))}
+            onSave={async (v: string) => { try { await saveReport(flight.id, 'signpre', { code3: v }); } catch {} }} />
+        </View>
+      ) : null}
       {gaps.length ? <Text style={{ color: '#f0d48a', marginTop: 8, lineHeight: 20 }}>Complete before signing:{'\n'}{gaps.map((g: any) => `• ${g.label}`).join('\n')}</Text> : null}
       <View style={{ alignItems: 'center', marginTop: 14 }}>
         <TouchableOpacity style={[st.btn, { minWidth: 240 }]} onPress={() => {
@@ -1116,6 +1125,91 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg }: any) {
         }} />
     </View>
   );
+}
+
+
+// GENDEC tab — server-rendered ICAO General Declaration with preview, print, and photo capture.
+function GendecTab({ flight, d, load, setRep, setMsg, locked }: any) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const fetchGendec = useCallback(async () => {
+    setLoading(true);
+    try {
+      const h = await gendecHtml(flight.id);
+      setHtml(h);
+    } catch (e: any) {
+      // Offline or error — fall back to the inline summary
+      setHtml(null);
+      setMsg(e.message);
+    } finally { setLoading(false); }
+  }, [flight.id]);
+  useEffect(() => { fetchGendec(); }, [fetchGendec]);
+
+  const doPrint = () => {
+    const content = html || _fallbackGendecHtml(flight);
+    if (Platform.OS === 'web') {
+      const w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write(content);
+      w.document.close();
+      w.print();
+    } else {
+      Print.printAsync({ html: content }).catch((e: any) => setMsg(e.message));
+    }
+  };
+
+  return (
+    <View>
+      <View style={st.card}>
+        <Text style={st.h}>General Declaration (GENDEC)</Text>
+        <Text style={{ color: T.sub, marginTop: 6, fontSize: 13 }}>
+          ICAO Annex 9 — auto-filled from Leon. Print or photograph the signed copy if the station requires one.
+        </Text>
+        <Text style={{ color: T.text, marginTop: 10, fontWeight: '700' }}>
+          {flight.flight_no} · {flight.dep} → {flight.arr} · {flight.date} · {flight.registration}
+        </Text>
+        {(flight.crew || []).map((c: any, i2: number) => (
+          <Text key={i2} style={{ color: T.text, marginTop: 3 }}>
+            {i2 + 1}.  <Text style={{ color: T.accent, fontWeight: '700' }}>{c.role}</Text>  {c.code || ''}  {c.name}
+          </Text>
+        ))}
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+          <TouchableOpacity style={[st.btn, { marginTop: 0 }]} onPress={doPrint}>
+            <Text style={st.btnTxt}>🖨 Print GEN DEC</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[st.btnSec, { marginTop: 0 }]} onPress={fetchGendec} disabled={loading}>
+            <Text style={st.btnSecTxt}>{loading ? '⟳ Loading…' : '⟳ Refresh'}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      {html && Platform.OS === 'web' ? (
+        <View style={[st.card, { padding: 0, overflow: 'hidden' }]}>
+          <Text style={[st.h, { paddingHorizontal: 12, paddingTop: 10 }]}>Preview</Text>
+          <iframe srcDoc={html} style={{ width: '100%', height: 700, border: 'none', backgroundColor: '#fff' } as any} />
+        </View>
+      ) : null}
+      <View style={st.card}>
+        <Text style={st.h}>Signed GEN DEC photo</Text>
+        <PhotoBox flight={flight} d={d} reload={load} setRep={setRep} setMsg={setMsg} signed={locked} kind="gendec" label="Signed GEN DEC photo (if required)" />
+      </View>
+    </View>
+  );
+}
+
+// Fallback HTML for offline / error (same as the old inline version)
+function _fallbackGendecHtml(f: any): string {
+  const rows = (f.crew || []).map((c: any, i: number) =>
+    `<tr><td>${i + 1}</td><td>${c.role || ''}</td><td>${c.code || ''}</td><td>${c.name || ''}</td><td></td><td></td><td></td><td></td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;font-size:12px;color:#000;margin:16px}
+    h2{font-size:16px;text-align:center} table{border-collapse:collapse;width:100%;margin-top:12px}
+    td,th{border:1px solid #000;padding:5px 8px} th{background:#f0f0f0;text-align:left;font-size:10px}
+  </style></head><body>
+  <h2>GENERAL DECLARATION</h2>
+  <p><b>${f.flight_no || ''}</b> · ${f.dep || ''} → ${f.arr || ''} · ${f.date || ''} · ${f.registration || ''} · Operator: Fly2Sky (VAW)</p>
+  <table><tr><th>#</th><th>Duty</th><th>Code</th><th>Name</th><th>M/F</th><th>Nationality</th><th>Passport</th><th>Expiry</th></tr>${rows}</table>
+  <p style="margin-top:30px">Signature of authorised agent / crew member: ____________________</p>
+  </body></html>`;
 }
 
 

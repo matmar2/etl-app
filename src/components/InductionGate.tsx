@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ackInduction, Induction, pendingInduction, role, roleLabel, userName, viewInduction } from '../api/client';
+import { ackInduction, fetchLogo, Induction, pendingInduction, role, roleLabel, userName, viewInduction } from '../api/client';
 import { speak, speechAvailable, stop as stopSpeech } from '../util/speech';
 import { getAdminVoiceLanguages, getUserVoiceLang, langLabel, loadUserVoiceLang, setUserVoiceLang, ttsCode } from '../util/voiceConfirm';
 import { theme } from '../theme';
@@ -42,7 +42,8 @@ export default function InductionGate() {
   // Language state
   const [lang, setLang] = useState('en');
   const [langOpen, setLangOpen] = useState(false);
-  useEffect(() => { loadUserVoiceLang().then(setLang); }, []);
+  const [logoUri, setLogoUri] = useState<string | null>(null);
+  useEffect(() => { loadUserVoiceLang().then(setLang); fetchLogo().then((l) => { if (l) setLogoUri(l); }); }, []);
 
   function availLangs(): string[] {
     return getAdminVoiceLanguages();
@@ -257,7 +258,7 @@ export default function InductionGate() {
         {phase === 'email' ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={s.emailContent}>
             <View style={s.logoWrap}>
-              <Image source={require('../../assets/Fly2Sky-logo.png')} style={s.logo} resizeMode="contain" />
+              <Image source={logoUri ? { uri: logoUri } : require('../../assets/Fly2Sky-logo.png')} style={s.logo} resizeMode="contain" />
             </View>
             <View style={s.mailHead}>
               <Text style={s.mailLine}><Text style={s.mailLbl}>From: </Text>ETL Administrator</Text>

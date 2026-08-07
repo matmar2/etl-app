@@ -4,12 +4,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'react-native';
-import { acceptFolder, api, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
+import { acceptFolder, api, fetchLogo, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { openInduction } from './help';
 export const LOGO = require('../../assets/Fly2Sky-logo.png');
 import { S, T, TY } from './theme';
+
+/** Dynamic company logo — returns API logo or bundled fallback. */
+export function useLogo() {
+  const [uri, setUri] = useState<string | null>(null);
+  useEffect(() => { fetchLogo().then((u) => { if (u) setUri(u); }); }, []);
+  return uri ? { uri } : LOGO;
+}
 
 const s = {
   screen: { flex: 1, backgroundColor: T.bg } as const,
@@ -57,6 +64,7 @@ const lg = {
 export function LoginScreen({ onDone }: { onDone: (u: any) => void }) {
   const [u, setU] = useState(''); const [p, setP] = useState(''); const [otp, setOtp] = useState('');
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const logoSrc = useLogo();
   const submit = async () => {
     setBusy(true); setErr('');
     try { const r = await login(u.trim(), p, otp.trim() || undefined); setToken(r.access_token); onDone(r.user); }
@@ -68,7 +76,7 @@ export function LoginScreen({ onDone }: { onDone: (u: any) => void }) {
       <View pointerEvents="none" style={{ position: 'absolute', top: -340, alignSelf: 'center', width: 880, height: 880, borderRadius: 440, backgroundColor: '#13284a', opacity: 0.5 }} />
       <View pointerEvents="none" style={{ position: 'absolute', bottom: -300, right: -220, width: 640, height: 640, borderRadius: 320, backgroundColor: '#0e2b45', opacity: 0.4 }} />
       <View style={lg.logoCard}>
-        <Image source={LOGO} style={lg.logo as any} />
+        <Image source={logoSrc} style={lg.logo as any} />
       </View>
       <Text style={lg.title}>Fly2Sky EFF</Text>
       <Text style={lg.sub}>Electronic Flight Folder</Text>
@@ -94,6 +102,7 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
   const [prep, setPrep] = useState<{ done: number; total: number } | null>(null);   // offline pre-cache progress
   const [openDates, setOpenDates] = useState<Record<string, boolean>>({});           // per-date collapse (today open by default)
   const aliveRef = useRef(true);
+  const logoSrc = useLogo();
   useEffect(() => () => { aliveRef.current = false; }, []);
   // web→native: localStorage(eff_reg) → SecureStore via the adapter (async, so the persisted tail
   // loads in an effect rather than the useState initializer).
@@ -113,14 +122,14 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
       }
       if (aliveRef.current) setPrep(null);
     }
-  }).catch((e) => setErr(e.message));
+  }).catch((e) => { if (/session expired/i.test(e.message)) { signOut(); return; } setErr(e.message); });
   useEffect(() => { load(); }, []);
   const regs = Array.from(new Set((rows || []).map((f) => f.registration).filter(Boolean))).sort();
   const shown = (rows || []).filter((f) => reg === 'ALL' || f.registration === reg);
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <Image source={LOGO} style={{ width: 120, height: 28, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6 } as any} />
+        <Image source={logoSrc} style={{ width: 120, height: 28, resizeMode: 'contain', backgroundColor: '#fff', borderRadius: 6 } as any} />
         <Text style={s.h1}>My flights</Text>
         <View style={{ flex: 1 }} />
         <Text style={s.sub}>{user?.full_name}</Text>

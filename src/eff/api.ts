@@ -59,6 +59,19 @@ export function setEtlToken(t: string | null) {
 }
 export function getEtlToken(): string | null { return etlToken; }
 
+// Company logo from ETL (public endpoint, no auth needed). Returns data URI or null.
+let _cachedLogo: string | null = null;
+export async function fetchLogo(): Promise<string | null> {
+  if (_cachedLogo) return _cachedLogo;
+  try {
+    const r = await fetch(`${ETL_API}/auth/logo`);
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.logo) { _cachedLogo = d.logo; return d.logo; }
+  } catch { /* offline — use bundled fallback */ }
+  return null;
+}
+
 // Live aircraft status + blocking defects + HIL from the ETL API, cached per reg for 5 min
 // (in memory — a fresh flight open within the window reuses it, a reload refetches).
 const _etlCache: Record<string, { at: number; data: EtlStatusBundle }> = {};
@@ -259,6 +272,7 @@ export const listFlights = async () => {
 };
 export const getFolder = (id: string) => api(`/flights/${id}/folder`);
 export const wxRefresh = (id: string) => api(`/flights/${id}/wx-refresh`, { method: 'POST' });
+export const ppsRefresh = (id: string) => api(`/flights/${id}/pps-refresh`, { method: 'POST' });
 export const getNavlog = (id: string) => api(`/flights/${id}/navlog`);
 export const saveNavEntry = (id: string, idx: number, body: any) =>
   api(`/flights/${id}/navlog/${idx}`, { method: 'POST', body: JSON.stringify(body) });
@@ -291,6 +305,15 @@ export async function prefetchDocs(id: string, docs: { id: string }[]) {
   }
 }
 export const deleteDoc = (id: string, docId: string) => api(`/flights/${id}/doc/${docId}`, { method: 'DELETE' });
+
+// ---------- GENDEC (General Declaration) --------------------------------------------------
+export async function gendecHtml(id: string, leg: string = 'outward'): Promise<string> {
+  const r = await fetch(`${BASE}/flights/${id}/gendec-html?leg=${leg}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!r.ok) throw new Error(`GENDEC fetch failed: ${r.status}`);
+  return r.text();
+}
 
 // ---------- Help: User Guide, AI Assistant, pilot induction --------------------------------
 // Guide + FAQ are cached (native store) so the Help page works offline; the assistant falls back

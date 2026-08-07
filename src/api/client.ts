@@ -1173,6 +1173,25 @@ export async function signoffsRecent(days: number, reg?: string): Promise<{ days
 
 // Cache the public config so OFFLINE it keeps the last-known testing_mode. Without this, an offline
 // fetch failure forced testing_mode=false, which hid the testing-only "Switch aircraft" dropdown.
+// Operator logo (public, no auth). Fetched once and cached so the login screen,
+// headers, and offline prints all use the admin-uploaded logo when available.
+let _logoCache: string | null = null;
+export async function fetchLogo(): Promise<string | null> {
+  if (_logoCache) return _logoCache;
+  try {
+    const cached = await _cacheGet<string>('operator_logo');
+    if (cached) { _logoCache = cached; return cached; }
+  } catch {}
+  try {
+    const r = await fetch(`${BASE}/auth/logo`).then((r) => r.json());
+    if (r?.logo) { _logoCache = r.logo; await _cacheSet('operator_logo', r.logo).catch(() => {}); return r.logo; }
+  } catch {}
+  return null;
+}
+// Synchronous variant for use in HTML templates (print/techlog). Returns the cached
+// logo if fetchLogo() has already run (it runs on login/header mount), else null.
+export function getLogoSync(): string | null { return _logoCache; }
+
 export async function publicConfig(): Promise<{ testing_mode: boolean; test_mfa?: boolean; switch_aircraft?: boolean; trial_banner?: string; trial_login_note?: string }> {
   try {
     const did = await deviceId().catch(() => '');

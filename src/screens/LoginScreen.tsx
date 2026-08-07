@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import { pullSectorList } from '../db/sectors';
-import { fleetList, forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable, setCurrentAircraft } from '../api/client';
+import { fetchLogo, fleetList, forgotPassword, hasOfflineSession, login, loginOffline, loginWithToken, MfaRequired, NetworkError, offlineResetPassword, publicConfig, requestOtp, serverReachable, setCurrentAircraft } from '../api/client';
 import { theme } from '../theme';
 
 export default function LoginScreen({ navigation }: any) {
@@ -77,7 +77,11 @@ export default function LoginScreen({ navigation }: any) {
   const flashLoop = useRef<Animated.CompositeAnimation | null>(null);
   const [offlineReady, setOfflineReady] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);   // null = checking
-  useEffect(() => { publicConfig().then((c) => { setTesting(!!c.testing_mode); if (c.trial_login_note) setTrialNote(c.trial_login_note); }); }, []);
+  const [logoUri, setLogoUri] = useState<string | null>(null);
+  useEffect(() => {
+    publicConfig().then((c) => { setTesting(!!c.testing_mode); if (c.trial_login_note) setTrialNote(c.trial_login_note); });
+    fetchLogo().then((l) => { if (l) setLogoUri(l); });
+  }, []);
   useEffect(() => { hasOfflineSession(u).then(setOfflineReady); }, [u]);   // seeded for offline login?
   useEffect(() => {
     let alive = true;
@@ -211,7 +215,7 @@ export default function LoginScreen({ navigation }: any) {
   return (
     <View style={styles.wrap}>
       <View style={styles.logoCard}>
-        <Image source={require('../../assets/Fly2Sky-logo.png')} style={styles.logo} resizeMode="contain" />
+        <Image source={logoUri ? { uri: logoUri } : require('../../assets/Fly2Sky-logo.png')} style={styles.logo} resizeMode="contain" />
       </View>
       <Text style={styles.title}>Electronic Tech Log</Text>
       <Text style={styles.sub}>Fly2Sky · Sign in</Text>
