@@ -313,6 +313,8 @@ export default function DepartureScreen({ route, navigation }: any) {
     // Servicing (oil / Nil) is a MAINTENANCE task — it is enforced on the mechanic's CRS, not on
     // the commander's acceptance. Only gate the acceptance on it for a role that can do servicing.
     if (canServ) add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
+    // Total engine oil on board — mandatory every leg (independent of servicing/Nil switch).
+    add('total_oil', 'Total engine oil', 'serv', hasV(serv.eng1_total) && hasV(serv.eng2_total));
     return out;
   }
   async function accept() {
@@ -628,7 +630,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           <View style={{ marginTop: 4 }}>
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Actual total fuel in tanks ({upliftUnit})</Text>
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-              <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 150 }}
+              <TextInput style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('dep_fuel_kg') ? 2 : 1, borderColor: badSet.has('dep_fuel_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, width: 150 }]}
                 keyboardType="decimal-pad" value={shown}
                 onChangeText={(raw) => { const v = numericOnly(raw); setUpliftManual(true); setUpliftText(v); setFuel({ ...fuel, dep_fuel_kg: v === '' ? '' : toKg(v) }); }} />
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -840,7 +842,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       }}><Text style={sx.saveText}>Save servicing uplifts</Text></TouchableOpacity> : null}
       </View>
 
-      <Text style={sx.section}>Total engine oil (qt)</Text>
+      <Text style={[sx.section, badSet.has('total_oil') && { color: theme.red }]} onLayout={(e) => { secY.current['total_oil'] = e.nativeEvent.layout.y; }}>Total engine oil (qt)</Text>
       <View style={sx.card}>
       {!canServTot ? <RoBanner text="the oil quantity is recorded by flight crew or maintenance" /> : null}
       <Text style={[sx.sub, { marginTop: 0, marginBottom: 8 }]}>Oil quantity on board at departure — Eng 1 / Eng 2, in quarts. Recorded every leg, independent of servicing — the quantity can be low with no uplift (e.g. a leak).</Text>
@@ -854,11 +856,11 @@ export default function DepartureScreen({ route, navigation }: any) {
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ width: 190 }}>
               <Text style={oilLbl} numberOfLines={1}>Total Eng 1 oil (qt) *</Text>
-              <TextInput style={[oilInput, servBad && need && !hasV(serv.eng1_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
+              <TextInput style={[oilInput, (badSet.has('total_oil') || servBad) && !hasV(serv.eng1_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng1_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng1_total: numericOnly(v) })} />
             </View>
             <View style={{ width: 190 }}>
               <Text style={oilLbl} numberOfLines={1}>Total Eng 2 oil (qt) *</Text>
-              <TextInput style={[oilInput, servBad && need && !hasV(serv.eng2_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
+              <TextInput style={[oilInput, (badSet.has('total_oil') || servBad) && !hasV(serv.eng2_total) ? redB : null]} keyboardType="decimal-pad" value={serv.eng2_total ?? ''} editable={canServTot} onChangeText={(v) => setServ({ ...serv, eng2_total: numericOnly(v) })} />
             </View>
           </View>
         );
