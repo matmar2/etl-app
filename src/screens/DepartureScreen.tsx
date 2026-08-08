@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
@@ -17,7 +17,7 @@ import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { updateSector } from '../db/sectors';
-import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, RefreshButton, round1, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmt, fmtHM, hhmm, NumField, num, numericOnly, OOOISection, RefreshButton, round1, schedule, sx, useReadyPulse, useSector } from './sectorShared';
 
 // A serviceability reason the delayed-OASES bridge can cover (mirrors backend is_oases_lag_reason):
 // 2/10-day check currency OR an overdue hold item. Never open technical / cabin defects.
@@ -103,6 +103,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   type FieldConf = Record<string, { visible?: boolean; required?: boolean; label?: string }>;
   const [fc, setFc] = useState<FieldConf>({});               // admin field_config (departure page)
   const [badSet, setBadSet] = useState<Set<string>>(new Set());
+  const readyPulse = useReadyPulse(badSet);
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
   const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
@@ -308,8 +309,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   // Proactive red borders: highlight empty mandatory fields as soon as the screen loads
   // (not only after a failed sign-off attempt). Recomputes whenever relevant state changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
-    [fc, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN]);
+  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
+    [fc, s, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN]);
   async function accept() {
     const miss = computeMissing();
     if (miss.length) {
@@ -423,7 +424,7 @@ export default function DepartureScreen({ route, navigation }: any) {
             {[['Flight', 'flight_no', 'AH1234'], ['Dep (ICAO)', 'dep', 'DAAG'], ['Arr (ICAO)', 'arr', 'DAUB']].map(([lbl, key, ph]) => (
               <View key={key} style={{ flex: 1 }}>
                 <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>{lbl}</Text>
-                <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10 }}
+                <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has(key) ? 2 : 1, borderColor: badSet.has(key) ? theme.red : theme.border, borderRadius: 8, padding: 10 }}
                   autoCapitalize="characters" value={routeEdit[key] ?? ''} onChangeText={(v) => setRouteEdit({ ...routeEdit, [key]: v })} placeholder={ph} placeholderTextColor={theme.sub} />
                 {key !== 'flight_no' ? <IcaoHint code={routeEdit[key]} /> : null}
               </View>
@@ -453,7 +454,7 @@ export default function DepartureScreen({ route, navigation }: any) {
 
       <Text style={sx.section}>Flight type &amp; status</Text>
       <View pointerEvents={canFlightType ? 'auto' : 'none'} style={canFlightType ? undefined : { opacity: 0.55 }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4, borderWidth: badSet.has('flight_type') ? 2 : 0, borderColor: badSet.has('flight_type') ? theme.red : 'transparent', borderRadius: 10, padding: badSet.has('flight_type') ? 4 : 0 }}>
         {['Scheduled', 'Training', 'Ferry', 'Positioning', 'Test'].map((t) => {
           const on = (s.flight_type || '') === t;
           return (
@@ -524,7 +525,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <View style={{ width: 170 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
-              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
+              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: badSet.has('fuel_found_kg') ? 2 : 1, borderColor: badSet.has('fuel_found_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') && !badSet.has('fuel_found_kg') ? effInputStyle : null]}
                 keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
                 onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
             </View>
@@ -553,7 +554,7 @@ export default function DepartureScreen({ route, navigation }: any) {
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <View style={{ width: 170 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
-              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
+              <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: badSet.has('fuel_found_kg') ? 2 : 1, borderColor: badSet.has('fuel_found_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') && !badSet.has('fuel_found_kg') ? effInputStyle : null]}
                 keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
                 onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
             </View>
@@ -571,7 +572,7 @@ export default function DepartureScreen({ route, navigation }: any) {
         <View style={{ backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginBottom: 8 }}>
           {/* No previous-leg record resolved (first leg / re-opened flight) — the reading must still be enterable. */}
           <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel remaining before refuelling (kg)<EffHint on={isEff('fuel_found_kg')} /></Text>
-          <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 170, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') ? effInputStyle : null]}
+          <TextInput editable={canFuel} style={[{ backgroundColor: theme.panel, color: theme.text, borderWidth: badSet.has('fuel_found_kg') ? 2 : 1, borderColor: badSet.has('fuel_found_kg') ? theme.red : theme.border, borderRadius: 8, padding: 10, width: 170, opacity: canFuel ? 1 : 0.5 }, isEff('fuel_found_kg') && !badSet.has('fuel_found_kg') ? effInputStyle : null]}
             keyboardType="decimal-pad" value={fuel.fuel_found_kg == null ? '' : String(fuel.fuel_found_kg)}
             onChangeText={(v) => { setFuel({ ...fuel, fuel_found_kg: numericOnly(v) }); pruneEff('fuel_found_kg'); }} />
         </View>
@@ -667,7 +668,7 @@ export default function DepartureScreen({ route, navigation }: any) {
             <View style={{ marginBottom: 10 }}>
               <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Fuel Uplifted ({bowserUnit})<EffHint on={isEff('bowser_uplift_lt')} /></Text>
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-                <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, opacity: canFuel ? 1 : 0.5 }, isEff('bowser_uplift_lt') ? effInputStyle : null]}
+                <TextInput editable={canFuel} style={[{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('bowser_uplift_lt') ? 2 : 1, borderColor: badSet.has('bowser_uplift_lt') ? theme.red : theme.border, borderRadius: 8, padding: 10, width: 90, opacity: canFuel ? 1 : 0.5 }, isEff('bowser_uplift_lt') && !badSet.has('bowser_uplift_lt') ? effInputStyle : null]}
                   keyboardType="decimal-pad" value={bowserText} onChangeText={(raw) => { const v = numericOnly(raw); setBowserText(v); setFuel({ ...fuel, bowser_uplift_lt: v === '' ? '' : round1(toLt(v)) }); pruneEff('bowser_uplift_lt'); }} />
                 {/* unit dropdown (default L) — compact so photo buttons share the line */}
                 <View>
@@ -771,7 +772,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       </View>
 
       <Text style={sx.section} onLayout={(e) => { secY.current['serv'] = e.nativeEvent.layout.y; }}>Servicing — oil &amp; hydraulic uplift</Text>
-      <View style={sx.card}>
+      <View style={[sx.card, badSet.has('servicing') ? { borderWidth: 2, borderColor: theme.red } : null]}>
       {!canServ ? <RoBanner text="servicing is recorded by maintenance (mechanic)" /> : null}
       <View style={sx.switchRow}>
         <Text style={{ color: theme.sub }}>Nil oils / fluids uplift</Text>
@@ -882,7 +883,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       ) : (
         <View>
           <Text style={sx.sub}>Walkaround / pre-flight inspection — open the FCOM exterior walkaround, then accept &amp; sign (mechanic or crew).</Text>
-          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, marginTop: 6 }} value={pfiName} onChangeText={setPfiName} placeholder="Name PFI performed by" placeholderTextColor={theme.sub} />
+          <TextInput style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('pfi') ? 2 : 1, borderColor: badSet.has('pfi') ? theme.red : theme.border, borderRadius: 8, padding: 10, marginTop: 6 }} value={pfiName} onChangeText={setPfiName} placeholder="Name PFI performed by" placeholderTextColor={theme.sub} />
           <TouchableOpacity style={[sx.save, { backgroundColor: theme.green, marginTop: 8 }]} onPress={() => { if (!pfiName.trim()) { setPfiMsg('Enter the name of who performs the PFI.'); return; } setPfiMsg(''); setWalkOpen(true); }}>
             <Text style={sx.saveText}>Open walkaround &amp; sign PFI</Text>
           </TouchableOpacity>
@@ -1039,9 +1040,11 @@ export default function DepartureScreen({ route, navigation }: any) {
       ) : (
         <>
           <Text style={sx.sub}>I certify the fuel and oil onboard at departure is as required and the aircraft is acceptable for service.</Text>
+          <Animated.View style={{ transform: [{ scale: readyPulse.scale }] }}>
           <TouchableOpacity disabled={!isCrew || (!s.released_at && !lagOnlyR && !testing)} style={[sx.save, { backgroundColor: theme.accent, opacity: (isCrew && (s.released_at || lagOnlyR || testing)) ? 1 : 0.4 }]} onPress={accept}>
             <Text style={[sx.saveText, { color: theme.onAccent }]}>{!s.released_at && !lagOnlyR && !testing ? 'Awaiting maintenance CRS' : 'Sign — accept aircraft (departure)'}</Text>
           </TouchableOpacity>
+          </Animated.View>
           {/* Transient feedback (errors, "undone", offline) — kept OUT of the button label so it
               never masks the real action the button performs. */}
           {signMsg ? <Text style={{ color: /Could not|Complete before/.test(signMsg) ? theme.red : theme.sub, fontSize: 12, marginTop: 6 }}>{signMsg}</Text> : null}

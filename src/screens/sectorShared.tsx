@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, TouchableOpacity, Vibration, View } from 'react-native';
 import { appSettings, syncPush } from '../api/client';
 import { getSector, pullSector, updateSector } from '../db/sectors';
 import { theme } from '../theme';
@@ -228,16 +228,37 @@ function OOOITimeInput({ field, sector, setManual, disabled, isEff, onEdit }: {
   );
 }
 
+// Save-button pulse: vibrates + visually bounces when all mandatory fields in the block are filled.
+// Returns { scale } — spread into the save button's Animated.View transform.
+export function useReadyPulse(badSet: Set<string>) {
+  const prevSize = useRef(badSet.size);
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (prevSize.current > 0 && badSet.size === 0) {
+      // All mandatory fields just became complete — pulse + vibrate
+      try { if (Platform.OS !== 'web') Vibration.vibrate(80); else if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80); } catch {}
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.06, duration: 120, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 0.97, duration: 100, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
+      ]).start();
+    }
+    prevSize.current = badSet.size;
+  }, [badSet.size, scale]);
+  return { scale };
+}
+
 // OOOI stamp tiles + manual inputs for the given fields.
 // effSet/onEdit: OOOI times imported from EFF render blue; stamping or typing one prunes it (onEdit).
-export function OOOISection({ s, fields, stamp, setManual, clear, disabled, effSet, onEdit }: any) {
+export function OOOISection({ s, fields, stamp, setManual, clear, disabled, effSet, onEdit, badSet }: any) {
   const isEff = (f: string) => !!effSet && effSet.has(f);
+  const isBad = (f: string) => !!badSet && badSet.has(f);
   const edit = (f: string) => { if (isEff(f) && onEdit) onEdit(f); };   // any manual change/stamp → no longer EFF
   return (
     <>
       <View style={styles.oooiRow}>
         {fields.map((f: string) => (
-          <TouchableOpacity key={f} style={[styles.oooiBtn, disabled && { opacity: 0.4 }, isEff(f) ? { borderColor: theme.eff, borderLeftWidth: 3 } : null]} disabled={disabled} onPress={() => { edit(f); stamp(f); }}
+          <TouchableOpacity key={f} style={[styles.oooiBtn, disabled && { opacity: 0.4 }, isBad(f) ? { borderColor: theme.red, borderWidth: 2 } : isEff(f) ? { borderColor: theme.eff, borderLeftWidth: 3 } : null]} disabled={disabled} onPress={() => { edit(f); stamp(f); }}
             onLongPress={!disabled && clear ? async () => { if (await confirmAction(`Clear ${OOOI_LABEL[f]} time?\n(e.g. delay / return to stand — re-stamp on the next push-back)`)) { edit(f); clear(f); } } : undefined}>
             <Text style={styles.oooiLbl}>{OOOI_LABEL[f]}<EffHint on={isEff(f)} /></Text>
             <Text style={[styles.oooiVal, isEff(f) ? { color: theme.eff } : null]}>{hhmm(s[f])}</Text>

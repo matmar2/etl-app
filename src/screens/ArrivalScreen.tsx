@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Animated, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, tokenIssuedAt, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
@@ -15,7 +15,7 @@ import { trackActivity } from '../db/activity';
 import SyncBlock from '../components/SyncBlock';
 import { theme } from '../theme';
 import { updateSector } from '../db/sectors';
-import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, RefreshButton, schedule, sx, useSector } from './sectorShared';
+import { effInputStyle, EffHint, EffLegend, fmtHM, hhmm, hm, num, numericOnly, OOOISection, RefreshButton, schedule, sx, useReadyPulse, useSector } from './sectorShared';
 
 export default function ArrivalScreen({ route, navigation }: any) {
   const { sectorId } = route.params;
@@ -36,6 +36,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
   const [util, setUtil] = useState<Utilisation | null>(null);
   const [div, setDiv] = useState<{ on: boolean; airport: string }>({ on: false, airport: '' });
   const [badSet, setBadSet] = useState<Set<string>>(new Set());
+  const readyPulse = useReadyPulse(badSet);
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
   const [testing, setTesting] = useState(false);
@@ -166,8 +167,8 @@ export default function ArrivalScreen({ route, navigation }: any) {
   }
   // Proactive red borders: highlight empty mandatory fields immediately, not only on sign-off failure.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
-    [fc, s?.arr, s?.off_block, s?.takeoff, s?.landing, s?.on_block, s?.ice_protect, rem, oilArr, div]);
+  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
+    [fc, s, s?.arr, s?.off_block, s?.takeoff, s?.landing, s?.on_block, s?.ice_protect, rem, oilArr, div]);
   async function accept() {
     const miss = computeMissing();
     if (miss.length) {
@@ -237,7 +238,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       <Text style={sx.section} onLayout={(e) => { secY.current['oooi'] = e.nativeEvent.layout.y; }}>Times (OUT / OFF / ON / IN)</Text>
       <EffLegend show={anyEffArr} />
-      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} effSet={effFields} onEdit={pruneEff} />
+      <OOOISection s={s} fields={['off_block', 'takeoff', 'landing', 'on_block']} stamp={stamp} setManual={setManual} clear={(canOooiA && effDep) ? clearTime : undefined} disabled={!effDep || !canOooiA} effSet={effFields} onEdit={pruneEff} badSet={badSet} />
       <Text style={sx.sub}>{(() => {
         const mm = (a?: string | null, b?: string | null) => { if (!a || !b) return null; return Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)); };
         const blk = mm(s.off_block, s.on_block) ?? s.block_time_min;
@@ -250,7 +251,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
 
       {role() !== 'mechanic' ? (<>
       <Text style={sx.section} onLayout={(e) => { secY.current['ice'] = e.nativeEvent.layout.y; }}>Ice protection</Text>
-      <View style={sx.card}>
+      <View style={[sx.card, badSet.has('ice') ? { borderWidth: 2, borderColor: theme.red } : null]}>
         <View style={sx.switchRow}><Text style={{ color: theme.sub }}>De/anti-icing applied</Text>
           <Switch value={!!s.ice_protect} disabled={!effDep} onValueChange={async (v) => {
             await save({ ice_protect: v });
@@ -318,7 +319,7 @@ export default function ArrivalScreen({ route, navigation }: any) {
             <Text style={{ color: theme.sub, fontSize: 12, marginBottom: 4 }}>Diversion airport (ICAO)</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <TextInput editable={div.on && canDivA} autoCapitalize="characters" maxLength={4}
-                style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: 1, borderColor: theme.border, borderRadius: 8, padding: 10, width: 90, textAlign: 'center', opacity: div.on ? 1 : 0.4 }}
+                style={{ backgroundColor: theme.tile, color: theme.text, borderWidth: badSet.has('diversion_airport') ? 2 : 1, borderColor: badSet.has('diversion_airport') ? theme.red : theme.border, borderRadius: 8, padding: 10, width: 90, textAlign: 'center', opacity: div.on ? 1 : 0.4 }}
                 value={div.airport} placeholder={div.on ? 'LMML' : '—'} placeholderTextColor={theme.sub}
                 onChangeText={(v) => setDiv({ ...div, airport: v.toUpperCase() })}
                 onEndEditing={() => save({ diversion_airport: div.airport || null })} />
@@ -499,9 +500,11 @@ export default function ArrivalScreen({ route, navigation }: any) {
         // accept() shows a popup listing any missing fields instead of silently disabling.
         return (
           <>
+            <Animated.View style={{ transform: [{ scale: readyPulse.scale }] }}>
             <TouchableOpacity disabled={!canAct} style={[sx.save, { backgroundColor: theme.accent, opacity: canAct ? 1 : 0.4 }]} onPress={accept}>
               <Text style={[sx.saveText, { color: theme.onAccent }]}>{!effDep ? 'Accept departure first' : !canAcceptA ? 'Not permitted' : 'Sign — close sector (arrival)'}</Text>
             </TouchableOpacity>
+            </Animated.View>
             {signMsg ? (
               <Text style={{ color: /Complete|Could not/.test(signMsg) ? theme.red : theme.sub, fontSize: 12, marginTop: 6 }}>{signMsg}</Text>
             ) : null}
