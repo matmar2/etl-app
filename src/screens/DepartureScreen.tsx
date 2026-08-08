@@ -210,6 +210,15 @@ export default function DepartureScreen({ route, navigation }: any) {
     })();
   }, [!!s]);
 
+  // Proactive red borders: highlight empty mandatory fields as soon as the screen loads
+  // (not only after a failed sign-off attempt). Recomputes whenever relevant state changes.
+  // MUST be before the if(!s) early return — hooks must run in the same order every render.
+  // computeMissing() is a hoisted function declaration; the s&& guard prevents calling it
+  // when s is null (early-return render), so closed-over const vars are never read in TDZ.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
+    [fc, s, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN]);
+
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
   const QT_L = 0.946353;                                  // US quart -> litre; oil stored canonically in L
   // Engine oil is measured in QUARTS (Airbus oil-quantity indication); stored canonically in litres.
@@ -306,11 +315,6 @@ export default function DepartureScreen({ route, navigation }: any) {
     if (canServ) add('servicing', 'Servicing (oil / Nil)', 'serv', !!fuel.nil_oils_fluids || hasV(serv.eng1) || hasV(serv.eng2) || hasV(serv.hyd_green) || hasV(serv.hyd_blue) || hasV(serv.hyd_yellow));
     return out;
   }
-  // Proactive red borders: highlight empty mandatory fields as soon as the screen loads
-  // (not only after a failed sign-off attempt). Recomputes whenever relevant state changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
-    [fc, s, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN]);
   async function accept() {
     const miss = computeMissing();
     if (miss.length) {

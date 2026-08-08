@@ -98,6 +98,12 @@ export default function ArrivalScreen({ route, navigation }: any) {
   }
   async function decideCabin(id: string, ok: boolean) { try { await acceptDispatch(id, ok); loadCabin(); } catch { /* offline */ } }
 
+  // Proactive red borders: highlight empty mandatory fields immediately, not only on sign-off failure.
+  // MUST be before the if(!s) early return — hooks must run in the same order every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
+    [fc, s, s?.arr, s?.off_block, s?.takeoff, s?.landing, s?.on_block, s?.ice_protect, rem, oilArr, div]);
+
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
   const isCrew = role() === 'captain' || role() === 'pilot' || role() === 'admin';
   const canOooiA = can('arrival', 'oooi');         // arrival OFF/ON/IN times
@@ -165,10 +171,6 @@ export default function ArrivalScreen({ route, navigation }: any) {
     add('diversion_airport', 'Diversion airport', 'oooi', !div.on || !!div.airport, div.on);   // required when diverted
     return out;
   }
-  // Proactive red borders: highlight empty mandatory fields immediately, not only on sign-off failure.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
-    [fc, s, s?.arr, s?.off_block, s?.takeoff, s?.landing, s?.on_block, s?.ice_protect, rem, oilArr, div]);
   async function accept() {
     const miss = computeMissing();
     if (miss.length) {
