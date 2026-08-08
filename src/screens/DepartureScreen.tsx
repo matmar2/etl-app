@@ -107,6 +107,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const scrollRef = useRef<ScrollView>(null);
   const secY = useRef<Record<string, number>>({});
   const [fuelTol, setFuelTol] = useState(2);   // bowser-vs-uplift cross-check tolerance % (admin-set)
+  const [upliftMargin, setUpliftMargin] = useState(1); // Fuel Uplifted mandatory when uplift detected beyond this % (admin-set)
   const [gradeDef, setGradeDef] = useState('Jet A-1');   // admin-set fuel grade prefill (editable)
   const [ovEnabled, setOvEnabled] = useState(false);     // admin toggle: per-leg commander check-confirmation
   const [ovOpen, setOvOpen] = useState(false);           // conditions list expanded
@@ -117,7 +118,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       const mf = x.mandatory_fields?.departure || {};
       const d: FieldConf = {}; for (const [k, v] of Object.entries(mf)) d[k] = { visible: true, required: !!v }; setFc(d);
     }
-    const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
+    const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); const um = Number(x.fuel_uplift_margin_pct); if (um > 0) setUpliftMargin(um); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
@@ -217,7 +218,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   // when s is null (early-return render), so closed-over const vars are never read in TDZ.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (s && Object.keys(fc).length) setBadSet(new Set(computeMissing().map((x) => x.key))); },
-    [fc, s, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN]);
+    [fc, s, s?.dep, s?.arr, s?.flight_type, s?.pfi_signature, s?.pfi_at, fuel, serv, tanks, receiptN, upliftMargin]);
 
   if (!s) return <View style={sx.wrap}><Text style={sx.sub}>Loading…</Text></View>;
   const QT_L = 0.946353;                                  // US quart -> litre; oil stored canonically in L
@@ -304,9 +305,20 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('dep_fuel_kg', 'Departure fuel', 'fuel', depEff != null);
     add('taxi_fuel_kg', 'Taxi fuel', 'fuel', hasV(fuel.taxi_fuel_kg));
     add('tanks', 'Tank entries (all)', 'fuel', tanks.length > 0 && tanks.every((t) => hasV(fuel[t.field])));
-    add('bowser_uplift_lt', 'Fuel Uplifted', 'fuel', hasV(fuel.bowser_uplift_lt));
+    // Fuel Uplifted / total uplift: mandatory only when refuelling detected —
+    // i.e. |actual_total − fuel_remaining_before| exceeds the admin margin (default 1%).
+    // If fuel_remaining_before isn't entered yet, or matches actual_total within margin, skip.
+    const refuelDetected = (() => {
+      const tot = depEff;                        // actual total fuel in tanks (kg)
+      const before = fuelFoundKg;                // fuel remaining before refuelling (kg)
+      if (tot == null || before == null) return false;
+      return Math.abs(tot - before) > (upliftMargin / 100) * tot;
+    })();
+    if (refuelDetected) {
+      add('bowser_uplift_lt', 'Fuel Uplifted', 'fuel', hasV(fuel.bowser_uplift_lt));
+      add('fuel_uplift_kg', 'Actual total uplift', 'fuel', upliftKg > 0);
+    }
     add('fuel_grade', 'Fuel grade', 'fuel', !!fuel.fuel_grade);
-    add('fuel_uplift_kg', 'Actual total uplift', 'fuel', upliftKg > 0);
     add('fuel_found_kg', 'Fuel remaining before refuelling', 'fuel', hasV(fuel.fuel_found_kg));
     add('fuel_receipt', 'Fuel receipt photo', 'fuel', receiptN == null ? true : receiptN > 0);   // lenient when offline/unknown
     add('pfi', 'PFI', 'pfi', !!(s.pfi_signature || s.pfi_at));
