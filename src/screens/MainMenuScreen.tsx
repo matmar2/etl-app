@@ -13,7 +13,8 @@ import { openInduction, pokeInduction } from '../components/InductionGate';
 import { access, AircraftStatus, aircraftStatus, appSettings, aircraftUtilisation, appRelease, CheckStatus, currentAircraft, deviceId, documentsList, feedbackUnreadCount, Fleet, fleetList, flushBroadcastAcks, flushInductionAcks, flushFeedback, hydrateEff, inductionExists, leonFlights, listActiveDefects, listHIL, loadCurrentAircraft, loadPermissions, logout, offlinePrepared, onEff, pendingSyncCount, prefetchAircraftDefects, prepareOffline, publicConfig, refreshReference, role, roleLabel, scheduledAircraft, serverReachable, setCurrentAircraft, signoffsRecent, syncPush, userName, Utilisation } from '../api/client';
 import { theme } from '../theme';
 import { fmt, fmtHM } from './sectorShared';
-import { confirmAction } from '../util/confirm';
+import { confirmAction, notifyAction } from '../util/confirm';
+import * as SecureStore from '../api/secureStore';
 import { voiceConfirmAvailable, loadUserVoicePref, setUserVoicePref } from '../util/voiceConfirm';
 import { speechAvailable } from '../util/speech';
 
@@ -159,6 +160,25 @@ export default function MainMenuScreen({ navigation }: any) {
   // case — without it the star would essentially never show (the manual check finds nothing waiting).
   const upd = Updates.useUpdates();
   const updateAvail = Updates.isEnabled && (upd.isUpdateAvailable || upd.isUpdatePending);
+  // Stale-bundle pop-up (admin-controlled, Back office → Settings → ota_nag): the red star is easy
+  // to miss, so when an update is available/pending, tell the crew ONCE per update how to get it
+  // (LZ-FSA ran a 2-day-old bundle without anyone noticing, 09 Aug). SecureStore key per update id
+  // so a dismissed notice never repeats for the same update — a NEW publish prompts again.
+  useEffect(() => {
+    if (!updateAvail) return;
+    (async () => {
+      try {
+        const x: any = await appSettings();
+        const nag = x?.ota_nag;
+        if (!nag || nag.enabled === false || !nag.message) return;
+        const uid = (upd.availableUpdate?.updateId || Updates.updateId || 'pending').slice(0, 16);
+        const seenKey = `ota_nag_${uid}`;
+        if (await SecureStore.getItem(seenKey)) return;
+        await SecureStore.setItem(seenKey, '1');
+        notifyAction(String(nag.message), 'App update available');
+      } catch { /* offline / settings unavailable — the red star still shows */ }
+    })();
+  }, [updateAvail]);
   // Which channel/runtimeVersion THIS installed build listens on. An OTA only reaches it (and only
   // then does the red star light) when it's published to this exact channel at this runtimeVersion.
   function otaDiag() {
