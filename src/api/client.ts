@@ -602,6 +602,9 @@ export async function leonHistory(reg: string, start: string, end: string): Prom
 
 export const signRecord = (payload: {
   kind: string; sector_id?: string; defect_id?: string; signature_image?: string; device_id?: string;
+  // The signing screen passes the sector's LOCAL row: the server applies it before validating, so
+  // the sign never races the background push (offline-first — no extra round-trip before signing).
+  sector?: any;
 }) => mutateOrQueue('/signatures', { method: 'POST', body: JSON.stringify(payload) });
 
 // Component Change Report (CCR) — rows tied to a defect rectification or a ground maintenance log.

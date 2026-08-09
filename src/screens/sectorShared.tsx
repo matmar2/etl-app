@@ -76,6 +76,7 @@ export function useSector(sectorId: string) {
     const next = await updateSector(sectorId, patch);
     setS(next); setMsg('Saved');
     syncPush().then(() => setMsg('Saved ✓ synced')).catch(() => setMsg('Saved · offline (queued)'));
+    return next;   // callers that need the fresh local row (e.g. sign-with-data) get it directly
   }
   async function setTime(field: string, iso: string) {
     const n = { ...s, [field]: iso };

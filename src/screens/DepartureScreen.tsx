@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Animated, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, syncPush, Tank, userName, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -91,6 +91,15 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [prevF, setPrevF] = useState<PrevFuel | null>(null);
   const [receiptN, setReceiptN] = useState<number | null>(null);   // fuel-receipt photos on this sector (null = unknown/offline)
   const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
+  // Reopening the leg must not forget the commander's pick — seed it from the persisted sector
+  // (prev_fuel_source) once, and keep it changeable (a new tap re-saves).
+  const prevChoiceSeeded = useRef(false);
+  useEffect(() => {
+    if (!prevChoiceSeeded.current && s && (s as any).prev_fuel_source) {
+      prevChoiceSeeded.current = true;
+      setPrevChoice((s as any).prev_fuel_source === 'leon' ? 'leon' : 'etl');
+    }
+  }, [s]);
   const [servMin, setServMin] = useState<any>(null);
   const [tankEntry, setTankEntry] = useState(false);   // admin: per-tank boxes on the iPad (crew default = total only)
   const [pfiName, setPfiName] = useState(userName() || '');   // pre-filled with the signed-in user, editable
@@ -110,6 +119,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [upliftMargin, setUpliftMargin] = useState(1); // Fuel Uplifted mandatory when uplift detected beyond this % (admin-set)
   const [gradeDef, setGradeDef] = useState('Jet A-1');   // admin-set fuel grade prefill (editable)
   const [ovEnabled, setOvEnabled] = useState(false);     // admin toggle: per-leg commander check-confirmation
+  const [ovHint, setOvHint] = useState('');              // admin-editable testing-phase sign hint (blank = hidden)
   const [ovOpen, setOvOpen] = useState(false);           // conditions list expanded
   const gradeDefRef = useRef('Jet A-1');
   useEffect(() => { appSettings().then((x: any) => {
@@ -118,7 +128,7 @@ export default function DepartureScreen({ route, navigation }: any) {
       const mf = x.mandatory_fields?.departure || {};
       const d: FieldConf = {}; for (const [k, v] of Object.entries(mf)) d[k] = { visible: true, required: !!v }; setFc(d);
     }
-    const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); const um = Number(x.fuel_uplift_margin_pct); if (um > 0) setUpliftMargin(um); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); }).catch(() => {}); }, []);
+    const t = Number(x.fuel_cross_tolerance_pct); if (t > 0) setFuelTol(t); const um = Number(x.fuel_uplift_margin_pct); if (um > 0) setUpliftMargin(um); if (x.fuel_grade_default) { setGradeDef(String(x.fuel_grade_default)); gradeDefRef.current = String(x.fuel_grade_default); } setTankEntry(!!x.departure_tank_entry); setOvEnabled(!!(x as any).check_override?.enabled); setOvHint(String((x as any).check_override?.sign_hint || '')); }).catch(() => {}); }, []);
   // Show the DEFAULT SG (editable) instead of an empty box — reference density from Fleet.
   useEffect(() => {
     if (servMin && (fuel.fuel_density == null || fuel.fuel_density === '')) {
@@ -372,13 +382,12 @@ export default function DepartureScreen({ route, navigation }: any) {
       // click would be missing on the server side and the signature would be rejected.
       const fp: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier || null, fuel_receipt_no: fuel.fuel_receipt_no || null, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids, eng1_total: num(serv.eng1_total), eng2_total: num(serv.eng2_total) };
       tanks.forEach((t) => (fp[t.field] = num(fuel[t.field])));
-      await save(fp);
-      // save() only awaits the LOCAL write — its syncPush runs fire-and-forget. Await a full push
-      // here so the server row carries these values BEFORE its mandatory-field check runs, or the
-      // sign is rejected for a field the crew has already filled (AH1045/04Aug: uplift entered on
-      // the iPad, sign request beat the push to the server). Offline: push fails, sign queues — fine.
-      await syncPush().catch(() => {});
-      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
+      const fresh = await save(fp);
+      // OFFLINE-FIRST: no extra server round-trip before signing. The sign request CARRIES the
+      // sector's local row, so the server applies these values before its own mandatory-field
+      // check — the sign can never race its own data to the server (AH1045/04Aug: uplift typed
+      // on the iPad, sign request beat the background push and was rejected as 'missing').
+      const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature, sector: fresh ?? s });
       trackActivity('sign', 'preflight', sectorId, 'Departure', { flight: s.flight_no, queued: !!r?.queued });
       // Optimistic local update: mark the sector as preflight_signed so the Sign button hides
       // immediately. When offline, the queued signature replays on sync and the server sets the
@@ -545,7 +554,7 @@ export default function DepartureScreen({ route, navigation }: any) {
             ETL and Leon disagree by {fmt(round1(Math.abs(Number(etlC!.fuel_kg) - Number(leonC!.fuel_kg))))} kg. Confirm which source is correct for this departure.
           </Text>
           {([['etl', etlC!], ['leon', leonC!]] as const).map(([k, c]) => (
-            <TouchableOpacity key={k} disabled={!canDep} onPress={() => setPrevChoice(k)}
+            <TouchableOpacity key={k} disabled={!canDep} onPress={() => { setPrevChoice(k); save({ prev_fuel_source: k }); }}
               style={{ marginTop: 8, borderWidth: 2, borderColor: prevChoice === k ? theme.green : theme.border, borderRadius: 8, padding: 10, backgroundColor: theme.panel }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ color: theme.text, fontWeight: '800' }}>{prevChoice === k ? '✓ ' : ''}{c.source}</Text>
@@ -978,6 +987,12 @@ export default function DepartureScreen({ route, navigation }: any) {
               {/* State the REAL grounding reasons — open defects AND/OR overdue / not-recorded checks. */}
               <Text style={{ color: theme.red, fontWeight: '800' }}>▲ Aircraft UNSERVICEABLE — {acSt.reasons?.length ? acSt.reasons.join(' · ') : `${acSt.blocking_defects} open defect(s)`}</Text>
               <Text style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>Rectify (CRS) or defer every open defect under the MEL, complete any overdue / not-recorded 2/10-day check, and extend or clear any overdue hold item — or, when it is only a delayed OASES update, confirm the conditions below — before the release. The Tech Log keeps the entered information.</Text>
+              {/* Admin-editable testing-phase hint (Back office → Settings): tells the crew the sign
+                  path further down the page is still available — blank text hides it; auto-hidden
+                  once testing mode is off. */}
+              {testing && ovHint ? (
+                <Text style={{ color: theme.accent, fontSize: 12.5, fontWeight: '800', marginTop: 6 }}>{ovHint}</Text>
+              ) : null}
               {acSt.blocking_defects > 0 ? (
                 <TouchableOpacity style={[sx.save, { backgroundColor: theme.tile, borderWidth: 1, borderColor: theme.border, marginTop: 8 }]} onPress={() => navigation.navigate('Defects', { aircraftId: currentAircraft()?.registration || s.aircraft_id })}>
                   <Text style={sx.saveText}>View / clear defects</Text>
