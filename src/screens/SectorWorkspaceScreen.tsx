@@ -115,15 +115,17 @@ export default function SectorWorkspaceScreen({ route, navigation }: any) {
   // 'Not started' vs 'In progress': count the page's own entered fields so a partially filled
   // page reads as such on the workspace card (crew asked for the true state, not a binary).
   const _n = (v: any) => v !== null && v !== undefined && v !== '' && v !== false;
-  const depEntered = ['fuel_planned_kg', 'fuel_found_kg', 'dep_fuel_kg', 'taxi_fuel_kg', 'fuel_density',
+  const DEP_FIELDS = ['fuel_planned_kg', 'fuel_found_kg', 'dep_fuel_kg', 'taxi_fuel_kg', 'fuel_density',
     'bowser_uplift_lt', 'fuel_uplift_kg', 'fuel_grade', 'fuel_supplier', 'fuel_receipt_no',
-    'pfi_signature', 'nil_oils_fluids', 'ice_protect'].filter((k) => _n((s as any)[k])).length;
-  const arrEntered = ['off_block', 'takeoff', 'landing', 'fuel_remaining_kg', 'full_stop_ldgs',
-    'touch_go', 'autoland_ok'].filter((k) => _n((s as any)[k])).length;
+    'pfi_signature', 'nil_oils_fluids', 'ice_protect'];
+  const ARR_FIELDS = ['off_block', 'takeoff', 'landing', 'fuel_remaining_kg', 'full_stop_ldgs',
+    'touch_go', 'autoland_ok'];
+  const depEntered = DEP_FIELDS.filter((k) => _n((s as any)[k])).length;
+  const arrEntered = ARR_FIELDS.filter((k) => _n((s as any)[k])).length;
   const depState = depDone ? (s.off_block ? `Off-block ${hhmm(s.off_block)} · uplift ${s.fuel_uplift_kg ?? '—'} kg` : 'Accepted')
-    : depEntered > 0 ? `In progress (${depEntered} field${depEntered === 1 ? '' : 's'} entered)` : 'Not started';
+    : depEntered > 0 ? `In progress (${depEntered} of ${DEP_FIELDS.length} fields entered)` : 'Not started';
   const arrState = arrDone ? `On-block ${hhmm(s.on_block)} · ${s.status}`
-    : arrEntered > 0 ? `In progress (${arrEntered} field${arrEntered === 1 ? '' : 's'} entered)` : 'Not started';
+    : arrEntered > 0 ? `In progress (${arrEntered} of ${ARR_FIELDS.length} fields entered)` : 'Not started';
   const closed = s.status === 'closed' || s.status === 'exported';
   const isMaint = (s as any)?.page_kind === 'maintenance_only' || s?.flight_no === 'MAINT';   // ground maintenance log — no flight
 

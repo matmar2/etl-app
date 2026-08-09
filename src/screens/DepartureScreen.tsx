@@ -91,15 +91,8 @@ export default function DepartureScreen({ route, navigation }: any) {
   const [prevF, setPrevF] = useState<PrevFuel | null>(null);
   const [receiptN, setReceiptN] = useState<number | null>(null);   // fuel-receipt photos on this sector (null = unknown/offline)
   const [prevChoice, setPrevChoice] = useState<'etl' | 'leon' | null>(null);   // pilot's pick when ETL and Leon disagree
-  // Reopening the leg must not forget the commander's pick — seed it from the persisted sector
-  // (prev_fuel_source) once, and keep it changeable (a new tap re-saves).
-  const prevChoiceSeeded = useRef(false);
-  useEffect(() => {
-    if (!prevChoiceSeeded.current && s && (s as any).prev_fuel_source) {
-      prevChoiceSeeded.current = true;
-      setPrevChoice((s as any).prev_fuel_source === 'leon' ? 'leon' : 'etl');
-    }
-  }, [s]);
+  // (Seeded from the persisted sector.prev_fuel_source in the hydration effect below — a single
+  // writer; an earlier separate seed effect here lost a race with the hydration reset.)
   const [servMin, setServMin] = useState<any>(null);
   const [tankEntry, setTankEntry] = useState(false);   // admin: per-tank boxes on the iPad (crew default = total only)
   const [pfiName, setPfiName] = useState(userName() || '');   // pre-filled with the signed-in user, editable
@@ -158,7 +151,11 @@ export default function DepartureScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!s) return;
     aircraftUtilisation(s.aircraft_id).then(setUtil).catch(() => {});
-    setPrevChoice(null);
+    // Hydrate the commander's ETL/Leon pick from the sector (persisted as prev_fuel_source) —
+    // NOT null: this effect re-runs on every sector reload and a plain reset silently wiped the
+    // seeded choice right after it was applied (found via live fiber inspection, 09 Aug).
+    const pfs = (s as any).prev_fuel_source;
+    setPrevChoice(pfs === 'leon' ? 'leon' : pfs === 'etl' ? 'etl' : null);
     prevFuelCached(sectorId, currentAircraft()?.registration || s.aircraft_id).then(setPrevF).catch(() => {});   // returns both ETL + Leon candidates
     listAttachments({ sector_id: sectorId }).then((a) => setReceiptN(a.filter((x) => x.kind === 'receipt').length)).catch(() => setReceiptN(null));
     setRouteEdit({ flight_no: s.flight_no, dep: s.dep, arr: s.arr });
