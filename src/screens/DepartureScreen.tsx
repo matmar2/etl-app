@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { Animated, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, Tank, userName, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftConfig, sectorCheckOverride, aircraftStatus, AircraftStatus, aircraftUtilisation, allocateTl, appSettings, can, currentAircraft, listActiveDefects, listAttachments, listServicing, PrevFuel, lastArrivalOil, prevFuelCached, publicConfig, revokeAcceptance, revokeRelease, signRecord, syncPush, Tank, userName, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -296,7 +296,7 @@ export default function DepartureScreen({ route, navigation }: any) {
   const isVis = (k: string) => fc[k]?.visible !== false;
   function computeMissing() {
     const out: { key: string; label: string; sec: string }[] = [];
-    const add = (key: string, label: string, sec: string, ok: boolean) => { if (fc[key]?.required && !ok) out.push({ key, label: fc[key]?.label || label, sec }); };
+    const add = (key: string, label: string, sec: string, ok: boolean, force = false) => { if ((force || fc[key]?.required) && !ok) out.push({ key, label: fc[key]?.label || label, sec }); };
     add('dep', 'Departure airport', 'route', !!s.dep);
     add('arr', 'Arrival airport', 'route', !!s.arr);
     add('flight_type', 'Flight type', 'route', !!s.flight_type);
@@ -306,17 +306,17 @@ export default function DepartureScreen({ route, navigation }: any) {
     add('taxi_fuel_kg', 'Taxi fuel', 'fuel', hasV(fuel.taxi_fuel_kg));
     add('tanks', 'Tank entries (all)', 'fuel', tanks.length > 0 && tanks.every((t) => hasV(fuel[t.field])));
     // Fuel Uplifted / total uplift: mandatory only when refuelling detected —
-    // i.e. |actual_total − fuel_remaining_before| exceeds the admin margin (default 1%).
-    // If fuel_remaining_before isn't entered yet, or matches actual_total within margin, skip.
+    // i.e. |actual_total − fuel_before| exceeds the admin margin (default 1%).
+    // fuel_before = fuel_remaining_before_refuelling if entered, else prev-leg landing fuel (Leon/ETL).
     const refuelDetected = (() => {
       const tot = depEff;                        // actual total fuel in tanks (kg)
-      const before = fuelFoundKg;                // fuel remaining before refuelling (kg)
+      const before = baseKg;                     // fuel_found_kg → prev-leg landing fuel (Leon/ETL)
       if (tot == null || before == null) return false;
       return Math.abs(tot - before) > (upliftMargin / 100) * tot;
     })();
     if (refuelDetected) {
-      add('bowser_uplift_lt', 'Fuel Uplifted', 'fuel', hasV(fuel.bowser_uplift_lt));
-      add('fuel_uplift_kg', 'Actual total uplift', 'fuel', upliftKg > 0);
+      if (!hasV(fuel.bowser_uplift_lt)) out.push({ key: 'bowser_uplift_lt', label: `Fuel Uplifted (L) — departure fuel (${fmt(round1(depEff || 0))} kg) differs from ${fuelFoundKg != null ? 'fuel remaining before refuelling' : 'previous arrival fuel'} (${fmt(round1(baseKg || 0))} kg)`, sec: 'fuel' });
+      if (!(upliftKg > 0)) out.push({ key: 'fuel_uplift_kg', label: 'Actual total uplift', sec: 'fuel' });
     }
     add('fuel_grade', 'Fuel grade', 'fuel', !!fuel.fuel_grade);
     add('fuel_found_kg', 'Fuel remaining before refuelling', 'fuel', hasV(fuel.fuel_found_kg));
@@ -367,8 +367,23 @@ export default function DepartureScreen({ route, navigation }: any) {
       // Committing the departure makes this an active TL page — allocate its number now (works offline)
       // so the completed sector prints its full TL # even before it syncs.
       if (!s.page_no) { const n = await allocateTl(currentAircraft()?.registration || s.aircraft_id); if (n) await save({ page_no: n }); }
+      // Auto-save fuel + oil + servicing so the server sees the latest values during its own
+      // mandatory-field check. Without this, data entered after the last "Save departure fuel"
+      // click would be missing on the server side and the signature would be rejected.
+      const fp: any = { fuel_planned_kg: num(fuel.fuel_planned_kg), fuel_uplift_kg: upliftKg, fuel_density: num(fuel.fuel_density), fuel_supplier: fuel.fuel_supplier || null, fuel_receipt_no: fuel.fuel_receipt_no || null, dep_fuel_kg: depEff, taxi_fuel_kg: num(fuel.taxi_fuel_kg), fuel_found_kg: num(fuel.fuel_found_kg), bowser_uplift_lt: num(fuel.bowser_uplift_lt), fuel_grade: fuel.fuel_grade || null, nil_oils_fluids: !!fuel.nil_oils_fluids, eng1_total: num(serv.eng1_total), eng2_total: num(serv.eng2_total) };
+      tanks.forEach((t) => (fp[t.field] = num(fuel[t.field])));
+      await save(fp);
+      // save() only awaits the LOCAL write — its syncPush runs fire-and-forget. Await a full push
+      // here so the server row carries these values BEFORE its mandatory-field check runs, or the
+      // sign is rejected for a field the crew has already filled (AH1045/04Aug: uplift entered on
+      // the iPad, sign request beat the push to the server). Offline: push fails, sign queues — fine.
+      await syncPush().catch(() => {});
       const r: any = await signRecord({ kind: 'preflight', sector_id: sectorId, signature_image: signature });
       trackActivity('sign', 'preflight', sectorId, 'Departure', { flight: s.flight_no, queued: !!r?.queued });
+      // Optimistic local update: mark the sector as preflight_signed so the Sign button hides
+      // immediately. When offline, the queued signature replays on sync and the server sets the
+      // same status; if the server rejects it, the next pull reverts.
+      if (r?.queued) await save({ status: 'preflight_signed' }).catch(() => {});
       setSignMsg(r?.queued ? 'Accepted offline — will sync ✓' : (r.record_hash ? 'Accepted ✓' : 'Accepted'));
       speakPreDeparture();
     }
@@ -395,7 +410,15 @@ export default function DepartureScreen({ route, navigation }: any) {
 
   async function undoAccept() {
     if (!(await confirmAction('Undo the commander acceptance for this departure?', 'Undo acceptance'))) return;
-    try { await revokeAcceptance(sectorId); trackActivity('revoke', 'preflight', sectorId, 'Departure', { flight: s.flight_no }); setSignMsg('Acceptance undone — make your changes, then sign again.'); refresh(); }
+    try {
+      const rv: any = await revokeAcceptance(sectorId);
+      trackActivity('revoke', 'preflight', sectorId, 'Departure', { flight: s.flight_no });
+      // Optimistic local revert so the Sign button reappears immediately (offline: the queued
+      // revoke replays on sync; if the server rejects it the next pull restores the signed state).
+      if (rv?.queued) await save({ status: 'draft' }).catch(() => {});
+      setSignMsg(rv?.queued ? 'Acceptance undone offline — will sync ✓' : 'Acceptance undone — make your changes, then sign again.');
+      refresh();
+    }
     catch (e: any) { setSignMsg(e?.message?.includes('409') ? 'Cannot undo — flight is closed' : (e.message || 'Failed')); }
   }
 

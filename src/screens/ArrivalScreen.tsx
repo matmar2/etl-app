@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Platform, ScrollView, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, tokenIssuedAt, Utilisation } from '../api/client';
+import { acceptDispatch, addServicing, aircraftUtilisation, appSettings, can, currentAircraft, listActiveDefects, listServicing, publicConfig, role, signRecord, syncPush, tokenIssuedAt, Utilisation } from '../api/client';
 import ClockBanner from '../components/ClockBanner';
 import IcaoHint from '../components/IcaoHint';
 import OfflineFlash from '../components/OfflineFlash';
@@ -195,6 +195,11 @@ export default function ArrivalScreen({ route, navigation }: any) {
       for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
         if (val) await addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at }).catch(() => {});
       }
+      // Flush the dirty sector to the server BEFORE signing — save() only awaits the local write,
+      // so without this the sign request can beat the field push and the server rejects for a
+      // "missing" field the crew already filled (same race as pre-departure). Offline: push fails,
+      // the sign queues — unchanged behaviour.
+      await syncPush().catch(() => {});
       const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId, signature_image: signature });
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
       trackActivity('sign', 'postflight', sectorId, 'Arrival', { flight: s.flight_no, queued: !!r?.queued });
