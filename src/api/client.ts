@@ -519,14 +519,19 @@ export async function allocateTl(reg: string): Promise<number | null> {
 // The actual OTA apply (expo-updates) is wired once EAS + the signed build are in place.
 // The response's `sandbox` flag (non-aircraft iPad on the sandbox release) drives the global
 // SANDBOX banner — captured here so any screen can read it via isSandbox()/onSandbox().
-let _sandbox = false;
+// On web, auto-detect sandbox from the URL — the browser at /sandbox-app/ is always sandbox,
+// no device registration needed. Native iPads rely on the appRelease sandbox flag instead.
+const _webIsSandbox = typeof window !== 'undefined' && window.location?.pathname?.startsWith('/sandbox-app');
+let _sandbox = _webIsSandbox;
 const _sandboxCbs = new Set<(v: boolean) => void>();
 export function isSandbox(): boolean { return _sandbox; }
 export function onSandbox(cb: (v: boolean) => void): () => void { _sandboxCbs.add(cb); cb(_sandbox); return () => { _sandboxCbs.delete(cb); }; }
 function _setSandbox(v: boolean) { if (v !== _sandbox) { _sandbox = v; _sandboxCbs.forEach((f) => f(v)); } }
 // Sandbox flag must survive offline restarts — a non-aircraft iPad launched with no connectivity must
 // still show the SANDBOX banner. Same cache-and-rehydrate pattern as EFF below.
+// On web the flag is always set from the URL above, so we only hydrate on native.
 export async function hydrateSandbox(): Promise<void> {
+  if (_webIsSandbox) return;   // web: already set from URL
   try { const { data } = await getRef<boolean>('sandbox_flag'); if (data != null) _setSandbox(!!data); } catch { /* no cache yet */ }
 }
 
