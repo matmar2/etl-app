@@ -445,23 +445,9 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
       })();
       case 'briefing': return (
         <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
-            <Text style={{ color: T.sub, fontSize: 12 }}>
-              Plan updated {f.pps_plan_ts ? `${String(f.pps_plan_ts).slice(0, 16).replace('T', ' ')}z` : '—'} · last edit {f.pps_edit_ts ? `${String(f.pps_edit_ts).slice(0, 16).replace('T', ' ')}z` : '—'}
-            </Text>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity style={{ paddingVertical: 10, paddingHorizontal: 4 }} disabled={refreshing} onPress={async () => {
-              setRefreshing(true); setMsg('');
-              try { const r = await api(`/flights/${flight.id}/pps-refresh`, { method: 'POST' });
-                setMsg(''); load();
-                if (!r.docs && !r.revised) setMsg('Flight plan is already up to date.', true);
-              } catch (e: any) { setMsg(e.message); }
-              finally { setRefreshing(false); }
-            }}>
-              <Text style={{ color: T.accent, fontWeight: '700' }}>{refreshing ? '⟳ Updating…' : '⟳ Update flight plan'}</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
             <TouchableOpacity style={{ paddingVertical: 10, paddingHorizontal: 4 }} disabled={wxBusy} onPress={doWxRefresh}>
-              <Text style={{ color: T.accent, fontWeight: '700' }}>{wxBusy ? '⟳ Fetching…' : '⟳ Live wx'}</Text></TouchableOpacity>
+              <Text style={{ color: T.accent, fontWeight: '700' }}>{wxBusy ? '⟳ Fetching…' : '⟳ Refresh weather'}</Text></TouchableOpacity>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
             {BRIEF_TABS.map(([k, label]) => {
@@ -561,6 +547,28 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                 {shown ? <PdfViewer flightId={flight.id} doc={shown} setMsg={setMsg} page={goPage} /> : null}
               </View>);
           })()}
+          {/* Flight Plan card — EFBOne parity: update timestamps + prominent Update button */}
+          <View style={[st.card, { paddingVertical: 12 }]}>
+            <Text style={st.h}>Flight Plan</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ color: T.sub, fontSize: 14 }}>Last update</Text>
+              <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_plan_ts ? `${String(f.pps_plan_ts).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ color: T.sub, fontSize: 14 }}>Last edit</Text>
+              <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_edit_ts ? `${String(f.pps_edit_ts).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
+            </View>
+            <TouchableOpacity style={st.btn} disabled={refreshing} onPress={async () => {
+              setRefreshing(true); setMsg('');
+              try { const r = await api(`/flights/${flight.id}/pps-refresh`, { method: 'POST' });
+                setMsg(''); load();
+                if (!r.docs && !r.revised) setMsg('Flight plan is already up to date.', true);
+              } catch (e: any) { setMsg(e.message); }
+              finally { setRefreshing(false); }
+            }}>
+              <Text style={st.btnTxt}>{refreshing ? 'Updating…' : 'Update Flight Plan'}</Text>
+            </TouchableOpacity>
+          </View>
         </View>);
       case 'wxnotams': return (() => {
         const wn = f.wx_notams || {};
