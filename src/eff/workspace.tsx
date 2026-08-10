@@ -551,12 +551,16 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <View style={[st.card, { paddingVertical: 12 }]}>
             <Text style={st.h}>Flight Plan</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-              <Text style={{ color: T.sub, fontSize: 14 }}>Last update</Text>
+              <Text style={{ color: T.sub, fontSize: 14 }}>Last updated (PPS)</Text>
               <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_plan_ts ? `${String(f.pps_plan_ts).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
             </View>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
               <Text style={{ color: T.sub, fontSize: 14 }}>Last edit</Text>
               <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_edit_ts ? `${String(f.pps_edit_ts).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ color: T.sub, fontSize: 14 }}>Last fetched</Text>
+              <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_fetched_at ? `${String(f.pps_fetched_at).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
             </View>
             <TouchableOpacity style={st.btn} disabled={refreshing} onPress={async () => {
               setRefreshing(true); setMsg('');
