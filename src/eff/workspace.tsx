@@ -212,6 +212,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [wxTab, setWxTab] = useState('dep');
   const [wxCat, setWxCat] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [planMsg, setPlanMsg] = useState('');
   const [wxBusy, setWxBusy] = useState(false);
   const [wxDecode, setWxDecode] = useState(false);
   const [atisArrTab, setAtisArrTab] = useState('dest');
@@ -563,15 +564,16 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <Text style={{ color: T.entry, fontSize: 14, fontWeight: '600' }}>{f.pps_fetched_at ? `${String(f.pps_fetched_at).slice(0, 16).replace('T', ' ')}z` : '—'}</Text>
             </View>
             <TouchableOpacity style={st.btn} disabled={refreshing} onPress={async () => {
-              setRefreshing(true); setMsg('');
+              setRefreshing(true); setPlanMsg('');
               try { const r = await api(`/flights/${flight.id}/pps-refresh`, { method: 'POST' });
-                setMsg(''); load();
-                if (!r.docs && !r.revised) setMsg('Flight plan is already up to date.', true);
-              } catch (e: any) { setMsg(e.message); }
+                load();
+                setPlanMsg(!r.docs && !r.revised ? 'Flight plan is already up to date.' : `Updated — ${r.docs || 0} document(s).`);
+              } catch (e: any) { setPlanMsg(e.message); }
               finally { setRefreshing(false); }
             }}>
               <Text style={st.btnTxt}>{refreshing ? 'Updating…' : 'Update Flight Plan'}</Text>
             </TouchableOpacity>
+            {planMsg ? <Text style={{ color: T.sub, fontSize: 13, marginTop: 8, textAlign: 'center' }}>{planMsg}</Text> : null}
           </View>
         </View>);
       case 'wxnotams': return (() => {
