@@ -869,7 +869,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <F s="pre" k="extra_reason_note" label="Reason for extra fuel — specify" ph="type the reason" w={420} />
             ) : null}
           </View>
-          <View style={st.card}><Text style={st.h}>Passengers</Text>
+          <View style={st.card}><Text style={st.h}>Passengers & bags</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }}>
               <F s="pre" k="pax_m" label="Male / adults" kb="numeric" w={120} /><F s="pre" k="pax_f" label="Female" kb="numeric" w={120} />
               <F s="pre" k="pax_c" label="Children" kb="numeric" w={120} /><F s="pre" k="pax_i" label="Infants" kb="numeric" w={120} />
@@ -883,6 +883,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                       <Text style={{ color: T.text, fontWeight: '800', fontSize: 15, fontVariant: ['tabular-nums'] as any }}>{any ? total : '—'}</Text>
                     </View>
                   </View>); })()}
+              <F s="pre" k="bags" label="Number of bags" kb="numeric" w={130} />
             </View></View>
           <View style={st.card}><Text style={st.h}>Document photos</Text>
             <PhotoBox flight={f} d={d} reload={load} setRep={setRep} setMsg={setMsg} signed={locked} kind="to_perf" label="Take-off performance" />

@@ -195,9 +195,13 @@ export default function ArrivalScreen({ route, navigation }: any) {
       for (const [sys, val] of [['eng1', oilArr.eng1], ['eng2', oilArr.eng2]] as const) {
         if (val) await addServicing({ sector_id: sectorId, system: sys, arrival_lt: +(Number(val) * QT_L).toFixed(2), arrival_at: at }).catch(() => {});
       }
+      // Flush the typed-but-debounced arrival fuel into the sector row FIRST — computeMissing()
+      // reads the input state, but the row only gets the value after a 1.5 s debounce, so a quick
+      // sign carried a stale row and the server rejected AFTER the signature pad (crew report 09 Aug).
+      const fresh = await save({ fuel_remaining_kg: num(rem) });
       // OFFLINE-FIRST: the sign request carries the sector's local row — the server applies it
       // before validating, so the sign never races the background push (see DepartureScreen).
-      const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId, signature_image: signature, sector: s });
+      const r: any = await signRecord({ kind: 'postflight', sector_id: sectorId, signature_image: signature, sector: fresh ?? s });
       await save({ status: 'closed' });            // reflect locally so the next flight can be opened
       trackActivity('sign', 'postflight', sectorId, 'Arrival', { flight: s.flight_no, queued: !!r?.queued });
       setSignMsg(r?.queued ? 'Closed offline — will sync ✓' : (r.status === 'closed' ? 'Closed ✓' : 'Signed'));
