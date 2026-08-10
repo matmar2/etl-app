@@ -38,6 +38,7 @@ export async function hydrate(): Promise<void> {
     outboxMem = (await jsonGet<any[]>(OUTBOX_KEY)) || [];
     helpMem = (await jsonGet<{ pages: GuidePage[]; faq: FaqItem[] }>(HELP_CACHE)) || { pages: [], faq: [] };
     deepLinksMem = await jsonGet<Record<string, string>>(DEEP_LINKS_KEY);   // EFB deep links survive offline / relaunch
+    delayCodesMem = await jsonGet<{ code: string; description: string; category: string }[]>(DELAY_CODES_KEY) || [];
   } catch {}
 }
 
@@ -73,28 +74,17 @@ export async function fetchLogo(): Promise<string | null> {
   return null;
 }
 
-// Live aircraft status + blocking defects + HIL from the ETL API, cached per reg for 5 min
-// (in memory — a fresh flight open within the window reuses it, a reload refetches).
+// Live aircraft status + blocking defects + HIL — proxied through the EFF backend so the
+// client only needs its EFF token (managed by api() with auto-refresh), never a separate
+// ETL bearer that goes stale after 24 h. The EFF backend calls ETL server-to-server using
+// the etl_internal_token (never expires). Cached per reg for 5 min in memory.
 const _etlCache: Record<string, { at: number; data: EtlStatusBundle }> = {};
 export type EtlStatusBundle = { status: any; defects: any[]; hil: any[] };
 export async function etlAircraftStatus(reg: string): Promise<EtlStatusBundle> {
   const key = (reg || '').toUpperCase();
   const hit = _etlCache[key];
   if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.data;
-  const tok = getEtlToken();
-  if (!tok) throw new Error('No ETL session token — sign out and in again');
-  const get = async (path: string) => {
-    const r = await fetch(`${ETL_API}${path}`, { headers: { Authorization: `Bearer ${tok}` } });
-    if (!r.ok) throw new Error(`ETL ${r.status}`);
-    return r.json();
-  };
-  const enc = encodeURIComponent(reg);
-  const [status, defects, hil] = await Promise.all([
-    get(`/aircraft/${enc}/status`),
-    get(`/defects/active?aircraft_id=${enc}`),
-    get(`/defects/hil?aircraft_id=${enc}`),
-  ]);
-  const data = { status, defects, hil };
+  const data = await api(`/aircraft/${encodeURIComponent(reg)}/etl-status`);
   _etlCache[key] = { at: Date.now(), data };
   return data;
 }
@@ -315,14 +305,25 @@ export function getDeepLinks(): Record<string, string> {
   return deepLinksMem && typeof deepLinksMem === 'object' ? deepLinksMem : {};
 }
 
+// ICAO delay codes — cached from /config (admin-managed list)
+const DELAY_CODES_KEY = 'eff_delay_codes';
+let delayCodesMem: { code: string; description: string; category: string }[] | null = null;
+export function setDelayCodes(m: any) {
+  if (!Array.isArray(m)) return;
+  delayCodesMem = m;
+  jsonSet(DELAY_CODES_KEY, m);
+}
+export function getDelayCodes(): { code: string; description: string; category: string }[] {
+  return Array.isArray(delayCodesMem) ? delayCodesMem : [];
+}
+
 export const listFlights = async () => {
   const rows = await api('/flights');
-  // Always refresh config in the background — deep links, required fields etc. can change
-  // without an app update. The old guard (!_etlAppUrl) meant stale values survived forever.
   api('/config').then((c) => {
     setEtlAppUrl(c?.etl_app_url || '');
     setRequiredFields(c?.required_fields);
     setDeepLinks(c?.deep_links);
+    setDelayCodes(c?.delay_codes);
   }).catch(() => {});
   return rows;
 };

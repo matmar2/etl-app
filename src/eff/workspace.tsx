@@ -18,7 +18,7 @@ if (Platform.OS !== 'web' && requireOptionalNativeModule('ExpoCamera')) {
 }
 const cameraAvailable = !!(ExpoCamera && ExpoCamera.CameraView);
 import { LOGO, useLogo } from './screens';
-import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDeepLinks, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
+import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDeepLinks, getDelayCodes, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
 import { HelpPage, openInduction } from './help';
 import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
@@ -55,6 +55,7 @@ const REQUIRED: Record<string, { key: string; label: string }[]> = {
     { key: 'pax_c', label: 'Pax — children' }, { key: 'pax_i', label: 'Pax — infants' },
   ],
   atisdep: [{ key: 'atis', label: 'ATIS (departure)' }, { key: 'clearance', label: 'ATC clearance' }],
+  atisarr: [{ key: 'atis_dest', label: 'ATIS (destination)' }, { key: 'clearance', label: 'Clearance' }],
   offblock: [{ key: 'off_block', label: 'OFF block time' }, { key: 'takeoff', label: 'Take-off time' }],
   rvsm: [1, 2, 3, 4].map((i) => ({ key: `q${i}`, label: `RVSM item ${i}` })),
   post: [
@@ -111,6 +112,7 @@ const RAIL: { group?: string; key: string; label: string; icon: string }[] = [
   { key: 'rvsm', label: 'RVSM check', icon: '📐' },
   { key: 'navlog', label: 'Nav log — fuel & time', icon: '🗺️' },
   { key: 'enroute', label: 'Enroute / notes', icon: '📓' },
+  { key: 'atisarr', label: 'ATIS / Clearance / Notes', icon: '📻' },
   { group: 'After landing', key: 'post', label: 'Post-flight report', icon: '📋' },
   { key: 'signpost', label: 'Sign post-flight', icon: '✍️' },
   { group: 'Help', key: 'help', label: 'User Guide & AI Assistant', icon: '📖' },
@@ -211,12 +213,16 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [wxCat, setWxCat] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
   const [wxBusy, setWxBusy] = useState(false);
+  const [wxDecode, setWxDecode] = useState(false);
+  const [atisArrTab, setAtisArrTab] = useState('dest');
   const [copied, setCopied] = useState(false);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<any[] | null>(null);
   const [goPage, setGoPage] = useState<number | null>(null);
   const [viewDoc, setViewDoc] = useState<any>(null);
-  const [msg, setMsg] = useState('');
+  const [msg, _setMsg] = useState('');
+  const [msgOk, setMsgOk] = useState(false);
+  const setMsg = (m: string, ok = false) => { _setMsg(m); setMsgOk(ok); };
   const logoSrc = useLogo();
   const load = () => getFolder(flight.id).then((x) => {
     const rep0 = x.report || {};
@@ -232,7 +238,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   useEffect(() => { load(); }, []);
   const doWxRefresh = useCallback(async () => {
     setWxBusy(true); setMsg('');
-    try { await wxRefresh(flight.id); load(); }
+    try { await wxRefresh(flight.id); load(); setMsg('Weather updated.', true); }
     catch (e: any) { setMsg(e.message); }
     finally { setWxBusy(false); }
   }, [flight.id, load]);
@@ -326,7 +332,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </Text>
               <TouchableOpacity disabled={refreshing} onPress={async () => {
                 setRefreshing(true); setMsg('');
-                try { await ppsRefresh(flight.id); load(); setMsg('Flight data refreshed from PPS.'); }
+                try { await ppsRefresh(flight.id); load(); setMsg('Flight data refreshed from PPS.', true); }
                 catch (e: any) { setMsg(e.message); }
                 finally { setRefreshing(false); }
               }} style={{ paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: T.accent, borderRadius: 999, opacity: refreshing ? 0.5 : 1 }}>
@@ -448,7 +454,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               setRefreshing(true); setMsg('');
               try { const r = await api(`/flights/${flight.id}/pps-refresh`, { method: 'POST' });
                 setMsg(''); load();
-                if (!r.docs && !r.revised) setMsg('Flight plan is already up to date.');
+                if (!r.docs && !r.revised) setMsg('Flight plan is already up to date.', true);
               } catch (e: any) { setMsg(e.message); }
               finally { setRefreshing(false); }
             }}>
@@ -623,10 +629,81 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           return m ? `VALID day ${m[1]} ${m[2]}:00Z → day ${m[3]} ${m[4]}:00Z` : null;
         };
         const wxSubCap = { color: T.sub, fontSize: 10.5, letterSpacing: 0.5, textTransform: 'uppercase' as const };
+        // --------------- METAR / TAF human-readable decode ---------------
+        const _WX_CODES: Record<string, string> = {
+          MI: 'shallow', PR: 'partial', BC: 'patches', DR: 'drifting', BL: 'blowing',
+          SH: 'showers', TS: 'thunderstorm', FZ: 'freezing',
+          DZ: 'drizzle', RA: 'rain', SN: 'snow', SG: 'snow grains', IC: 'ice crystals',
+          PL: 'ice pellets', GR: 'hail', GS: 'small hail', UP: 'unknown precip',
+          FG: 'fog', BR: 'mist', HZ: 'haze', VA: 'volcanic ash', DU: 'dust',
+          SA: 'sand', FU: 'smoke', PY: 'spray', PO: 'dust whirls', SQ: 'squall',
+          FC: 'funnel cloud', SS: 'sandstorm', DS: 'duststorm',
+        };
+        const _CLD: Record<string, string> = { FEW: 'few', SCT: 'scattered', BKN: 'broken', OVC: 'overcast' };
+        const decodeWx = (raw: string): string[] => {
+          if (!raw) return [];
+          const out: string[] = [];
+          // Wind: dddffGggKT or dddffKT or VRB
+          const wm = /\b(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?KT\b/.exec(raw);
+          if (wm) {
+            const dir = wm[1] === 'VRB' ? 'variable' : `${wm[1]}°`;
+            const spd = Number(wm[2]);
+            const gust = wm[4] ? ` gusting ${wm[4]} kt` : '';
+            out.push(`Wind ${dir} at ${spd} kt${gust}`);
+          }
+          // Variable wind direction
+          const vw = /\b(\d{3})V(\d{3})\b/.exec(raw);
+          if (vw) out.push(`Wind varying ${vw[1]}°–${vw[2]}°`);
+          // Visibility
+          const vm = /\b(\d{4})\b/.exec(raw.replace(/\b\d{6}Z\b/, '').replace(/\b\d{3}\d{2,3}(G\d{2,3})?KT\b/, ''));
+          if (vm && vm[1] !== '0000') {
+            const v = Number(vm[1]);
+            out.push(v >= 9999 ? 'Visibility 10 km or more' : `Visibility ${v >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + ' km' : v + ' m'}`);
+          }
+          if (/\bCAVOK\b/.test(raw)) out.push('CAVOK (ceiling and visibility OK)');
+          // Weather phenomena
+          const wxr = raw.match(/(?:^|\s)([+-]?)(?:VC)?((?:MI|PR|BC|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|FG|BR|HZ|VA|DU|SA|FU|PY|PO|SQ|FC|SS|DS)+)(?:\s|$)/g);
+          if (wxr) for (const w of wxr) {
+            const s = w.trim();
+            const int = s.startsWith('+') ? 'heavy ' : s.startsWith('-') ? 'light ' : '';
+            const code = s.replace(/^[+-]/, '').replace('VC', '');
+            const parts: string[] = [];
+            for (let i = 0; i < code.length; i += 2) { const c = code.slice(i, i + 2); if (_WX_CODES[c]) parts.push(_WX_CODES[c]); }
+            if (parts.length) out.push(`Weather: ${int}${parts.join(' ')}`);
+          }
+          // Clouds
+          const cm = raw.matchAll(/\b(FEW|SCT|BKN|OVC)(\d{3})(CB|TCU)?\b/g);
+          for (const c of cm) {
+            const alt = Number(c[2]) * 100;
+            const typ = c[3] === 'CB' ? ' cumulonimbus' : c[3] === 'TCU' ? ' towering cumulus' : '';
+            out.push(`Cloud: ${_CLD[c[1]]} at ${alt} ft${typ}`);
+          }
+          if (/\bNSC\b/.test(raw)) out.push('No significant cloud');
+          if (/\bNCD\b/.test(raw)) out.push('No cloud detected');
+          if (/\bVV(\d{3})\b/.test(raw)) { const vv = raw.match(/\bVV(\d{3})\b/); if (vv) out.push(`Vertical visibility ${Number(vv[1]) * 100} ft`); }
+          // Temp / dewpoint
+          const tm = /\b(M?\d{2})\/(M?\d{2})\b/.exec(raw);
+          if (tm) {
+            const t = tm[1].replace('M', '-'), d = tm[2].replace('M', '-');
+            out.push(`Temperature ${t}°C / Dewpoint ${d}°C`);
+          }
+          // QNH
+          const qm = /\bQ(\d{4})\b/.exec(raw);
+          if (qm) out.push(`QNH ${qm[1]} hPa`);
+          const am = /\bA(\d{4})\b/.exec(raw);
+          if (am) out.push(`Altimeter ${(Number(am[1]) / 100).toFixed(2)} inHg`);
+          // NOSIG / TEMPO / BECMG
+          if (/\bNOSIG\b/.test(raw)) out.push('No significant change expected');
+          return out;
+        };
+        // -----------------------------------------------------------------
         const wxCard = (a: any) => (a.metar || a.taf) ? (
           <View style={st.card}>
             <View style={st.hRow}>
               <Text style={st.hIn}>Weather — {a.icao}</Text><View style={{ flex: 1 }} />
+              <TouchableOpacity style={{ paddingVertical: 6, paddingHorizontal: 8, backgroundColor: wxDecode ? T.accent + '22' : 'transparent', borderRadius: 6, marginRight: 6 }} onPress={() => setWxDecode(d => !d)}>
+                <Text style={{ color: wxDecode ? T.accent : T.sub, fontWeight: '700', fontSize: 12 }}>{wxDecode ? '✓ Decoded' : '⚡ Decode'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={{ paddingVertical: 6, paddingHorizontal: 4 }} disabled={wxBusy} onPress={doWxRefresh}>
                 <Text style={{ color: T.accent, fontWeight: '700', fontSize: 13 }}>{wxBusy ? '⟳ Fetching…' : '⟳ Refresh WX'}</Text>
               </TouchableOpacity>
@@ -638,6 +715,9 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                   {metarObs(a.metar) ? <Text style={wxSubCap}>{metarObs(a.metar)}</Text> : null}
                 </View>
                 <Text style={{ color: T.entry, fontFamily: 'monospace' as any, fontSize: 13, lineHeight: 19, fontWeight: '600', marginTop: 3 }}>{a.metar}</Text>
+                {wxDecode ? <View style={{ marginTop: 6, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: T.accent + '44' }}>
+                  {decodeWx(a.metar).map((line, i) => <Text key={i} style={{ color: T.text, fontSize: 12, lineHeight: 18 }}>{line}</Text>)}
+                </View> : null}
               </View>) : null}
             {a.taf ? (
               <View style={{ marginTop: 10 }}>
@@ -646,6 +726,9 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                   {tafValidity(a.taf) ? <Text style={wxSubCap}>{tafValidity(a.taf)}</Text> : null}
                 </View>
                 <Text style={{ color: T.text, fontFamily: 'monospace' as any, fontSize: 12.5, lineHeight: 18, marginTop: 3 }}>{a.taf}</Text>
+                {wxDecode ? <View style={{ marginTop: 6, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: T.accent + '44' }}>
+                  {decodeWx(a.taf).map((line, i) => <Text key={i} style={{ color: T.text, fontSize: 12, lineHeight: 18 }}>{line}</Text>)}
+                </View> : null}
               </View>) : null}
           </View>) : null;
         let items: any[] = []; let head: any = null;
@@ -735,7 +818,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                     const upd: any = {};
                     if (f.prev_dep) upd.prev_dep = f.prev_dep;
                     if (f.prev_fuel_kg != null) upd.landing_fuel = String(Math.round(f.prev_fuel_kg));
-                    if (!Object.keys(upd).length) { setMsg('Nothing to retrieve from Leon yet'); return; }
+                    if (!Object.keys(upd).length) { setMsg('Nothing to retrieve from Leon yet', true); return; }
                     setRep((p: any) => ({ ...p, security: { ...(p.security || {}), ...upd },
                       pre: { ...(p.pre || {}), before_fuel: upd.landing_fuel ?? (p.pre || {}).before_fuel } }));
                     try { await saveReport(flight.id, 'security', upd);
@@ -922,21 +1005,58 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <F s="atisdep" k="notes" label="Notes" w={640} />
         </View>);
       case 'signpre': return <SignCard kind="preflight" flight={f} done={d?.acceptance} rep={rep} secs={['pre', 'atisdep']} onDone={load} setMsg={setMsg} setRep={setRep} />;
-      case 'offblock': return (
-        <View>
-          <View style={st.card}><Text style={st.h}>Times (UTC)</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              <F s="offblock" k="off_block" label="OFF block (HH:MM)" ph="--:--" w={150} time />
-              <F s="offblock" k="takeoff" label="Take-off (HH:MM)" ph="--:--" w={150} time />
-              <F s="offblock" k="delay1" label="Delay 1 (min)" kb="numeric" w={110} />
-              <F s="offblock" k="delay2" label="Delay 2 (min)" kb="numeric" w={110} />
-              <F s="offblock" k="delay3" label="Delay 3 (min)" kb="numeric" w={110} />
-            </View></View>
-          <View style={st.card}><Text style={st.h}>De- / anti-icing</Text>
-            <YN s="offblock" k="deice" label="De-/anti-icing applied" />
-            {rep?.offblock?.deice === 'YES' ? <YN s="offblock" k="manual_hot" label="Manual holdover time" /> : null}
-          </View>
-        </View>);
+      case 'offblock': {
+        const dcList = getDelayCodes();
+        const DCPick = ({ n }: { n: number }) => {
+          const mk = `delay${n}_code`;
+          const cur = rep?.offblock?.[mk] ?? '';
+          const label = cur ? dcList.find((d) => d.code === cur) : null;
+          const [open, setOpen] = useState(false);
+          return (
+            <View style={{ marginBottom: 8 }}>
+              <TouchableOpacity onPress={() => setOpen(!open)}
+                style={{ flexDirection: 'row', alignItems: 'center', height: 34, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: T.inBorder, backgroundColor: T.inBg, minWidth: 200 }}>
+                <Text style={{ color: cur ? T.text : T.sub, fontSize: 12.5, flex: 1 }} numberOfLines={1}>
+                  {label ? `${label.code} — ${label.description}` : '— delay code —'}</Text>
+                <Text style={{ color: T.sub, fontSize: 10 }}>{open ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+              {open ? (
+                <ScrollView style={{ maxHeight: 220, borderWidth: 1, borderColor: T.inBorder, borderRadius: 6, marginTop: 2, backgroundColor: T.card }}>
+                  <TouchableOpacity onPress={() => { set('offblock', mk, ''); saveReport(f.id, 'offblock', { [mk]: '' }).catch(() => {}); setOpen(false); }}
+                    style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line }}>
+                    <Text style={{ color: T.sub, fontSize: 12.5 }}>— none —</Text>
+                  </TouchableOpacity>
+                  {dcList.map((d) => (
+                    <TouchableOpacity key={d.code} onPress={() => { set('offblock', mk, d.code); saveReport(f.id, 'offblock', { [mk]: d.code }).catch(() => {}); setOpen(false); }}
+                      style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: d.code === cur ? T.accent + '22' : 'transparent' }}>
+                      <Text style={{ color: T.text, fontSize: 12.5 }}>{d.code} — {d.description}</Text>
+                      {d.category ? <Text style={{ color: T.sub, fontSize: 10 }}>{d.category}</Text> : null}
+                    </TouchableOpacity>))}
+                </ScrollView>) : null}
+            </View>);
+        };
+        return (
+          <View>
+            <View style={st.card}><Text style={st.h}>Times (UTC)</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                <F s="offblock" k="off_block" label="OFF block (HH:MM)" ph="--:--" w={150} time />
+                <F s="offblock" k="takeoff" label="Take-off (HH:MM)" ph="--:--" w={150} time />
+              </View>
+            </View>
+            <View style={st.card}><Text style={st.h}>Delays</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
+                {[1, 2, 3].map((n) => (
+                  <View key={n} style={{ minWidth: 120 }}>
+                    <F s="offblock" k={`delay${n}`} label={`Delay ${n} (min)`} kb="numeric" w={110} />
+                    <DCPick n={n} />
+                  </View>))}
+              </View>
+            </View>
+            <View style={st.card}><Text style={st.h}>De- / anti-icing</Text>
+              <YN s="offblock" k="deice" label="De-/anti-icing applied" />
+              {rep?.offblock?.deice === 'YES' ? <YN s="offblock" k="manual_hot" label="Manual holdover time" /> : null}
+            </View>
+          </View>); }
       case 'rvsm': return (
         <View style={st.card}><Text style={st.h}>Prior entering RVSM airspace (FCOM-PRO-SPO-50)</Text>
           <YN s="rvsm" k="q1" label="Two primary altimeters within limits, cross-checked" />
@@ -946,13 +1066,84 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
         </View>);
       case 'navlog': return <NavLogScreen flight={f} back={() => setSec('briefing')} embedded onSetRail={setRailOpen} />;
       case 'enroute': return (
-        <View style={st.card}><Text style={st.h}>Enroute · destination ATIS · notes</Text>
-          <F s="enroute" k="enroute" label="Enroute notes" w={640} />
-          <F s="enroute" k="atis_dest" label="ATIS — destination" w={640} />
-          <F s="enroute" k="atis_alt" label="ATIS — alternate" w={640} />
-          <F s="enroute" k="clearance" label="Clearance" w={640} />
-          <F s="enroute" k="lt_corr" label="Low-temperature altitude correction" w={640} />
+        <View>
+          <View style={st.card}><Text style={st.h}>Enroute · Weather · Notes</Text>
+            <F s="enroute" k="enroute" label="Enroute notes" w={640} />
+          </View>
+          <PhotoBox flight={f} d={d} reload={load} setRep={setRep} setMsg={setMsg} signed={locked} kind="ldg_perf" label="Landing performance" />
         </View>);
+      case 'atisarr': {
+        // ICAO Doc 8168 low-temperature altitude correction
+        // ISA at elevation = 15 - (elev_ft × 0.0019812)
+        // Correction = (published_alt - elev) × (ISA - OAT) / (273 + OAT)
+        const lt = rep?.atisarr || {};
+        const oat = lt.lt_temp !== undefined && lt.lt_temp !== '' ? Number(lt.lt_temp) : null;
+        const elev = lt.lt_elev !== undefined && lt.lt_elev !== '' ? Number(lt.lt_elev) : null;
+        const isa = elev != null ? Math.round((15 - elev * 0.0019812) * 10) / 10 : null;
+        const corr = (pub: string | undefined) => {
+          const p = pub !== undefined && pub !== '' ? Number(pub) : null;
+          if (p == null || oat == null || elev == null || isa == null) return '-';
+          const c = (p - elev) * (isa - oat) / (273 + oat);
+          return `${Math.round(p + c)} ft (+${Math.round(c)} ft)`;
+        };
+        const LTF = ({ k, label: lb }: { k: string; label: string }) => (
+          <View style={{ marginTop: 10 }}>
+            <Text style={{ color: T.sub, fontSize: 12.5, marginBottom: 3 }}>{lb}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TextInput style={[st.input, { width: 120 }]} value={lt[k] ?? ''} placeholder="ft" placeholderTextColor={T.sub}
+                keyboardType="numeric"
+                onChangeText={(v) => set('atisarr', k, v.replace(/[^0-9]/g, ''))}
+                onBlur={() => { const v = lt[k]; if (v !== undefined) saveReport(f.id, 'atisarr', { [k]: v }).catch(() => {}); }} />
+              <Text style={{ color: T.entry, fontWeight: '700', fontSize: 13 }}>{corr(lt[k])}</Text>
+            </View>
+          </View>
+        );
+        const ATABS: [string, string][] = [['dest', 'ATIS Dest'], ['alt', 'ATIS Alt'], ['clr', 'Clearance'], ['lt', 'LT Alt Corr']];
+        const atN = (k: string) => { if (k === 'dest') return !lt.atis_dest ? 1 : 0; if (k === 'alt') return !lt.atis_alt ? 1 : 0; if (k === 'clr') return !lt.clearance ? 1 : 0; return 0; };
+        return (
+          <View style={st.card}>
+            <Text style={st.h}>ATIS / Clearance / Notes</Text>
+            <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: T.inBorder, marginBottom: 10, gap: 4 }}>
+              {ATABS.map(([k, lb]) => { const on = atisArrTab === k; const n = atN(k); return (
+                <TouchableOpacity key={k} onPress={() => setAtisArrTab(k)}
+                  style={{ paddingVertical: 8, paddingHorizontal: 12, borderBottomWidth: 2, borderBottomColor: on ? T.accent : 'transparent' }}>
+                  <Text style={{ color: on ? T.accent : T.sub, fontWeight: on ? '700' : '500', fontSize: 13 }}>{lb}{n ? ` ❶` : ''}</Text>
+                </TouchableOpacity>); })}
+            </View>
+            {atisArrTab === 'dest' ? <F s="atisarr" k="atis_dest" label="ATIS — destination" w={640} /> : null}
+            {atisArrTab === 'alt' ? <F s="atisarr" k="atis_alt" label="ATIS — alternate" w={640} /> : null}
+            {atisArrTab === 'clr' ? <F s="atisarr" k="clearance" label="Clearance" w={640} /> : null}
+            {atisArrTab === 'lt' ? (
+              <View>
+                <Text style={{ color: T.text, fontWeight: '700', fontSize: 14, marginBottom: 6 }}>Low Temperature Altitude Correction</Text>
+                <View style={{ flexDirection: 'row', gap: 24, flexWrap: 'wrap' }}>
+                  <View>
+                    <Text style={{ color: T.sub, fontSize: 12.5, marginBottom: 3 }}>Ground Air Temperature (°C)</Text>
+                    <TextInput style={[st.input, { width: 120 }]} value={lt.lt_temp ?? ''} placeholder="°C" placeholderTextColor={T.sub}
+                      keyboardType="numbers-and-punctuation"
+                      onChangeText={(v) => set('atisarr', 'lt_temp', v.replace(/[^0-9\-\.]/g, ''))}
+                      onBlur={() => { const v = lt.lt_temp; if (v !== undefined) saveReport(f.id, 'atisarr', { lt_temp: v }).catch(() => {}); }} />
+                  </View>
+                  <View>
+                    <Text style={{ color: T.sub, fontSize: 12.5, marginBottom: 3 }}>Airport Elevation (ft)</Text>
+                    <TextInput style={[st.input, { width: 120 }]} value={lt.lt_elev ?? ''} placeholder="ft" placeholderTextColor={T.sub}
+                      keyboardType="numeric"
+                      onChangeText={(v) => set('atisarr', 'lt_elev', v.replace(/[^0-9]/g, ''))}
+                      onBlur={() => { const v = lt.lt_elev; if (v !== undefined) saveReport(f.id, 'atisarr', { lt_elev: v }).catch(() => {}); }} />
+                  </View>
+                  <View>
+                    <Text style={{ color: T.sub, fontSize: 12.5, marginBottom: 3 }}>ISA</Text>
+                    <Text style={{ color: T.entry, fontWeight: '700', fontSize: 15, paddingVertical: 8 }}>{isa != null ? `${isa}°C` : '-'}</Text>
+                  </View>
+                </View>
+                <LTF k="lt_faf" label="FAF" />
+                <LTF k="lt_om" label="OM / NDB or Equivalent" />
+                <LTF k="lt_dadh" label="DA / DH" />
+                <LTF k="lt_mdamdh" label="MDA / MDH" />
+                <LTF k="lt_circuit" label="Circuit" />
+              </View>
+            ) : null}
+          </View>); }
       case 'post': return (
         <View>
           <View style={st.card}><Text style={st.h}>Times (UTC)</Text>
@@ -1011,7 +1202,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               return blk && park ? <Text style={{ color: T.sub, marginTop: 8 }}>Fuel used: <Text style={{ color: T.text, fontWeight: '700' }}>{Math.round(blk - park)} kg</Text></Text> : null; })()}
           </View>
         </View>);
-      case 'signpost': return <SignCard kind="postflight" flight={f} done={d?.acceptance_post} rep={rep} secs={['offblock', 'rvsm', 'post']} onDone={load} setMsg={setMsg} />;
+      case 'signpost': return <SignCard kind="postflight" flight={f} done={d?.acceptance_post} rep={rep} secs={['offblock', 'rvsm', 'post']} onDone={load} setMsg={setMsg} setRep={setRep} />;
       case 'help': return <HelpPage />;
     }
     return null;
@@ -1047,32 +1238,26 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </TouchableOpacity>
             </View>);
         })}
-        {/* EFB deep links: open Flysmart+ / Jepp FD Pro / Jepp Aviator. On iPad native,
-            Linking.openURL handles the custom scheme directly.  On web (iPad Safari), window.open
-            passes the scheme to iOS.  On desktop browsers they'll try to resolve it as HTTP — per
-            Jeppesen, only Safari/WebKit honours custom URL schemes.  Jepp FD Pro first copies the
-            filed ATC route to the clipboard so crew can paste it into FliteDeck's route box.
+        {/* EFB deep links: open Flysmart+ / Jepp FD Pro. iPad-only (custom URL schemes).
+            On web, show the buttons as disabled with a note.
             URLs are admin-set (Back office → Settings). */}
         {(() => {
           const dl = getDeepLinks();
-          if (!dl.flysmart && !dl.jepp && !dl.aviator) return null;
+          if (!dl.flysmart && !dl.jepp) return null;
           const isWeb = Platform.OS === 'web';
           const openEfb = async (kind: string) => {
+            if (isWeb) { setMsg('EFB apps are available on iPad only.'); return; }
             let url = dl[kind];
-            if (url && !url.includes('://')) url += '://';   // defensive: DB values stored without :// still work
+            if (url && !url.includes('://')) url += '://';
             if (kind === 'jepp') {
               const route = String(f?.atc_route || '').trim();
-              if (route) {
-                if (isWeb) { try { await navigator.clipboard.writeText(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {} }
-                else { try { (require('react-native') as any).Clipboard?.setString?.(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {} }
-              }
+              if (route) { try { (require('react-native') as any).Clipboard?.setString?.(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {} }
             }
-            if (isWeb) { try { window.open(url, '_blank'); } catch { setMsg('Could not open — URL scheme may not be supported by this browser.'); } }
-            else { try { await Linking.openURL(url); } catch { setMsg('Could not open — is the app installed on this iPad?'); } }
+            try { await Linking.openURL(url); } catch { setMsg('Could not open — is the app installed on this iPad?'); }
           };
           const row = (kind: string, icon: string, label: string, sub?: string) => (
-            <TouchableOpacity key={kind} onPress={() => openEfb(kind)}
-              style={{ flexDirection: 'row', alignItems: 'center', minHeight: 40, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 9, marginBottom: 1, borderLeftWidth: 3, borderLeftColor: 'transparent' }}>
+            <TouchableOpacity key={kind} onPress={() => openEfb(kind)} disabled={isWeb}
+              style={{ flexDirection: 'row', alignItems: 'center', minHeight: 40, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 9, marginBottom: 1, borderLeftWidth: 3, borderLeftColor: 'transparent', opacity: isWeb ? 0.45 : 1 }}>
               <Text style={{ width: 26, fontSize: 14, textAlign: 'center' }}>{icon}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: T.text, fontSize: 13 }}>{label} <Text style={{ color: T.sub, fontSize: 11 }}>↗</Text></Text>
@@ -1085,7 +1270,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <Text style={{ color: T.sub, fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 14, marginBottom: 4, marginLeft: 10 }}>EFB apps</Text>
               {dl.flysmart ? row('flysmart', '✈️', 'Flysmart+') : null}
               {dl.jepp ? row('jepp', '🗺️', 'Jepp FD Pro', f?.atc_route ? 'copies the ATC route for pasting' : undefined) : null}
-              {dl.aviator ? row('aviator', '🧭', 'Jepp Aviator') : null}
+              {isWeb ? <Text style={{ color: T.sub, fontSize: 10.5, marginLeft: 10, marginTop: 2 }}>iPad only — not available in web version</Text> : null}
             </View>
           );
         })()}
@@ -1124,7 +1309,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             <Text style={{ color: T.sub, fontSize: 13 }}>{f.flight_no} · {f.dep} → {f.arr} · {f.date}{f.std ? ` · STD ${String(f.std).slice(11, 16)}z` : ''}</Text>
           </View>
         ) : null; })()}
-        {msg ? <Text style={{ color: T.red }}>{msg}</Text> : null}
+        {msg ? <Text style={{ color: msgOk ? '#22c55e' : T.red }}>{msg}</Text> : null}
         {d?.acceptance || d?.acceptance_post ? (
           locked ? (
             <View style={{ marginTop: 6, marginBottom: 6, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: T.line, backgroundColor: '#122036', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1185,15 +1370,19 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any
   return (
     <View style={[st.card, { zIndex: 20 }]}>
       <Text style={{ color: T.sub, fontSize: 13.5, lineHeight: 20 }}>By signing I acknowledge I have familiarised myself with the briefing(s), including Cat B/C aerodromes intended for this flight.</Text>
-      {kind === 'preflight' ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 10 }}>
-          <CodeCombo label="3-letter code" width={150} required
-            value={String(rep?.signpre?.code3 ?? '')}
-            options={Array.from(new Set((flight.crew || []).map((c: any) => c.code).filter(Boolean)))}
-            onSet={(v: string) => setRep?.((p: any) => ({ ...p, signpre: { ...(p.signpre || {}), code3: v } }))}
-            onSave={async (v: string) => { try { await saveReport(flight.id, 'signpre', { code3: v }); } catch {} }} />
-        </View>
-      ) : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 10 }}>
+        <CodeCombo label="3-letter code" width={150} required
+          value={String(kind === 'preflight' ? (rep?.signpre?.code3 ?? '') : (rep?.signpost?.code3 ?? ''))}
+          options={Array.from(new Set((flight.crew || []).map((c: any) => c.code).filter(Boolean)))}
+          onSet={(v: string) => {
+            const key = kind === 'preflight' ? 'signpre' : 'signpost';
+            setRep?.((p: any) => ({ ...p, [key]: { ...(p[key] || {}), code3: v } }));
+          }}
+          onSave={async (v: string) => {
+            const key = kind === 'preflight' ? 'signpre' : 'signpost';
+            try { await saveReport(flight.id, key, { code3: v }); } catch {}
+          }} />
+      </View>
       {gaps.length ? <Text style={{ color: '#f0d48a', marginTop: 8, lineHeight: 20 }}>Complete before signing:{'\n'}{gaps.map((g: any) => `• ${g.label}`).join('\n')}</Text> : null}
       <View style={{ alignItems: 'center', marginTop: 14 }}>
         <TouchableOpacity style={[st.btn, { minWidth: 240 }]} onPress={() => {
