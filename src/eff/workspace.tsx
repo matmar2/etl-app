@@ -944,7 +944,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <YN s="rvsm" k="q3" label="Primary altimeters are scanned during flight in RVSM airspace" />
           <YN s="rvsm" k="q4" label="Altitude-alerting system operative" />
         </View>);
-      case 'navlog': return <NavLogScreen flight={f} back={() => setSec('briefing')} embedded />;
+      case 'navlog': return <NavLogScreen flight={f} back={() => setSec('briefing')} embedded onSetRail={setRailOpen} />;
       case 'enroute': return (
         <View style={st.card}><Text style={st.h}>Enroute · destination ATIS · notes</Text>
           <F s="enroute" k="enroute" label="Enroute notes" w={640} />
@@ -1047,26 +1047,31 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </TouchableOpacity>
             </View>);
         })}
-        {/* EFB deep links (iPad only): open Flysmart+ / Jepp FD Pro installed on this iPad.
-            Jepp first copies the filed ATC route to the clipboard so the crew can paste it
-            straight into FliteDeck's route box. URLs are admin-set (Back office → Settings). */}
+        {/* EFB deep links: open Flysmart+ / Jepp FD Pro / Jepp Aviator. On iPad native,
+            Linking.openURL handles the custom scheme directly.  On web (iPad Safari), window.open
+            passes the scheme to iOS.  On desktop browsers they'll try to resolve it as HTTP — per
+            Jeppesen, only Safari/WebKit honours custom URL schemes.  Jepp FD Pro first copies the
+            filed ATC route to the clipboard so crew can paste it into FliteDeck's route box.
+            URLs are admin-set (Back office → Settings). */}
         {(() => {
-          if (Platform.OS !== 'ios') return null;
           const dl = getDeepLinks();
-          if (!dl.flysmart && !dl.jepp) return null;
-          const openEfb = async (kind: 'flysmart' | 'jepp') => {
-            const url = kind === 'flysmart' ? dl.flysmart : dl.jepp;
+          if (!dl.flysmart && !dl.jepp && !dl.aviator) return null;
+          const isWeb = Platform.OS === 'web';
+          const openEfb = async (kind: string) => {
+            let url = dl[kind];
+            if (url && !url.includes('://')) url += '://';   // defensive: DB values stored without :// still work
             if (kind === 'jepp') {
               const route = String(f?.atc_route || '').trim();
               if (route) {
-                // Core-RN clipboard, guarded — no separate native module, so OTA-safe on every binary.
-                try { (require('react-native') as any).Clipboard?.setString?.(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {}
+                if (isWeb) { try { await navigator.clipboard.writeText(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {} }
+                else { try { (require('react-native') as any).Clipboard?.setString?.(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {} }
               }
             }
-            try { await Linking.openURL(url); } catch { setMsg('Could not open — is the app installed on this iPad?'); }
+            if (isWeb) { try { window.open(url, '_blank'); } catch { setMsg('Could not open — URL scheme may not be supported by this browser.'); } }
+            else { try { await Linking.openURL(url); } catch { setMsg('Could not open — is the app installed on this iPad?'); } }
           };
-          const row = (kind: 'flysmart' | 'jepp', icon: string, label: string, sub?: string) => (
-            <TouchableOpacity onPress={() => openEfb(kind)}
+          const row = (kind: string, icon: string, label: string, sub?: string) => (
+            <TouchableOpacity key={kind} onPress={() => openEfb(kind)}
               style={{ flexDirection: 'row', alignItems: 'center', minHeight: 40, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 9, marginBottom: 1, borderLeftWidth: 3, borderLeftColor: 'transparent' }}>
               <Text style={{ width: 26, fontSize: 14, textAlign: 'center' }}>{icon}</Text>
               <View style={{ flex: 1 }}>
@@ -1080,6 +1085,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <Text style={{ color: T.sub, fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 14, marginBottom: 4, marginLeft: 10 }}>EFB apps</Text>
               {dl.flysmart ? row('flysmart', '✈️', 'Flysmart+') : null}
               {dl.jepp ? row('jepp', '🗺️', 'Jepp FD Pro', f?.atc_route ? 'copies the ATC route for pasting' : undefined) : null}
+              {dl.aviator ? row('aviator', '🧭', 'Jepp Aviator') : null}
             </View>
           );
         })()}

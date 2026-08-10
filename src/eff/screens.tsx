@@ -2,7 +2,7 @@
    Self-contained module (no external navigation lib): the tiny stack in App.tsx is replaced by
    the ETL navigator when this folder moves into the ETL app. Web-first trial build. */
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Image } from 'react-native';
 import { acceptFolder, api, fetchLogo, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
@@ -274,10 +274,19 @@ function AcceptCard({ flight, accepted, onDone, setMsg }: any) {
   );
 }
 
-export function NavLogScreen({ flight, back, embedded }: { flight: any; back: () => void; embedded?: boolean }) {
+export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: any; back: () => void; embedded?: boolean; onSetRail?: (open: boolean) => void }) {
   const [d, setD] = useState<any>(null); const [msg, setMsg] = useState('');
   const [draft, setDraft] = useState<Record<number, any>>({});
   const [route, setRoute] = useState<'main' | 'alt'>('main');
+  // Portrait layout picker — crew can choose scroll (default), full-width (collapse sidebar),
+  // or compact (collapse sidebar + narrower columns so it still fits if sidebar re-opens).
+  const { width: winW, height: winH } = useWindowDimensions();
+  const isPortrait = winW < winH;
+  const [layoutMode, setLayoutMode] = useState<'scroll' | 'fullwidth' | 'compact'>('scroll');
+  useEffect(() => {
+    if (!onSetRail) return;
+    onSetRail(layoutMode === 'scroll');
+  }, [layoutMode]);
   useEffect(() => { getNavlog(flight.id).then(setD).catch((e) => setMsg(e.message)); }, []);
   const save = async (idx: number, body: any) => {
     try { await saveNavEntry(flight.id, idx, body); } catch (e: any) { setMsg(`Offline / error — retry: ${e.message}`); }
@@ -321,10 +330,13 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
   // every column is visible with no horizontal scrolling; below the base total the table falls
   // back to a horizontal scroll rather than crushing the entry inputs.
   const BASE_W = [86, 64, 46, 46, 78, 72, 84, 76, 70, 84, 100, 66];
-  const BASE_TOTAL = BASE_W.reduce((a, b) => a + b, 0);
+  const COMPACT_W = [72, 50, 38, 38, 66, 58, 72, 64, 58, 72, 84, 56];   // 728px — fits iPad portrait with sidebar open
+  const activeW = layoutMode === 'compact' ? COMPACT_W : BASE_W;
+  const activeTot = activeW.reduce((a, b) => a + b, 0);
   const [tblW, setTblW] = useState(0);
-  const fit = tblW >= BASE_TOTAL;
-  const CW = fit ? BASE_W.map((w) => Math.floor(w * (tblW / BASE_TOTAL))) : BASE_W;
+  const fit = tblW >= activeTot;
+  const CW = fit ? activeW.map((w) => Math.floor(w * (tblW / activeTot))) : activeW;
+  const showLayoutPicker = embedded && isPortrait;
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
       {embedded ? null : <TouchableOpacity onPress={back}><Text style={{ color: T.accent, fontWeight: '700', paddingVertical: 10 }}>‹ Folder</Text></TouchableOpacity>}
@@ -340,6 +352,17 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
         )) : null}
         <View style={{ flex: 1 }} /><Text style={s.sub}>entries auto-save</Text>
       </View>
+      {showLayoutPicker ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <Text style={{ color: T.sub, fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' }}>LAYOUT</Text>
+          {([['scroll', 'Scroll'], ['fullwidth', 'Full width'], ['compact', 'Compact']] as const).map(([k, lbl]) => (
+            <TouchableOpacity key={k} onPress={() => setLayoutMode(k)}
+              style={{ borderWidth: 1, borderColor: layoutMode === k ? T.accent : T.line, backgroundColor: layoutMode === k ? '#1c3050' : T.card, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
+              <Text style={{ color: layoutMode === k ? '#fff' : T.sub, fontWeight: '700', fontSize: 11.5 }}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
       {msg ? <Text style={{ color: T.red, marginTop: 8 }}>{msg}</Text> : null}
       {!d ? <ActivityIndicator style={{ marginTop: 30 }} /> : (
         <ScrollView horizontal={!fit} scrollEnabled={!fit} style={{ marginTop: 12 }}

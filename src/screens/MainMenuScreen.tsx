@@ -223,6 +223,12 @@ export default function MainMenuScreen({ navigation }: any) {
   // Updates apply automatically at sign-in (LoginScreen). No popup here — the red star on
   // ⇩ Update stays as the silent indicator for updates published mid-session.
   function loadCounts(reg: string) {
+    // Retry-once wrapper: transient failures (DB pool exhaustion, Chrome tab-resume auth race,
+    // 502 from Leon) don't leave tiles stuck at the static fallback forever.  Retries after 3 s;
+    // if the retry also fails, stays silent — the next focus-based reload() will try again.
+    const r1 = <T,>(fn: () => Promise<T>, cb: (v: T) => void) =>
+      fn().then(cb).catch(() => { setTimeout(() => fn().then(cb).catch(() => {}), 3000); });
+
     return Promise.all([
       Promise.all([listActiveDefects(reg).catch(() => []), listHIL(reg).catch(() => [])])
         .then(([a, h]) => {
@@ -232,10 +238,10 @@ export default function MainMenuScreen({ navigation }: any) {
           const tech = a.length - cab;
           setCounts((c) => ({ ...c, defects: `${tech} act/${cab} cab/${h.length} HIL` }));
         }),
-      leonFlights(reg).then((f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))).catch(() => {}),
-      documentsList('document').then((d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))).catch(() => {}),
-      documentsList('form').then((d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))).catch(() => {}),
-      signoffsRecent(15, reg).then((r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))).catch(() => {}),
+      r1(() => leonFlights(reg), (f) => setCounts((c) => ({ ...c, flight: `${f.length} flight(s)` }))),
+      r1(() => documentsList('document'), (d) => setCounts((c) => ({ ...c, docs: `${d.length} document(s)` }))),
+      r1(() => documentsList('form'), (d) => setCounts((c) => ({ ...c, forms: `${d.length} form(s)` }))),
+      r1(() => signoffsRecent(15, reg), (r) => setCounts((c) => ({ ...c, signoff: `${r.signoffs.length} in 15 days` }))),
     ]);
   }
 

@@ -37,6 +37,7 @@ export async function hydrate(): Promise<void> {
     requiredMem = await jsonGet<Record<string, string[]>>(REQUIRED_KEY);
     outboxMem = (await jsonGet<any[]>(OUTBOX_KEY)) || [];
     helpMem = (await jsonGet<{ pages: GuidePage[]; faq: FaqItem[] }>(HELP_CACHE)) || { pages: [], faq: [] };
+    deepLinksMem = await jsonGet<Record<string, string>>(DEEP_LINKS_KEY);   // EFB deep links survive offline / relaunch
   } catch {}
 }
 
@@ -316,7 +317,9 @@ export function getDeepLinks(): Record<string, string> {
 
 export const listFlights = async () => {
   const rows = await api('/flights');
-  if (!_etlAppUrl) api('/config').then((c) => {
+  // Always refresh config in the background — deep links, required fields etc. can change
+  // without an app update. The old guard (!_etlAppUrl) meant stale values survived forever.
+  api('/config').then((c) => {
     setEtlAppUrl(c?.etl_app_url || '');
     setRequiredFields(c?.required_fields);
     setDeepLinks(c?.deep_links);
