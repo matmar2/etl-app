@@ -51,7 +51,10 @@ echo "› syncing to box ($HOST)…"
 rsync -az --delete -e "ssh ${SSH_OPTS[*]}" dist/ "$HOST:/home/ubuntu/etl-web/"
 
 echo "› publishing to /var/www/etl-web…"
+# rsync --delete so stale AppEntry/FlightFolder chunks from prior builds are removed;
+# cp -rT left them behind, causing cross-build "Requiring unknown module" crashes when a
+# browser had a cached index.html from a previous deploy.
 ssh "${SSH_OPTS[@]}" "$HOST" \
-  'sudo cp -rT /home/ubuntu/etl-web /var/www/etl-web && sudo chmod -R a+rX /var/www/etl-web'
+  'sudo rsync -a --delete /home/ubuntu/etl-web/ /var/www/etl-web/ && sudo chmod -R a+rX /var/www/etl-web'
 
 echo "✓ deployed → https://etl.avora.aero/app"
