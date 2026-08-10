@@ -301,11 +301,25 @@ export function getRequiredFields(): Record<string, string[]> | null {
   return requiredMem && typeof requiredMem === 'object' ? requiredMem : null;
 }
 
+// Admin-set EFB deep links (Flysmart+, Jepp FD Pro) from /config — cached (in-memory + persisted)
+// so the iPad rail buttons work offline. Mirrors the standalone EFF app (keep in parity).
+const DEEP_LINKS_KEY = 'eff_deep_links';
+let deepLinksMem: Record<string, string> | null = null;
+export function setDeepLinks(m: any) {
+  if (!m || typeof m !== 'object') return;
+  deepLinksMem = m;
+  jsonSet(DEEP_LINKS_KEY, m);
+}
+export function getDeepLinks(): Record<string, string> {
+  return deepLinksMem && typeof deepLinksMem === 'object' ? deepLinksMem : {};
+}
+
 export const listFlights = async () => {
   const rows = await api('/flights');
   if (!_etlAppUrl) api('/config').then((c) => {
     setEtlAppUrl(c?.etl_app_url || '');
     setRequiredFields(c?.required_fields);
+    setDeepLinks(c?.deep_links);
   }).catch(() => {});
   return rows;
 };

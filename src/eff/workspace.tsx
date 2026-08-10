@@ -18,7 +18,7 @@ if (Platform.OS !== 'web' && requireOptionalNativeModule('ExpoCamera')) {
 }
 const cameraAvailable = !!(ExpoCamera && ExpoCamera.CameraView);
 import { LOGO, useLogo } from './screens';
-import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
+import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDeepLinks, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
 import { HelpPage, openInduction } from './help';
 import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
@@ -1047,6 +1047,42 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </TouchableOpacity>
             </View>);
         })}
+        {/* EFB deep links (iPad only): open Flysmart+ / Jepp FD Pro installed on this iPad.
+            Jepp first copies the filed ATC route to the clipboard so the crew can paste it
+            straight into FliteDeck's route box. URLs are admin-set (Back office → Settings). */}
+        {(() => {
+          if (Platform.OS !== 'ios') return null;
+          const dl = getDeepLinks();
+          if (!dl.flysmart && !dl.jepp) return null;
+          const openEfb = async (kind: 'flysmart' | 'jepp') => {
+            const url = kind === 'flysmart' ? dl.flysmart : dl.jepp;
+            if (kind === 'jepp') {
+              const route = String(f?.atc_route || '').trim();
+              if (route) {
+                // Core-RN clipboard, guarded — no separate native module, so OTA-safe on every binary.
+                try { (require('react-native') as any).Clipboard?.setString?.(route); setMsg('ATC route copied — paste it into FliteDeck.'); } catch {}
+              }
+            }
+            try { await Linking.openURL(url); } catch { setMsg('Could not open — is the app installed on this iPad?'); }
+          };
+          const row = (kind: 'flysmart' | 'jepp', icon: string, label: string, sub?: string) => (
+            <TouchableOpacity onPress={() => openEfb(kind)}
+              style={{ flexDirection: 'row', alignItems: 'center', minHeight: 40, paddingVertical: 8, paddingHorizontal: 8, borderRadius: 9, marginBottom: 1, borderLeftWidth: 3, borderLeftColor: 'transparent' }}>
+              <Text style={{ width: 26, fontSize: 14, textAlign: 'center' }}>{icon}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: T.text, fontSize: 13 }}>{label} <Text style={{ color: T.sub, fontSize: 11 }}>↗</Text></Text>
+                {sub ? <Text style={{ color: T.sub, fontSize: 10.5 }}>{sub}</Text> : null}
+              </View>
+            </TouchableOpacity>
+          );
+          return (
+            <View>
+              <Text style={{ color: T.sub, fontSize: 10.5, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 14, marginBottom: 4, marginLeft: 10 }}>EFB apps</Text>
+              {dl.flysmart ? row('flysmart', '✈️', 'Flysmart+') : null}
+              {dl.jepp ? row('jepp', '🗺️', 'Jepp FD Pro', f?.atc_route ? 'copies the ATC route for pasting' : undefined) : null}
+            </View>
+          );
+        })()}
         {/* Rail legend — mirrors the amber badge and green tick above. */}
         <View style={{ marginTop: 16, marginBottom: 8, marginHorizontal: 4, padding: 10, borderWidth: 1, borderColor: T.line, borderRadius: 8, backgroundColor: T.card }}>
           <Text style={{ color: T.sub, fontSize: 11.5, lineHeight: 19 }}>

@@ -29,7 +29,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Used to photograph aircraft damage and fuel/servicing receipts for the Technical Log.",
         "NSPhotoLibraryUsageDescription": "Used to attach photos of damage or receipts to defects.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": ["flysmart", "jdmpro", "fltdpro", "flitedeck"]
       }
     },
     "extra": {
