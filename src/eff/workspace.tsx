@@ -225,7 +225,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [msgOk, setMsgOk] = useState(false);
   const setMsg = (m: string, ok = false) => { _setMsg(m); setMsgOk(ok); };
   const logoSrc = useLogo();
-  const load = () => getFolder(flight.id).then((x) => {
+  const load = (fresh?: boolean) => api(`/flights/${flight.id}/folder`, fresh ? { fresh: true } as any : undefined).then((x: any) => {
     const rep0 = x.report || {};
     // Density defaults to 0.785 (accepted unless the crew changes it) so it satisfies the sign
     // gate without re-entry and carries to ETL. Seed it once when the folder has none.
@@ -239,7 +239,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   useEffect(() => { load(); }, []);
   const doWxRefresh = useCallback(async () => {
     setWxBusy(true); setMsg('');
-    try { await wxRefresh(flight.id); load(); setMsg('Weather updated.', true); }
+    try { await wxRefresh(flight.id); await load(true); setMsg('Weather updated.', true); }
     catch (e: any) { setMsg(e.message); }
     finally { setWxBusy(false); }
   }, [flight.id, load]);
@@ -333,7 +333,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </Text>
               <TouchableOpacity disabled={refreshing} onPress={async () => {
                 setRefreshing(true); setMsg('');
-                try { await ppsRefresh(flight.id); load(); setMsg('Flight data refreshed from PPS.', true); }
+                try { await ppsRefresh(flight.id); await load(true); setMsg('Flight data refreshed from PPS.', true); }
                 catch (e: any) { setMsg(e.message); }
                 finally { setRefreshing(false); }
               }} style={{ paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: T.accent, borderRadius: 999, opacity: refreshing ? 0.5 : 1 }}>
@@ -566,7 +566,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             <TouchableOpacity style={st.btn} disabled={refreshing} onPress={async () => {
               setRefreshing(true); setPlanMsg('');
               try { const r = await api(`/flights/${flight.id}/pps-refresh`, { method: 'POST' });
-                load();
+                await load(true);
                 setPlanMsg(!r.docs && !r.revised ? 'Flight plan is already up to date.' : `Updated — ${r.docs || 0} document(s).`);
               } catch (e: any) { setPlanMsg(e.message); }
               finally { setRefreshing(false); }
