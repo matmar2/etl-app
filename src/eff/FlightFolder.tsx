@@ -12,7 +12,7 @@
 // a 403 (not flight crew) shows a short message instead.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
-import { hydrate, isOnline, loadToken, sessionFromEtl, setToken, startAutoFlush, stopAutoFlush } from './api';
+import { hydrate, isOnline, loadToken, prefetchAll, sessionFromEtl, setToken, startAutoFlush, stopAutoFlush } from './api';
 import { FlightsScreen, LoginScreen } from './screens';
 import { Workspace } from './workspace';
 import { InductionGate } from './help';
@@ -50,6 +50,7 @@ export default function FlightFolderScreen({ navigation }: any) {
       setReady(true);
       startAutoFlush();                    // begins the offline outbox flush + online probe loop
       isOnline();                          // prime isOnlineSync() for the offline badges
+      prefetchAll();                       // BACKGROUND: warm every folder in the flights window for offline use
     })();
     return () => { alive = false; stopAutoFlush(); };
   }, []);

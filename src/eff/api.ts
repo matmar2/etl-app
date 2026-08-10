@@ -142,8 +142,25 @@ export function startAutoFlush() {
 }
 export function stopAutoFlush() { if (_flushTimer) { clearInterval(_flushTimer); _flushTimer = null; } }
 
-export async function api(path: string, init?: RequestInit, _retry = true): Promise<any> {
+// OFFLINE-FIRST (crew directive 09 Aug): after login the app ASSUMES offline. A cached GET is
+// served INSTANTLY and the network copy refreshes in the BACKGROUND (throttled) — no page waits
+// on a request. Fresh reads only on first (uncached) load, explicit refresh (`fresh: true`),
+// or the login prefetch. Mirrors the standalone EFF app (keep in parity).
+const _revalidatedAt: Record<string, number> = {};
+const REVALIDATE_MS = 60_000;
+function _revalidate(path: string) {
+  const now = Date.now();
+  if (now - (_revalidatedAt[path] || 0) < REVALIDATE_MS) return;
+  _revalidatedAt[path] = now;
+  api(path, { fresh: true } as any).catch(() => {});   // silent — cache updates for the next open
+}
+
+export async function api(path: string, init?: RequestInit & { fresh?: boolean }, _retry = true): Promise<any> {
   const method = (init?.method || 'GET').toUpperCase();
+  if (method === 'GET' && !init?.fresh) {
+    const b = await blobGet('c:' + path).catch(() => null);
+    if (b) { try { const v = JSON.parse(b); _revalidate(path); return v; } catch {} }
+  }
   let r: Response;
   try {
     r = await fetch(`${BASE}${path}`, {
@@ -176,10 +193,32 @@ export async function api(path: string, init?: RequestInit, _retry = true): Prom
   if (!r.ok) throw new Error((await r.text()).slice(0, 300) || `${r.status}`);
   const data = await r.json();
   if (method === 'GET') {
+    _revalidatedAt[path] = Date.now();
     blobSet('c:' + path, JSON.stringify(data));         // SQLite ref_cache (not SecureStore) — lists/folders can be large
     flushOutbox();
   }
   return data;
+}
+
+// Warm every folder in the flights window for offline use: flights → per-flight folder (incl.
+// WX & NOTAMs) + navlog + briefing PDFs. Background, sequential, fully try/caught — it never
+// interferes with the crew's work. Runs after sign-in and from the manual ⟳ Refresh.
+let _prefetching = false;
+export async function prefetchAll(): Promise<void> {
+  if (_prefetching) return;
+  _prefetching = true;
+  try {
+    const flights = await api('/flights', { fresh: true } as any).catch(() => null);
+    if (!Array.isArray(flights)) return;
+    try { purgeCaches(flights.map((f: any) => f.id)); } catch {}
+    for (const f of flights) {
+      try {
+        const folder = await api(`/flights/${f.id}/folder`, { fresh: true } as any);
+        await api(`/flights/${f.id}/navlog`, { fresh: true } as any).catch(() => {});
+        await prefetchDocs(f.id, folder?.docs || []);
+      } catch { /* next flight — partial warm beats none */ }
+    }
+  } finally { _prefetching = false; }
 }
 
 // Document blob store (PDFs are megabytes) — web→native: IndexedDB('eff'/docs) → SQLite blob

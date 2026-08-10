@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'react-native';
-import { acceptFolder, api, fetchLogo, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
+import { acceptFolder, api, fetchLogo, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { openInduction } from './help';
@@ -133,6 +133,8 @@ export function FlightsScreen({ user, open, signOut }: { user: any; open: (f: an
         <Text style={s.h1}>My flights</Text>
         <View style={{ flex: 1 }} />
         <Text style={s.sub}>{user?.full_name}</Text>
+        <TouchableOpacity onPress={async () => { setErr(''); try { await prefetchAll(); } catch {} load(); }} style={{ marginLeft: 14, paddingVertical: 10, paddingHorizontal: 4 }}>
+          <Text style={{ color: T.accent, fontWeight: '700' }}>⟳ Refresh</Text></TouchableOpacity>
         <TouchableOpacity onPress={openInduction} style={{ marginLeft: 14, paddingVertical: 10, paddingHorizontal: 4 }}><Text style={{ color: T.text, fontWeight: '700' }}>👋 Welcome & Quick Ref</Text></TouchableOpacity>
         <TouchableOpacity onPress={signOut} style={{ marginLeft: 14, paddingVertical: 10, paddingHorizontal: 4 }}><Text style={{ color: T.accent, fontWeight: '700' }}>Sign out</Text></TouchableOpacity>
       </View>
@@ -315,6 +317,14 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
   };
   const isMain = route === 'main';
   const W = (isMain ? d?.waypoints : d?.alt_waypoints) || [];
+  // Column widths: base px values scale UP to fill the measured container, so on iPad landscape
+  // every column is visible with no horizontal scrolling; below the base total the table falls
+  // back to a horizontal scroll rather than crushing the entry inputs.
+  const BASE_W = [86, 64, 46, 46, 78, 72, 84, 76, 70, 84, 100, 66];
+  const BASE_TOTAL = BASE_W.reduce((a, b) => a + b, 0);
+  const [tblW, setTblW] = useState(0);
+  const fit = tblW >= BASE_TOTAL;
+  const CW = fit ? BASE_W.map((w) => Math.floor(w * (tblW / BASE_TOTAL))) : BASE_W;
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.pad}>
       {embedded ? null : <TouchableOpacity onPress={back}><Text style={{ color: T.accent, fontWeight: '700', paddingVertical: 10 }}>‹ Folder</Text></TouchableOpacity>}
@@ -332,11 +342,12 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
       </View>
       {msg ? <Text style={{ color: T.red, marginTop: 8 }}>{msg}</Text> : null}
       {!d ? <ActivityIndicator style={{ marginTop: 30 }} /> : (
-        <ScrollView horizontal style={{ marginTop: 12 }}>
-          <View>
+        <ScrollView horizontal={!fit} scrollEnabled={!fit} style={{ marginTop: 12 }}
+          onLayout={(e) => setTblW(Math.floor(e.nativeEvent.layout.width))}>
+          <View style={fit ? { width: '100%' } : undefined}>
             <View style={{ flexDirection: 'row', backgroundColor: T.panel, borderTopLeftRadius: 8, borderTopRightRadius: 8, borderBottomWidth: 1, borderBottomColor: T.line }}>
               {['WPT', 'AWY', 'FL', 'MT', 'TAS/GS', 'W/V', 'LEG/ACC', 'FOB PLAN', 'MREQ', 'ATO ✎', 'FOB ACTUAL ✎', 'Δ FUEL'].map((h, i) => (
-                <Text key={h} style={[head, { width: [86, 64, 46, 46, 78, 72, 84, 76, 70, 84, 100, 66][i], color: h.includes('✎') ? T.entry : T.sub }]}>{h}</Text>
+                <Text key={h} style={[head, { width: CW[i], color: h.includes('✎') ? T.entry : T.sub }]}>{h}</Text>
               ))}
             </View>
             {W.map((w: any, i: number) => {
@@ -349,18 +360,18 @@ export function NavLogScreen({ flight, back, embedded }: { flight: any; back: ()
               return (
                 <View key={i}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: rmk || isMain ? 0 : 1, borderBottomColor: '#1b2c49' }}>
-                  <Text style={[cell, { width: 86, fontWeight: '700' }]}>{w.wpt}</Text>
-                  <Text style={[cell, { width: 64, color: T.sub }]}>{w.awy ?? ''}</Text>
-                  <Text style={[cell, { width: 46 }]}>{w.fl ?? ''}</Text>
-                  <Text style={[cell, { width: 46 }]}>{w.mt ?? ''}</Text>
-                  <Text style={[cell, { width: 78 }]}>{w.tas ? `${w.tas}/${w.gs}` : ''}</Text>
-                  <Text style={[cell, { width: 72, color: T.sub }]}>{w.wv ?? ''}</Text>
-                  <Text style={[cell, { width: 84, color: T.sub }]}>{w.leg_min != null ? `${String(w.leg_min).padStart(2, '0')}/` : ''}{w.acc_min != null ? `${Math.floor(w.acc_min / 60)}:${String(w.acc_min % 60).padStart(2, '0')}` : ''}</Text>
-                  <Text style={[cell, { width: 76 }]}>{w.fob_plan ?? ''}</Text>
-                  <Text style={[cell, { width: 70, color: T.sub }]}>{w.mreq ?? ''}</Text>
-                  <View style={{ width: 84, padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'ato', 74, '--:--')}{(() => { const eto = planEto(w); return eto ? planChip(eto, () => acceptPlan(i, 'ato', eto)) : null; })()}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
-                  <View style={{ width: 100, padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'fob_kg', 90, 'kg', 'numeric')}{w.fob_plan != null ? planChip(String(w.fob_plan), () => acceptPlan(i, 'fob_kg', w.fob_plan)) : null}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
-                  <Text style={[cell, { width: 66, color: delta == null ? T.sub : delta >= 0 ? T.entry : '#f0a3a3' }]}>{delta == null ? '—' : (delta > 0 ? `+${delta}` : `${delta}`)}</Text>
+                  <Text style={[cell, { width: CW[0], fontWeight: '700' }]}>{w.wpt}</Text>
+                  <Text style={[cell, { width: CW[1], color: T.sub }]}>{w.awy ?? ''}</Text>
+                  <Text style={[cell, { width: CW[2] }]}>{w.fl ?? ''}</Text>
+                  <Text style={[cell, { width: CW[3] }]}>{w.mt ?? ''}</Text>
+                  <Text style={[cell, { width: CW[4] }]}>{w.tas ? `${w.tas}/${w.gs}` : ''}</Text>
+                  <Text style={[cell, { width: CW[5], color: T.sub }]}>{w.wv ?? ''}</Text>
+                  <Text style={[cell, { width: CW[6], color: T.sub }]}>{w.leg_min != null ? `${String(w.leg_min).padStart(2, '0')}/` : ''}{w.acc_min != null ? `${Math.floor(w.acc_min / 60)}:${String(w.acc_min % 60).padStart(2, '0')}` : ''}</Text>
+                  <Text style={[cell, { width: CW[7] }]}>{w.fob_plan ?? ''}</Text>
+                  <Text style={[cell, { width: CW[8], color: T.sub }]}>{w.mreq ?? ''}</Text>
+                  <View style={{ width: CW[9], padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'ato', CW[9] - 10, '--:--')}{(() => { const eto = planEto(w); return eto ? planChip(eto, () => acceptPlan(i, 'ato', eto)) : null; })()}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
+                  <View style={{ width: CW[10], padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'fob_kg', CW[10] - 10, 'kg', 'numeric')}{w.fob_plan != null ? planChip(String(w.fob_plan), () => acceptPlan(i, 'fob_kg', w.fob_plan)) : null}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
+                  <Text style={[cell, { width: CW[11], color: delta == null ? T.sub : delta >= 0 ? T.entry : '#f0a3a3' }]}>{delta == null ? '—' : (delta > 0 ? `+${delta}` : `${delta}`)}</Text>
                 </View>
                 {isMain ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 8, paddingBottom: 4, paddingTop: 2, borderBottomWidth: 1, borderBottomColor: '#1b2c49', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined }}>
