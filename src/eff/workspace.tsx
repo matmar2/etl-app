@@ -225,6 +225,9 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [wxDecode, setWxDecode] = useState(false);
   // Defer rendering of large NOTAM lists so the tab switch animates instantly.
   const [wxReady, setWxReady] = useState(true);
+  // Paginate NOTAMs — FIR lists can run 1000+ items; rendering all at once OOMs the iPad.
+  const [wxPage, setWxPage] = useState(1);
+  const NOTAM_PAGE = 50;
   const [atisArrTab, setAtisArrTab] = useState('dest');
   const [copied, setCopied] = useState(false);
   const [q, setQ] = useState('');
@@ -843,7 +846,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
               {TABS.map(([k, label, n]) => { const on = wxTab === k;
                 return (
-                  <TouchableOpacity key={k} onPress={() => { setWxReady(false); setWxTab(k); setWxCat('all'); scrollRef.current?.scrollTo({ y: 0, animated: true }); setTimeout(() => setWxReady(true), 30); }}
+                  <TouchableOpacity key={k} onPress={() => { setWxReady(false); setWxTab(k); setWxCat('all'); setWxPage(1); scrollRef.current?.scrollTo({ y: 0, animated: true }); setTimeout(() => setWxReady(true), 30); }}
                     style={{ borderWidth: 1, borderColor: on ? T.accent : T.line, backgroundColor: on ? T.accent : T.card,
                              borderRadius: 999, paddingHorizontal: 15, minHeight: 40, justifyContent: 'center',
                              opacity: on || n ? 1 : 0.5 }}>
@@ -854,7 +857,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
                 {CATS.map((c) => { const n = c === 'all' ? items.length : (counts[c] || 0); const on = wxCat === c;
                   return (
-                    <TouchableOpacity key={c} disabled={!n && c !== 'all'} onPress={() => setWxCat(c)}
+                    <TouchableOpacity key={c} disabled={!n && c !== 'all'} onPress={() => { setWxCat(c); setWxPage(1); }}
                       style={{ borderWidth: 1, borderColor: on ? T.accent : '#1e3151', backgroundColor: on ? 'rgba(74,163,223,0.14)' : 'transparent',
                                borderRadius: 999, paddingHorizontal: 11, minHeight: 40, justifyContent: 'center', opacity: n || c === 'all' ? 1 : 0.35 }}>
                       <Text style={{ color: on ? T.accent : T.sub, fontSize: 12, fontWeight: on ? '700' : '600' }}>{c === 'all' ? 'All' : c}{n ? ` (${n})` : ''}</Text>
@@ -862,7 +865,15 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </View>) : null}
             {head}
             {!wxReady ? <ActivityIndicator style={{ marginTop: 20 }} color={T.accent} /> :
-             shown.length ? shown.map(notamCard) : <Text style={{ color: T.sub, marginTop: 14 }}>{wxTab === 'marks' ? 'No bookmarked NOTAMs — tap 🏷️ on any NOTAM to bookmark it.' : 'No NOTAMs in this category.'}</Text>}
+             shown.length ? (<>
+               {shown.slice(0, wxPage * NOTAM_PAGE).map(notamCard)}
+               {shown.length > wxPage * NOTAM_PAGE ? (
+                 <TouchableOpacity onPress={() => setWxPage(p => p + 1)}
+                   style={{ marginTop: 14, paddingVertical: 12, alignItems: 'center', backgroundColor: '#1c3050', borderRadius: 10, borderWidth: 1, borderColor: T.line }}>
+                   <Text style={{ color: T.accent, fontWeight: '700', fontSize: 14 }}>Show more ({shown.length - wxPage * NOTAM_PAGE} remaining)</Text>
+                 </TouchableOpacity>) : null}
+               {shown.length > NOTAM_PAGE ? <Text style={{ color: T.sub, fontSize: 12, textAlign: 'center', marginTop: 8 }}>Showing {Math.min(wxPage * NOTAM_PAGE, shown.length)} of {shown.length}</Text> : null}
+             </>) : <Text style={{ color: T.sub, marginTop: 14 }}>{wxTab === 'marks' ? 'No bookmarked NOTAMs — tap 🏷️ on any NOTAM to bookmark it.' : 'No NOTAMs in this category.'}</Text>}
           </View>);
       })();
       case 'pre': return (
