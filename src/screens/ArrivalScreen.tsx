@@ -177,11 +177,8 @@ export default function ArrivalScreen({ route, navigation }: any) {
       setBadSet(new Set(miss.map((x) => x.key)));
       const y = secY.current[miss[0].sec]; if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 70), animated: true });
       setSignMsg('Complete before signing: ' + miss.map((x) => x.label).join(', '));
-      // The scroll jumps away from the sign button, so also LIST the gaps in a dialog the
-      // captain sees regardless of scroll position.
-      notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before signing');
       speakMissingFields(miss.map((x) => x.label));
-      return;
+      if (!(await confirmAction(miss.map((x) => `• ${x.label}`).join('\n') + '\n\nSign anyway?', 'Incomplete fields'))) return;
     }
     setBadSet(new Set());
     if (!(await confirmAction('Confirm post-flight acceptance and close this sector?', 'Post-flight acceptance'))) return;

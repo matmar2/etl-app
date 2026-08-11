@@ -314,7 +314,7 @@ export async function offlineResetPassword(username: string, otp: string, newPas
   const uname = username.trim();
   if ((newPassword || '').length < 6) throw new Error('New password must be at least 6 characters.');
   const raw = await SecureStore.getItem(offKey(uname));
-  if (!raw) throw new Error('Reset with your authenticator needs a prior online sign-in on this iPad. Connect to the internet and use “Forgot password” for an email link.');
+  if (!raw) throw new Error('Reset with your authenticator needs a prior online sign-in on this iPad.\n\nUse “Email me a link instead” below, or sign in with your password first.');
   const c = JSON.parse(raw);
   if (!c.secret) throw new Error('This account has no authenticator set up on this iPad. Sign in online once (so your authenticator is cached), then try again — or use an email reset link.');
   if (!verifyTotp(c.secret, (otp || '').trim())) throw new Error('Invalid authenticator code.');   // REAL TOTP only — no 123456 bypass

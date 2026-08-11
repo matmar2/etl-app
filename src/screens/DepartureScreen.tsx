@@ -343,11 +343,8 @@ export default function DepartureScreen({ route, navigation }: any) {
       const y = secY.current[miss[0].sec];
       if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 70), animated: true });
       setSignMsg('Complete before accepting: ' + miss.map((x) => x.label).join(', '));
-      // Also list the gaps in a dialog — the auto-scroll moves away from where the inline
-      // message renders, so the captain may otherwise never see the list.
-      notifyAction(miss.map((x) => `• ${x.label}`).join('\n'), 'Complete before accepting');
       speakMissingFields(miss.map((x) => x.label));
-      return;
+      if (!(await confirmAction(miss.map((x) => `• ${x.label}`).join('\n') + '\n\nSign anyway?', 'Incomplete fields'))) return;
     }
     setBadSet(new Set());
     // TESTING PHASE: delayed-OASES conditions without the mechanic's CRS — tell the commander

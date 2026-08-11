@@ -17,6 +17,8 @@ if (Platform.OS !== 'web' && requireOptionalNativeModule('ExpoCamera')) {
   try { ExpoCamera = require('expo-camera'); } catch { ExpoCamera = null; }
 }
 const cameraAvailable = !!(ExpoCamera && ExpoCamera.CameraView);
+// expo-image-picker — in the fleet binary since 1.0.0, safe for OTA (not in RISKY_LIBS).
+import * as ImagePicker from 'expo-image-picker';
 import { LOGO, useLogo } from './screens';
 import { acceptFolder2, api, deleteDoc, etlAircraftStatus, etlAppUrl, gendecHtml, getDeepLinks, getDelayCodes, getDoc, getEtlToken, getFolder, getRequiredFields, isOnlineSync, pendingCount, ppsRefresh, prefetchDocs, saveReport, uploadDoc, wxRefresh } from './api';
 import { HelpPage, openInduction } from './help';
@@ -24,6 +26,7 @@ import type { EtlStatusBundle } from './api';
 import { NavLogScreen } from './screens';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { fleetList, setCurrentAircraft } from '../api/client';   // ETL app hub — for the in-app "Open ETL" hand-off
+import { confirmAction } from '../util/confirm';
 import { createSector, pullSectorList } from '../db/sectors';    // find/create the Tech Log sector for this flight (platform-split)
 import { ELEV, R, S, T, TY } from './theme';
 
@@ -218,6 +221,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [refreshing, setRefreshing] = useState(false);
   const [planMsg, setPlanMsg] = useState('');
   const [wxBusy, setWxBusy] = useState(false);
+  const [expandedHil, setExpandedHil] = useState<string | null>(null);
   const [wxDecode, setWxDecode] = useState(false);
   // Defer rendering of large NOTAM lists so the tab switch animates instantly.
   const [wxReady, setWxReady] = useState(true);
@@ -433,9 +437,9 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                         <View style={{ flexDirection: 'row', alignItems: 'flex-end', borderBottomWidth: 1, borderBottomColor: T.line }}>
                           <Text style={[st2.th, { width: 92 }]}>Ref / TL</Text>
                           <Text style={[st2.th, { width: 46 }]}>ATA</Text>
-                          <Text style={[st2.th, { flex: 1 }]}>Description</Text>
                           <Text style={[st2.th, { width: 112 }]}>Status</Text>
                           <Text style={[st2.th, { width: 46 }]}>MEL</Text>
+                          <Text style={[st2.th, { width: 80 }]}>MEL ref</Text>
                           <Text style={[st2.th, { width: 92 }]}>Due date</Text>
                           <View style={{ width: 180 }}>
                             <Text style={[st2.th, { textAlign: 'center', paddingVertical: 0, paddingBottom: 3 }]}>Remaining</Text>
@@ -448,18 +452,41 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                         </View>
                         {rows.map((x: any, i2: number) => {
                           const days = daysLeft(x);
+                          const rowId = x.id || String(i2);
+                          const isExpanded = expandedHil === rowId;
+                          // Strip duplicate prefix — description starts with "MAREP : …" or
+                          // "PIREP : …" which duplicates the title field.
+                          const rawDesc = x.description || '';
+                          const tag = (x.title || '').toUpperCase();
+                          const desc = tag && rawDesc.toUpperCase().startsWith(tag)
+                            ? rawDesc.slice(tag.length).replace(/^\s*[:—–-]\s*/, '').replace(/^\s+/, '')
+                            : rawDesc;
+                          const lbl = tag ? `${tag} : ${desc}` : (desc || '—');
+                          /* Pressable for native; on web, Pressable renders as a div so onClick
+                             works. The tap-reliability fix (plain div) is only in the EFF-web-only copy. */
                           return (
-                            <View key={x.id || i2} style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#1b2c49', backgroundColor: i2 % 2 ? '#14223a' : undefined }}>
-                              <Text style={[st2.td, { width: 92, fontSize: 13, fontFamily: 'monospace' as any }]}>{x.hil_no || x.transfer_tl_no || x.oases_tl_page || '—'}</Text>
-                              <Text style={[st2.td, { width: 46, fontSize: 13 }]}>{x.ata_chapter || '—'}</Text>
-                              <Text style={[st2.td, { flex: 1, fontSize: 13, paddingRight: 8 }]} numberOfLines={1}>{x.title ? `${x.title} — ${x.description || ''}` : (x.description || '—')}</Text>
-                              <Text style={[st2.td, { width: 112, fontSize: 12.5, color: x.status === 'deferred' ? '#f0d48a' : T.text, textTransform: 'uppercase' as any }]}>{(x.status || '').replace('_', ' ')}</Text>
-                              <Text style={[st2.td, { width: 46, fontSize: 13, fontWeight: '700' as any }]}>{x.rect_interval || '—'}</Text>
-                              <Text style={[st2.td, { width: 92, fontSize: 13, fontVariant: ['tabular-nums'] as any }]}>{x.due_date ? String(x.due_date).slice(0, 10) : '—'}</Text>
-                              <Text style={[st2.td, { width: 60, fontSize: 13, fontWeight: '700' as any, color: dayColor(days), fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{days == null ? '—' : days}</Text>
-                              <Text style={[st2.td, { width: 60, fontSize: 13, fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{x.remaining_fh != null ? x.remaining_fh : '—'}</Text>
-                              <Text style={[st2.td, { width: 60, fontSize: 13, fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{x.remaining_cycles != null ? x.remaining_cycles : '—'}</Text>
-                            </View>);
+                            <Pressable key={rowId} onPress={() => setExpandedHil(isExpanded ? null : rowId)}
+                              style={{ borderBottomWidth: 1, borderBottomColor: '#1b2c49',
+                                       backgroundColor: isExpanded ? '#1a2e4e' : i2 % 2 ? '#14223a' : undefined }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Text style={[st2.td, { width: 92, fontSize: 13, fontFamily: 'monospace' as any }]}>{x.hil_no || x.transfer_tl_no || x.oases_tl_page || '—'}</Text>
+                                <Text style={[st2.td, { width: 46, fontSize: 13 }]}>{x.ata_chapter || '—'}</Text>
+                                <Text style={[st2.td, { width: 112, fontSize: 12.5, color: x.status === 'deferred' ? '#f0d48a' : T.text, textTransform: 'uppercase' as any }]}>{(x.status || '').replace('_', ' ')}</Text>
+                                <Text style={[st2.td, { width: 46, fontSize: 13, fontWeight: '700' as any }]}>{x.rect_interval || '—'}</Text>
+                                <Text style={[st2.td, { width: 80, fontSize: 12, color: T.sub }]}>{x.mel_ref || '—'}</Text>
+                                <Text style={[st2.td, { width: 92, fontSize: 13, fontVariant: ['tabular-nums'] as any }]}>{x.due_date ? String(x.due_date).slice(0, 10) : '—'}</Text>
+                                <Text style={[st2.td, { width: 60, fontSize: 13, fontWeight: '700' as any, color: dayColor(days), fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{days == null ? '—' : days}</Text>
+                                <Text style={[st2.td, { width: 60, fontSize: 13, fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{x.remaining_fh != null ? x.remaining_fh : '—'}</Text>
+                                <Text style={[st2.td, { width: 60, fontSize: 13, fontVariant: ['tabular-nums'] as any, textAlign: 'center' as any }]}>{x.remaining_cycles != null ? x.remaining_cycles : '—'}</Text>
+                              </View>
+                              {isExpanded ? (
+                                <View style={{ paddingHorizontal: 14, paddingBottom: 10, paddingTop: 2 }}>
+                                  <Text style={{ color: T.text, fontSize: 13, lineHeight: 19 }}>{rawDesc}</Text>
+                                  {x.mel_ref ? <Text style={{ color: T.sub, fontSize: 12, marginTop: 4 }}>MEL ref: {x.mel_ref}  ·  Category: {x.rect_interval || '—'}{x.defer_basis ? `  ·  Basis: ${x.defer_basis.toUpperCase()}` : ''}</Text> : null}
+                                  {x.approved_ref ? <Text style={{ color: T.sub, fontSize: 12, marginTop: 2 }}>Approved ref: {x.approved_ref}</Text> : null}
+                                </View>
+                              ) : null}
+                            </Pressable>);
                         })}
                       </View>
                     ) : <Text style={{ color: '#9fd6ae', fontSize: 13, marginTop: 12 }}>No open blocking defects or hold items.</Text>}
@@ -926,21 +953,21 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <View style={st.card}><Text style={st.h}>Planned fuel (kg) — from the OFP</Text>
             <Text style={{ color: T.sub, fontSize: 12, marginTop: 4 }}>Auto-filled once the PPS briefing connects; until then dispatch/crew may type from the OFP.</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              <F s="planned" k="trip" label="Trip" kb="numeric" w={110} />
-              <F s="planned" k="contingency" label="Contingency" kb="numeric" w={120} />
-              <F s="planned" k="alt1" label="Primary alternate" kb="numeric" w={140} />
-              <F s="planned" k="alt2" label="Secondary alternate" kb="numeric" w={150} />
-              <F s="planned" k="final_res" label="Final reserve" kb="numeric" w={120} />
-              <F s="planned" k="additional" label="Additional" kb="numeric" w={110} />
-              <F s="planned" k="extra" label="Extra" kb="numeric" w={110} />
-              <F s="planned" k="discretionary" label="Discretionary" kb="numeric" w={125} />
-              <F s="planned" k="taxi" label="Taxi" kb="numeric" w={110} />
-              <F s="planned" k="block" label="Planned block" kb="numeric" w={130} />
-              <F s="planned" k="min_req_land" label="Min req land" kb="numeric" w={130} />
+              <F s="planned" k="trip" label="Trip" kb="number-pad" w={110} />
+              <F s="planned" k="contingency" label="Contingency" kb="number-pad" w={120} />
+              <F s="planned" k="alt1" label="Primary alternate" kb="number-pad" w={140} />
+              <F s="planned" k="alt2" label="Secondary alternate" kb="number-pad" w={150} />
+              <F s="planned" k="final_res" label="Final reserve" kb="number-pad" w={120} />
+              <F s="planned" k="additional" label="Additional" kb="number-pad" w={110} />
+              <F s="planned" k="extra" label="Extra" kb="number-pad" w={110} />
+              <F s="planned" k="discretionary" label="Discretionary" kb="number-pad" w={125} />
+              <F s="planned" k="taxi" label="Taxi" kb="number-pad" w={110} />
+              <F s="planned" k="block" label="Planned block" kb="number-pad" w={130} />
+              <F s="planned" k="min_req_land" label="Min req land" kb="number-pad" w={130} />
             </View></View>
           <View style={st.card}><Text style={st.h}>Fuel</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <F s="pre" k="before_fuel" label="Before fuelling (kg)" kb="numeric" w={170} />
+              <F s="pre" k="before_fuel" label="Before fuelling (kg)" kb="number-pad" w={170} />
               <View style={{ marginRight: 14, marginBottom: 2 }}>
                 <TouchableOpacity style={[st.btnSec, { marginTop: 0 }]} onPress={async () => {
                   if (f.prev_fuel_kg == null) { setMsg('No previous-flight landing fuel in Leon yet'); return; }
@@ -948,8 +975,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                   try { await saveReport(flight.id, 'pre', { before_fuel: String(Math.round(f.prev_fuel_kg)) }); setMsg(''); } catch (e: any) { setMsg(e.message); }
                 }}><Text style={st.btnSecTxt}>⟳ From previous flight{f.prev_fuel_kg != null ? ` (${Math.round(f.prev_fuel_kg)} kg · Leon)` : ''}</Text></TouchableOpacity>
               </View>
-              <F s="pre" k="uplift_l" label="Fuel uplift in slip(s) (L)" kb="numeric" w={170} />
-              <F s="pre" k="density" label="Density" ph="0.785" kb="numeric" w={100} />
+              <F s="pre" k="uplift_l" label="Fuel uplift in slip(s) (L)" kb="number-pad" w={170} />
+              <F s="pre" k="density" label="Density" ph="0.785" kb="number-pad" w={100} />
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <View style={{ marginRight: 14 }}>
@@ -957,7 +984,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               </View>
               <F s="pre" k="fuel_slip_no" label="Fuel slip №" ph="auto from photo" w={160} />
               <F s="pre" k="supplier" label="Fuel supplier" ph="auto from photo" w={180} />
-              <F s="pre" k="block_fuel" label="Actual block fuel (kg)" kb="numeric" w={170} />
+              <F s="pre" k="block_fuel" label="Actual block fuel (kg)" kb="number-pad" w={170} />
             </View>
             {(() => { const p = rep?.pre || {}; const calc = (Number(p.before_fuel) || 0) + (Number(p.uplift_l) || 0) * (Number(p.density) || 0.785);
               const diff = p.block_fuel ? Math.round(Number(p.block_fuel) - calc) : null;
@@ -993,8 +1020,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           </View>
           <View style={st.card}><Text style={st.h}>Passengers & bags</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <F s="pre" k="pax_m" label="Male / adults" kb="numeric" w={120} /><F s="pre" k="pax_f" label="Female" kb="numeric" w={120} />
-              <F s="pre" k="pax_c" label="Children" kb="numeric" w={120} /><F s="pre" k="pax_i" label="Infants" kb="numeric" w={120} />
+              <F s="pre" k="pax_m" label="Male / adults" kb="number-pad" w={120} /><F s="pre" k="pax_f" label="Female" kb="number-pad" w={120} />
+              <F s="pre" k="pax_c" label="Children" kb="number-pad" w={120} /><F s="pre" k="pax_i" label="Infants" kb="number-pad" w={120} />
               {(() => { const p = rep?.pre || {};
                 const total = ['pax_m', 'pax_f', 'pax_c', 'pax_i'].reduce((a, k) => a + (Number(p[k]) || 0), 0);
                 const any = ['pax_m', 'pax_f', 'pax_c', 'pax_i'].some((k) => p[k] != null && p[k] !== '');
@@ -1005,7 +1032,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                       <Text style={{ color: T.text, fontWeight: '800', fontSize: 15, fontVariant: ['tabular-nums'] as any }}>{any ? total : '—'}</Text>
                     </View>
                   </View>); })()}
-              <F s="pre" k="bags" label="Number of bags" kb="numeric" w={130} />
+              <F s="pre" k="bags" label="Number of bags" kb="number-pad" w={130} />
             </View></View>
           <View style={st.card}><Text style={st.h}>Document photos</Text>
             <PhotoBox flight={f} d={d} reload={load} setRep={setRep} setMsg={setMsg} signed={locked} kind="to_perf" label="Take-off performance" />
@@ -1043,7 +1070,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           <F s="atisdep" k="clearance" label="ATC clearance" w={640} />
           <F s="atisdep" k="notes" label="Notes" w={640} />
         </View>);
-      case 'signpre': return <SignCard kind="preflight" flight={f} done={d?.acceptance} rep={rep} secs={['pre', 'atisdep']} onDone={load} setMsg={setMsg} setRep={setRep} />;
+      case 'signpre': return <SignCard kind="preflight" flight={f} done={d?.acceptance} rep={rep} secs={['pre', 'atisdep']} onDone={() => load(true)} setMsg={setMsg} setRep={setRep} />;
       case 'offblock': {
         const dcList = getDelayCodes();
         const DCPick = ({ n }: { n: number }) => {
@@ -1051,22 +1078,32 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           const cur = rep?.offblock?.[mk] ?? '';
           const label = cur ? dcList.find((d) => d.code === cur) : null;
           const [open, setOpen] = useState(false);
+          const [typing, setTyping] = useState('');
+          const filtered = typing ? dcList.filter((d) => d.code.startsWith(typing) || d.description.toLowerCase().includes(typing.toLowerCase())) : dcList;
+          const apply = (code: string) => { set('offblock', mk, code); saveReport(f.id, 'offblock', { [mk]: code }).catch(() => {}); };
           return (
             <View style={{ marginBottom: 8 }}>
-              <TouchableOpacity onPress={() => setOpen(!open)}
-                style={{ flexDirection: 'row', alignItems: 'center', height: 34, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: T.inBorder, backgroundColor: T.inBg, minWidth: 200 }}>
-                <Text style={{ color: cur ? T.text : T.sub, fontSize: 12.5, flex: 1 }} numberOfLines={1}>
-                  {label ? `${label.code} — ${label.description}` : '— delay code —'}</Text>
-                <Text style={{ color: T.sub, fontSize: 10 }}>{open ? '▲' : '▼'}</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 200 }}>
+                <TextInput value={typing || cur} placeholder="— delay code —" placeholderTextColor={T.sub}
+                  style={{ height: 34, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: T.inBorder, backgroundColor: T.inBg, color: T.text, fontSize: 12.5, flex: 1 }}
+                  onFocus={() => setOpen(true)}
+                  onChangeText={(v) => { setTyping(v); setOpen(true); }}
+                  onBlur={() => { if (typing && typing !== cur) { apply(typing); } setTyping(''); }}
+                  keyboardType="default" returnKeyType="done"
+                  onSubmitEditing={() => { if (typing) { apply(typing); setOpen(false); } setTyping(''); }} />
+                <TouchableOpacity onPress={() => setOpen(!open)} style={{ padding: 4 }}>
+                  <Text style={{ color: T.sub, fontSize: 10 }}>{open ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+              </View>
+              {label && !typing ? <Text style={{ color: T.sub, fontSize: 10, marginTop: 2, marginLeft: 4 }}>{label.description}</Text> : null}
               {open ? (
-                <ScrollView style={{ maxHeight: 220, borderWidth: 1, borderColor: T.inBorder, borderRadius: 6, marginTop: 2, backgroundColor: T.card }}>
-                  <TouchableOpacity onPress={() => { set('offblock', mk, ''); saveReport(f.id, 'offblock', { [mk]: '' }).catch(() => {}); setOpen(false); }}
+                <ScrollView style={{ maxHeight: 220, borderWidth: 1, borderColor: T.inBorder, borderRadius: 6, marginTop: 2, backgroundColor: T.card }} keyboardShouldPersistTaps="handled">
+                  <TouchableOpacity onPress={() => { apply(''); setTyping(''); setOpen(false); }}
                     style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line }}>
                     <Text style={{ color: T.sub, fontSize: 12.5 }}>— none —</Text>
                   </TouchableOpacity>
-                  {dcList.map((d) => (
-                    <TouchableOpacity key={d.code} onPress={() => { set('offblock', mk, d.code); saveReport(f.id, 'offblock', { [mk]: d.code }).catch(() => {}); setOpen(false); }}
+                  {filtered.map((d) => (
+                    <TouchableOpacity key={d.code} onPress={() => { apply(d.code); setTyping(''); setOpen(false); }}
                       style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: d.code === cur ? T.accent + '22' : 'transparent' }}>
                       <Text style={{ color: T.text, fontSize: 12.5 }}>{d.code} — {d.description}</Text>
                       {d.category ? <Text style={{ color: T.sub, fontSize: 10 }}>{d.category}</Text> : null}
@@ -1086,7 +1123,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16 }}>
                 {[1, 2, 3].map((n) => (
                   <View key={n} style={{ minWidth: 120 }}>
-                    <F s="offblock" k={`delay${n}`} label={`Delay ${n} (min)`} kb="numeric" w={110} />
+                    <F s="offblock" k={`delay${n}`} label={`Delay ${n} (min)`} kb="number-pad" w={110} />
                     <DCPick n={n} />
                   </View>))}
               </View>
@@ -1232,18 +1269,18 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                   </View>
                 </View>);
               })}
-              <F s="post" k="landings" label="Landings" kb="numeric" ph="1" w={100} />
+              <F s="post" k="landings" label="Landings" kb="number-pad" ph="1" w={100} />
               <F s="post" k="diversion" label="Diversion (or NIL)" ph="NIL" w={150} />
             </View>); })()}
             <YN s="post" k="lvo" label="LVO" /><YN s="post" k="autoland" label="Automatic landing" />
           </View>
           <View style={st.card}><Text style={st.h}>Fuel</Text>
-            <F s="post" k="parking_fuel" label="Parking fuel (kg)" kb="numeric" w={170} />
+            <F s="post" k="parking_fuel" label="Parking fuel (kg)" kb="number-pad" w={170} />
             {(() => { const blk = Number(rep?.pre?.block_fuel), park = Number(rep?.post?.parking_fuel);
               return blk && park ? <Text style={{ color: T.sub, marginTop: 8 }}>Fuel used: <Text style={{ color: T.text, fontWeight: '700' }}>{Math.round(blk - park)} kg</Text></Text> : null; })()}
           </View>
         </View>);
-      case 'signpost': return <SignCard kind="postflight" flight={f} done={d?.acceptance_post} rep={rep} secs={['offblock', 'rvsm', 'post']} onDone={load} setMsg={setMsg} setRep={setRep} />;
+      case 'signpost': return <SignCard kind="postflight" flight={f} done={d?.acceptance_post} rep={rep} secs={['offblock', 'rvsm', 'post']} onDone={() => load(true)} setMsg={setMsg} setRep={setRep} />;
       case 'help': return <HelpPage />;
     }
     return null;
@@ -1443,9 +1480,12 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any
       </View>
       {gaps.length ? <Text style={{ color: '#f0d48a', marginTop: 8, lineHeight: 20 }}>Complete before signing:{'\n'}{gaps.map((g: any) => `• ${g.label}`).join('\n')}</Text> : null}
       <View style={{ alignItems: 'center', marginTop: 14 }}>
-        <TouchableOpacity style={[st.btn, { minWidth: 240, opacity: submitting ? 0.5 : 1 }]} disabled={submitting} onPress={() => {
+        <TouchableOpacity style={[st.btn, { minWidth: 240, opacity: submitting ? 0.5 : 1 }]} disabled={submitting} onPress={async () => {
           setMsg('');
-          if (gaps.length) { setMsg('Complete the listed items first'); return; }
+          if (gaps.length) {
+            const ok = await confirmAction(`The following fields are not completed:\n\n${gaps.map((g: any) => `• ${g.label}`).join('\n')}\n\nSign anyway?`, 'Incomplete fields');
+            if (!ok) return;
+          }
           setSigning(true);
         }}><Text style={st.btnTxt}>{submitting ? 'Submitting…' : kind === 'preflight' ? 'Sign pre-flight ✓' : 'Sign post-flight ✓'}</Text></TouchableOpacity>
       </View>
@@ -1551,36 +1591,56 @@ function _fallbackGendecHtml(f: any): string {
 
 
 function PhotoBox({ flight, d, reload, setRep, setMsg, signed, kind = 'fuel_slip', label = 'Fuel slip photo — supplier + receipt № are read off it automatically' }: any) {
-  const [view, setView] = useState<string | null>(null);
+  const [viewIdx, setViewIdx] = useState<number | null>(null);
+  const [viewSrc, setViewSrc] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const slip = (d?.docs || []).find((x: any) => x.kind === kind);
-  const inputRef = useRef<any>(null);
+  // Optimistic entries for photos queued while offline — hold the data URI so View works locally.
+  // Cleared once a fresh (online) reload brings the real server docs.
+  const [pending, setPending] = useState<{ id: string; filename: string; kind: string; _queued: true; _dataUri: string }[]>([]);
+  const serverPhotos: any[] = (d?.docs || []).filter((x: any) => x.kind === kind);
+  const photos = [...serverPhotos, ...pending];
+  const inputRef = useRef<any>(null);        // camera capture
+  const fileRef = useRef<any>(null);         // file/gallery picker (no capture)
 
   const [camOpen, setCamOpen] = useState(false);
 
-  // Shared uploader — the captured/selected image becomes the SAME base64 payload the web path
-  // already uploaded, so the server-side upload + OCR extraction path is unchanged.
+  // Shared uploader — adds a new photo (no auto-delete of previous)
   const doUpload = async (b64: string, contentType: string, filename: string) => {
     setBusy(true); setMsg('');
     try {
-      if (slip) await deleteDoc(flight.id, slip.id).catch(() => {});            // replace = new in, old out
       const r = await uploadDoc(flight.id, { kind, filename, title: label.split(' — ')[0], content_type: contentType, data_b64: b64 });
       if (r?.extracted) {
         setRep((p: any) => ({ ...p, pre: { ...(p.pre || {}), ...r.extracted } }));
         setMsg('');
       }
-      reload();
+      if (r?.queued) {
+        // Offline — keep the data URI so View works without the server
+        const dataUri = `data:${contentType};base64,${b64}`;
+        setPending((prev) => [...prev, { id: `pending_${Date.now()}`, filename, kind, _queued: true, _dataUri: dataUri }]);
+        setMsg('Photo queued — will upload when online', true);
+      } else {
+        await reload(true);           // fresh=true → skip blob cache, fetch the updated doc list
+        setPending([]);               // server data is authoritative now
+      }
     } catch (e: any) { setMsg(`Photo failed — ${e.message}`); }
     finally { setBusy(false); }
   };
 
-  // web: <input type=file capture> picker (camera on iPad Safari). native: the OTA-safe expo-camera
-  // capture modal when the module is in this binary, else a clear "update the app" hint. View /
-  // Replace / Delete of already-uploaded photos work on both regardless.
   const pick = () => {
     if (Platform.OS === 'web') { inputRef.current?.click(); return; }
     if (cameraAvailable) { setMsg(''); setCamOpen(true); return; }
-    setMsg('Camera arrives with the next app update — this build doesn’t include the camera module yet.');
+    setMsg('Camera arrives with the next app update — this build doesn\'t include the camera module yet.');
+  };
+  const pickFile = async () => {
+    if (Platform.OS === 'web') { fileRef.current?.click(); return; }
+    // Native: open photo library via expo-image-picker
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) { setMsg('Photo access is off — enable in iOS Settings → ETL → Photos.'); return; }
+      const res = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+      if (res.canceled || !res.assets?.[0]?.base64) return;
+      doUpload(res.assets[0].base64!, res.assets[0].mimeType || 'image/jpeg', res.assets[0].fileName || `${kind}.jpg`);
+    } catch (e: any) { setMsg(`Library failed — ${e.message}`); }
   };
   const onFile = async (ev: any) => {
     const file = ev.target.files?.[0]; ev.target.value = ''; if (!file) return;
@@ -1588,48 +1648,68 @@ function PhotoBox({ flight, d, reload, setRep, setMsg, signed, kind = 'fuel_slip
     doUpload(b64, file.type || 'image/jpeg', file.name || `${kind}.jpg`);
   };
 
+  const viewPhoto = async (doc: any) => {
+    // Queued (offline) photos have their data URI stored locally
+    if (doc._dataUri) { setViewSrc(doc._dataUri); return; }
+    try { const r = await getDoc(flight.id, doc.id); setViewSrc(`data:${r.content_type || 'image/jpeg'};base64,${r.data_b64}`); }
+    catch (e: any) { setMsg(e.message); }
+  };
+
   return (
     <View style={{ marginTop: 12 }}>
       <Text style={{ color: T.sub, fontSize: 12, fontWeight: '600' }}>{label}</Text>
-      {/* web-only hidden file input (camera on iPad Safari via capture). createElement avoids the
-          RN JSX.IntrinsicElements type error; not rendered at all on native. */}
       {Platform.OS === 'web'
         ? React.createElement('input', { ref: inputRef, type: 'file', accept: 'image/*', capture: 'environment', style: { display: 'none' }, onChange: onFile })
         : null}
-      {/* native camera capture — only mounted when the native module is present (hooks inside run
-          only then), so an OTA to a binary without expo-camera never touches camera code. */}
+      {Platform.OS === 'web'
+        ? React.createElement('input', { ref: fileRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: onFile })
+        : null}
       {Platform.OS !== 'web' && cameraAvailable ? (
         <CameraCapture visible={camOpen} onClose={() => setCamOpen(false)} setMsg={setMsg}
           onCapture={(b64: string, ct: string, fn: string) => { setCamOpen(false); doUpload(b64, ct, fn); }} />
       ) : null}
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-        {!slip ? (
-          <TouchableOpacity style={[st.btn, { marginTop: 0 }]} disabled={busy} onPress={pick}>
-            <Text style={st.btnTxt}>{busy ? 'Uploading…' : '📷 Take photo'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <>
-            <TouchableOpacity style={[st.btnSec, { marginTop: 0 }]} onPress={async () => {
-              try { const doc = await getDoc(flight.id, slip.id); setView(`data:${doc.content_type || 'image/jpeg'};base64,${doc.data_b64}`); }
-              catch (e: any) { setMsg(e.message); }
-            }}><Text style={st.btnSecTxt}>👁 View</Text></TouchableOpacity>
-            <TouchableOpacity style={[st.btnSec, { marginTop: 0 }]} disabled={busy} onPress={pick}>
-              <Text style={st.btnSecTxt}>{busy ? '…' : '↻ Replace'}</Text></TouchableOpacity>
-            {!signed ? (
-              <TouchableOpacity style={[st.btnDanger, { marginTop: 0 }]} onPress={async () => {
-                try { await deleteDoc(flight.id, slip.id); reload(); } catch (e: any) { setMsg(e.message); }
-              }}><Text style={st.btnDangerTxt}>🗑 Delete</Text></TouchableOpacity>
-            ) : null}
-          </>
-        )}
-      </View>
-      {view ? (
-        <TouchableOpacity onPress={() => setView(null)} style={{ marginTop: 10 }}>
-          {/* web→native: <img> → RN <Image> (base64 data URI) */}
-          <Image source={{ uri: view }} style={{ width: 480, maxWidth: '100%', height: 320, borderRadius: 10 } as any} resizeMode="contain" />
-          <Text style={{ color: T.sub, fontSize: 12, marginTop: 4 }}>tap to close</Text>
-        </TouchableOpacity>
+      {photos.length > 0 ? (
+        <View style={{ marginTop: 8, gap: 6 }}>
+          {photos.map((p: any, i: number) => (
+            <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#14223a', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
+              <Text style={{ color: T.text, fontSize: 13, flex: 1 }}>📎 {p.filename || `Photo ${i + 1}`}{p._queued ? <Text style={{ color: T.amber, fontSize: 11 }}> ⏳ queued</Text> : null}</Text>
+              <TouchableOpacity onPress={() => {
+                if (viewIdx === i) { setViewIdx(null); setViewSrc(null); }
+                else { setViewIdx(i); viewPhoto(p); }
+              }}>
+                <Text style={{ color: viewIdx === i ? T.text : T.accent, fontSize: 12.5, fontWeight: '700' }}>{viewIdx === i ? '✕ Close' : '👁 View'}</Text>
+              </TouchableOpacity>
+              {!signed ? (
+                <TouchableOpacity onPress={() => {
+                  if (Platform.OS === 'web') { if (!confirm('Delete this photo?')) return; }
+                  if (p._queued) {
+                    // Remove from local pending list (upload still queued in outbox — will 404 on server, harmless)
+                    setPending((prev) => prev.filter((x) => x.id !== p.id));
+                    setViewIdx(null); setViewSrc(null);
+                  } else {
+                    deleteDoc(flight.id, p.id).then(() => { setViewIdx(null); setViewSrc(null); reload(true); })
+                      .catch((e: any) => setMsg(e.message));
+                  }
+                }}><Text style={{ color: '#f0a3a3', fontSize: 12.5, fontWeight: '700' }}>🗑</Text></TouchableOpacity>
+              ) : null}
+            </View>
+          ))}
+          {viewIdx != null && viewSrc ? (
+            <TouchableOpacity onPress={() => { setViewIdx(null); setViewSrc(null); }} style={{ marginTop: 4 }}>
+              <Image source={{ uri: viewSrc }} style={{ width: 480, maxWidth: '100%', height: 320, borderRadius: 10 } as any} resizeMode="contain" />
+              <Text style={{ color: T.sub, fontSize: 12, marginTop: 4 }}>tap to close</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : null}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+        <TouchableOpacity style={[photos.length ? st.btnSec : st.btn, { marginTop: 0 }]} disabled={busy} onPress={pick}>
+          <Text style={photos.length ? st.btnSecTxt : st.btnTxt}>{busy ? 'Uploading…' : photos.length ? '📷 Add photo' : '📷 Take photo'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.btnSec, { marginTop: 0 }]} disabled={busy} onPress={pickFile}>
+          <Text style={st.btnSecTxt}>{Platform.OS === 'web' ? '📁 From files' : '🖼 Library'}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

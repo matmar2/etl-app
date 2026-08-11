@@ -5,7 +5,8 @@
   "scripts": {
     "start": "expo start",
     "ios": "expo run:ios",
-    "android": "expo run:android"
+    "android": "expo run:android",
+    "postinstall": "npx patch-package"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

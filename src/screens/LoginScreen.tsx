@@ -280,7 +280,7 @@ export default function LoginScreen({ navigation }: any) {
             <TouchableOpacity onPress={forgotPwd}><Text style={styles.link}>Email me a link instead</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => { setReset(false); setErr(''); setNote(''); }}><Text style={styles.link}>Cancel</Text></TouchableOpacity>
           </View>
-          <Text style={styles.resetHint}>Needs a prior online sign-in on this iPad and your MFA set up. No authenticator? Use the email link (needs internet).</Text>
+          <Text style={styles.resetHint}>Needs a prior online sign-in on this iPad and your MFA set up. No authenticator? Use the email link.</Text>
         </View>
       )}
       <Text style={styles.hint}>Pilots, Cabin Crew & mechanics sign in with their crew login and MFA.</Text>

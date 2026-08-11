@@ -1,0 +1,24 @@
+diff --git a/node_modules/@react-navigation/elements/lib/module/PlatformPressable.js b/node_modules/@react-navigation/elements/lib/module/PlatformPressable.js
+index 6d0c9e6..2672db6 100644
+--- a/node_modules/@react-navigation/elements/lib/module/PlatformPressable.js
++++ b/node_modules/@react-navigation/elements/lib/module/PlatformPressable.js
+@@ -118,12 +118,17 @@ const CSS_TEXT = css`
+     opacity: var(--overlay-active-opacity);
+   }
+ `;
+-const HoverEffect = ({
++// PATCHED: HoverEffect renders <div> + <style> (HTML elements) for web hover overlays.
++// On native, the original guard (Platform.OS !== 'web') should return null — but a Hermes
++// bytecode compilation edge case caused the guard's dead-code-eliminated block to be skipped
++// on one iPad (11 Aug 2026 crash: "View config getter for component 'div'"). Splitting at
++// the module level guarantees the div/style JSX never exists in the native function body.
++const HoverEffect = Platform.OS !== 'web' ? () => null : ({
+   color,
+   hoverOpacity = 0.08,
+   activeOpacity = 0.16
+ }) => {
+-  if (Platform.OS !== 'web' || color == null) {
++  if (color == null) {
+     return null;
+   }
+   return /*#__PURE__*/_jsxs(_Fragment, {
