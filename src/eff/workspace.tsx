@@ -1089,32 +1089,34 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           const cur = rep?.offblock?.[mk] ?? '';
           const label = cur ? dcList.find((d) => d.code === cur) : null;
           const [open, setOpen] = useState(false);
+          const [editing, setEditing] = useState(false);
           const [typing, setTyping] = useState('');
-          const filtered = typing ? dcList.filter((d) => d.code.startsWith(typing) || d.description.toLowerCase().includes(typing.toLowerCase())) : dcList;
+          const search = editing ? typing : '';
+          const filtered = search ? dcList.filter((d) => d.code.startsWith(search) || d.description.toLowerCase().includes(search.toLowerCase())) : dcList;
           const apply = (code: string) => { set('offblock', mk, code); saveReport(f.id, 'offblock', { [mk]: code }).catch(() => {}); };
           return (
             <View style={{ marginBottom: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 200 }}>
-                <TextInput value={typing || cur} placeholder="— delay code —" placeholderTextColor={T.sub}
+                <TextInput value={editing ? typing : cur} placeholder="— delay code —" placeholderTextColor={T.sub}
                   style={{ height: 34, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: T.inBorder, backgroundColor: T.inBg, color: T.text, fontSize: 12.5, flex: 1 }}
-                  onFocus={() => setOpen(true)}
+                  onFocus={() => { setEditing(true); setTyping(cur); setOpen(true); }}
                   onChangeText={(v) => { setTyping(v); setOpen(true); }}
-                  onBlur={() => { if (typing && typing !== cur) { apply(typing); } setTyping(''); }}
+                  onBlur={() => { if (editing && typing !== cur) { apply(typing); } setEditing(false); setTyping(''); }}
                   keyboardType="default" returnKeyType="done"
-                  onSubmitEditing={() => { if (typing) { apply(typing); setOpen(false); } setTyping(''); }} />
+                  onSubmitEditing={() => { if (editing) { apply(typing); setOpen(false); } setEditing(false); setTyping(''); }} />
                 <TouchableOpacity onPress={() => setOpen(!open)} style={{ padding: 4 }}>
                   <Text style={{ color: T.sub, fontSize: 10 }}>{open ? '▲' : '▼'}</Text>
                 </TouchableOpacity>
               </View>
-              {label && !typing ? <Text style={{ color: T.sub, fontSize: 10, marginTop: 2, marginLeft: 4 }}>{label.description}</Text> : null}
+              {label && !editing ? <Text style={{ color: T.sub, fontSize: 10, marginTop: 2, marginLeft: 4 }}>{label.description}</Text> : null}
               {open ? (
                 <ScrollView style={{ maxHeight: 220, borderWidth: 1, borderColor: T.inBorder, borderRadius: 6, marginTop: 2, backgroundColor: T.card }} keyboardShouldPersistTaps="handled">
-                  <TouchableOpacity onPress={() => { apply(''); setTyping(''); setOpen(false); }}
+                  <TouchableOpacity onPress={() => { apply(''); setEditing(false); setTyping(''); setOpen(false); }}
                     style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line }}>
                     <Text style={{ color: T.sub, fontSize: 12.5 }}>— none —</Text>
                   </TouchableOpacity>
                   {filtered.map((d) => (
-                    <TouchableOpacity key={d.code} onPress={() => { apply(d.code); setTyping(''); setOpen(false); }}
+                    <TouchableOpacity key={d.code} onPress={() => { apply(d.code); setEditing(false); setTyping(''); setOpen(false); }}
                       style={{ paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: T.line, backgroundColor: d.code === cur ? T.accent + '22' : 'transparent' }}>
                       <Text style={{ color: T.text, fontSize: 12.5 }}>{d.code} — {d.description}</Text>
                       {d.category ? <Text style={{ color: T.sub, fontSize: 10 }}>{d.category}</Text> : null}
