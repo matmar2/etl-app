@@ -8,7 +8,21 @@ import React, { Suspense } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { ui } from '../ui';
 
-const Inner = React.lazy(() => import('../eff/FlightFolder'));
+// Retry-on-failure wrapper for the chunk import. Metro's web chunk loader can fail
+// transiently (network glitch, partial script load, bfcache stale module map) causing
+// "Requiring unknown module 768". Retrying the import() re-fetches and re-evaluates the
+// chunk, which registers the missing modules.
+const Inner = React.lazy(() =>
+  import('../eff/FlightFolder').catch(() =>
+    new Promise<void>(r => setTimeout(r, 300)).then(() =>
+      import('../eff/FlightFolder').catch(() =>
+        new Promise<void>(r => setTimeout(r, 600)).then(() =>
+          import('../eff/FlightFolder')
+        )
+      )
+    )
+  )
+);
 
 export default function FlightFolderScreen(props: any) {
   return (

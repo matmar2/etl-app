@@ -9,7 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Text, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Print from 'expo-print';
-import { getDoc } from './api';
+import { getDoc, getCompanyDoc } from './api';
 import { S, T } from './theme';
 
 const card = { ...S.card, marginTop: 12 } as const;
@@ -19,7 +19,8 @@ export default function PdfViewer({ flightId, doc, setMsg, page }: any) {
   const [fileUri, setFileUri] = useState<string | null>(null);
   useEffect(() => {
     setFull(null); setFileUri(null);
-    getDoc(flightId, doc.id).then(setFull).catch((e: any) => setMsg(`Could not load ${doc.title} — ${e.message}`));
+    const fetch = doc.company_doc ? getCompanyDoc(doc.id) : getDoc(flightId, doc.id);
+    fetch.then(setFull).catch((e: any) => setMsg(`Could not load ${doc.title} — ${e.message}`));
   }, [doc.id]);
   const ct = full?.content_type || 'application/pdf';
   const isPdf = ct.includes('pdf');

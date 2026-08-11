@@ -5,7 +5,7 @@
 // data: URI — more robust for multi-MB PDFs and revocable so it doesn't leak memory.
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
-import { getDoc } from './api';
+import { getDoc, getCompanyDoc } from './api';
 import { S, T } from './theme';
 
 const card = { ...S.card, marginTop: 12 } as const;
@@ -15,7 +15,8 @@ export default function PdfViewer({ flightId, doc, setMsg, page }: any) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     setFull(null);
-    getDoc(flightId, doc.id).then(setFull).catch((e: any) => setMsg(`Could not load ${doc.title} — ${e.message}`));
+    const fetch = doc.company_doc ? getCompanyDoc(doc.id) : getDoc(flightId, doc.id);
+    fetch.then(setFull).catch((e: any) => setMsg(`Could not load ${doc.title} — ${e.message}`));
   }, [doc.id]);
   useEffect(() => {
     if (!full) return;

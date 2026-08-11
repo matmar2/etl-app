@@ -354,11 +354,29 @@ export async function getDoc(id: string, docId: string): Promise<any> {
     throw e;
   }
 }
+export async function getCompanyDoc(docId: string): Promise<any> {
+  try {
+    const d = await api(`/company-docs/${docId}`);
+    kvDel('c:' + `/company-docs/${docId}`);
+    docPut(docId, d);
+    return d;
+  } catch (e) {
+    const c = await docGet(docId);
+    if (c) return c;
+    throw e;
+  }
+}
 // Prefetch a folder's documents into the blob store while online (offline briefing guarantee).
-export async function prefetchDocs(id: string, docs: { id: string }[]) {
+export async function prefetchDocs(id: string, docs: { id: string; company_doc?: boolean }[]) {
   for (const doc of docs) {
     if (await docGet(doc.id)) continue;
-    try { const d = await api(`/flights/${id}/doc/${doc.id}`); kvDel('c:' + `/flights/${id}/doc/${doc.id}`); docPut(doc.id, d); } catch { return; }
+    try {
+      if ((doc as any).company_doc) {
+        const d = await api(`/company-docs/${doc.id}`); kvDel('c:' + `/company-docs/${doc.id}`); docPut(doc.id, d);
+      } else {
+        const d = await api(`/flights/${id}/doc/${doc.id}`); kvDel('c:' + `/flights/${id}/doc/${doc.id}`); docPut(doc.id, d);
+      }
+    } catch { return; }
   }
 }
 export const deleteDoc = (id: string, docId: string) => api(`/flights/${id}/doc/${docId}`, { method: 'DELETE' });

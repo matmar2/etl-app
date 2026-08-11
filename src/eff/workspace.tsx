@@ -79,7 +79,11 @@ const requiredFor = (sec: string): { key: string; label: string }[] => {
   const cfg = getRequiredFields();
   const built = REQUIRED[sec] || [];
   if (!cfg) return built;
-  return (cfg[sec] || []).map((k) => ({ key: k, label: built.find((b) => b.key === k)?.label || humanise(k) }));
+  // Fall back to built-in when the admin config doesn't define a section — an absent
+  // key means "not configured", not "nothing required". Only an explicit empty array
+  // from the server clears a section's validation.
+  if (!(sec in cfg)) return built;
+  return cfg[sec].map((k) => ({ key: k, label: built.find((b) => b.key === k)?.label || humanise(k) }));
 };
 const missing = (rep: any, sec: string) => requiredFor(sec).filter((f) => {
   const v = (rep?.[sec] || {})[f.key];
@@ -215,6 +219,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   const [planMsg, setPlanMsg] = useState('');
   const [wxBusy, setWxBusy] = useState(false);
   const [wxDecode, setWxDecode] = useState(false);
+  // Defer rendering of large NOTAM lists so the tab switch animates instantly.
+  const [wxReady, setWxReady] = useState(true);
   const [atisArrTab, setAtisArrTab] = useState('dest');
   const [copied, setCopied] = useState(false);
   const [q, setQ] = useState('');
@@ -233,7 +239,24 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
       rep0.pre = { ...(rep0.pre || {}), density: '0.785' };
       saveReport(flight.id, 'pre', { density: '0.785' }).catch(() => {});
     }
-    setD(x); setRep(rep0);
+    setD(x);
+    // Merge server data with local edits so reload() after sign/photo never wipes
+    // fields the user typed but didn't blur out of. Local non-empty values win.
+    setRep((prev: any) => {
+      if (!prev || !Object.keys(prev).length) return rep0;
+      const merged: any = { ...rep0 };
+      for (const sec of Object.keys(prev)) {
+        if (!prev[sec] || typeof prev[sec] !== 'object') continue;
+        merged[sec] = { ...(rep0[sec] || {}), ...prev[sec] };
+        // Only keep local values that are actually filled — empty locals should not
+        // block a server value that arrived (e.g. OCR extraction after photo upload).
+        for (const [k, v] of Object.entries(rep0[sec] || {})) {
+          const local = prev[sec]?.[k];
+          if (local === undefined || local === null || local === '') merged[sec][k] = v;
+        }
+      }
+      return merged;
+    });
     prefetchDocs(flight.id, x.docs || []);              // briefing PDFs → IndexedDB for offline
   }).catch((e) => { if (/session expired/i.test(e.message) && signOut) { signOut(); return; } setMsg(e.message); });
   useEffect(() => { load(); }, []);
@@ -258,6 +281,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
   })();
   const locked = !!d?.locked || (amendMsLeft != null && amendMsLeft <= 0);
   const lockedRef = useRef(false); lockedRef.current = locked;
+  const scrollRef = useRef<ScrollView>(null);
 
   // Live aircraft status from the ETL API for the Overview card — fetched once per flight open,
   // cached per reg for 5 min in api.ts. Failure only hides the live data, never the Overview.
@@ -792,7 +816,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
               {TABS.map(([k, label, n]) => { const on = wxTab === k;
                 return (
-                  <TouchableOpacity key={k} onPress={() => { setWxTab(k); setWxCat('all'); }}
+                  <TouchableOpacity key={k} onPress={() => { setWxReady(false); setWxTab(k); setWxCat('all'); scrollRef.current?.scrollTo({ y: 0, animated: true }); setTimeout(() => setWxReady(true), 30); }}
                     style={{ borderWidth: 1, borderColor: on ? T.accent : T.line, backgroundColor: on ? T.accent : T.card,
                              borderRadius: 999, paddingHorizontal: 15, minHeight: 40, justifyContent: 'center',
                              opacity: on || n ? 1 : 0.5 }}>
@@ -810,7 +834,8 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                     </TouchableOpacity>); })}
               </View>) : null}
             {head}
-            {shown.length ? shown.map(notamCard) : <Text style={{ color: T.sub, marginTop: 14 }}>{wxTab === 'marks' ? 'No bookmarked NOTAMs — tap 🏷️ on any NOTAM to bookmark it.' : 'No NOTAMs in this category.'}</Text>}
+            {!wxReady ? <ActivityIndicator style={{ marginTop: 20 }} color={T.accent} /> :
+             shown.length ? shown.map(notamCard) : <Text style={{ color: T.sub, marginTop: 14 }}>{wxTab === 'marks' ? 'No bookmarked NOTAMs — tap 🏷️ on any NOTAM to bookmark it.' : 'No NOTAMs in this category.'}</Text>}
           </View>);
       })();
       case 'pre': return (
@@ -1100,8 +1125,10 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
           const c = (p - elev) * (isa - oat) / (273 + oat);
           return `${Math.round(p + c)} ft (+${Math.round(c)} ft)`;
         };
-        const LTF = ({ k, label: lb }: { k: string; label: string }) => (
-          <View style={{ marginTop: 10 }}>
+        // LTF is a plain function returning JSX (not a component) — avoids remounting
+        // TextInputs on re-render, which was dismissing the keyboard mid-typing.
+        const ltf = (k: string, lb: string) => (
+          <View key={k} style={{ marginTop: 10 }}>
             <Text style={{ color: T.sub, fontSize: 12.5, marginBottom: 3 }}>{lb}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TextInput style={[st.input, { width: 120 }]} value={lt[k] ?? ''} placeholder="ft" placeholderTextColor={T.sub}
@@ -1150,11 +1177,11 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
                     <Text style={{ color: T.entry, fontWeight: '700', fontSize: 15, paddingVertical: 8 }}>{isa != null ? `${isa}°C` : '-'}</Text>
                   </View>
                 </View>
-                <LTF k="lt_faf" label="FAF" />
-                <LTF k="lt_om" label="OM / NDB or Equivalent" />
-                <LTF k="lt_dadh" label="DA / DH" />
-                <LTF k="lt_mdamdh" label="MDA / MDH" />
-                <LTF k="lt_circuit" label="Circuit" />
+                {ltf('lt_faf', 'FAF')}
+                {ltf('lt_om', 'OM / NDB or Equivalent')}
+                {ltf('lt_dadh', 'DA / DH')}
+                {ltf('lt_mdamdh', 'MDA / MDH')}
+                {ltf('lt_circuit', 'Circuit')}
               </View>
             ) : null}
           </View>); }
@@ -1309,7 +1336,7 @@ export function Workspace({ flight, back, signOut, navigation }: { flight: any; 
         ) : null}
       </ScrollView>
       ) : null}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingTop: 18, maxWidth: sec === 'navlog' ? undefined : 1000, width: '100%', alignSelf: 'center' } as any}>
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingTop: 18, maxWidth: sec === 'navlog' ? undefined : 1000, width: '100%', alignSelf: 'center' } as any}>
         {!railOpen ? (
           <TouchableOpacity onPress={() => setRailOpen(true)} style={{ alignSelf: 'flex-start', backgroundColor: '#1c3050', borderWidth: 1, borderColor: T.line, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
             <Text style={{ color: '#fff', fontSize: 15 }}>☰</Text>
@@ -1379,8 +1406,25 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any
   // web→native: the web trial signed into a raw <canvas> (DOM PointerEvents, toDataURL) absent on
   // native. Replaced with ETL's cross-platform SignaturePad returning the same base64 PNG data URI.
   const [signing, setSigning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);   // debounce double-tap
   if (done) return <View style={st.card}><Text style={{ color: T.entry, fontWeight: '700' }}>✓ Signed — {done.signer_name}{done.licence_no ? ` · ${done.licence_no}` : ''} · {(done.signed_at || '').slice(0, 16)}z</Text></View>;
   const gaps = secs.flatMap((s2: string) => missing(rep, s2));
+
+  // Persist every local field to the server BEFORE signing so the sign endpoint
+  // sees the same data the user sees, and the reload after signing doesn't lose anything.
+  const persistAll = async () => {
+    const promises: Promise<any>[] = [];
+    for (const sec of secs) {
+      const data = rep?.[sec];
+      if (!data || typeof data !== 'object') continue;
+      promises.push(saveReport(flight.id, sec, data).catch(() => {}));
+    }
+    // Also persist the sign-tab's own code3
+    const signSec = kind === 'preflight' ? 'signpre' : 'signpost';
+    if (rep?.[signSec]) promises.push(saveReport(flight.id, signSec, rep[signSec]).catch(() => {}));
+    await Promise.all(promises);
+  };
+
   return (
     <View style={[st.card, { zIndex: 20 }]}>
       <Text style={{ color: T.sub, fontSize: 13.5, lineHeight: 20 }}>By signing I acknowledge I have familiarised myself with the briefing(s), including Cat B/C aerodromes intended for this flight.</Text>
@@ -1399,17 +1443,22 @@ function SignCard({ kind, flight, done, rep, secs, onDone, setMsg, setRep }: any
       </View>
       {gaps.length ? <Text style={{ color: '#f0d48a', marginTop: 8, lineHeight: 20 }}>Complete before signing:{'\n'}{gaps.map((g: any) => `• ${g.label}`).join('\n')}</Text> : null}
       <View style={{ alignItems: 'center', marginTop: 14 }}>
-        <TouchableOpacity style={[st.btn, { minWidth: 240 }]} onPress={() => {
+        <TouchableOpacity style={[st.btn, { minWidth: 240, opacity: submitting ? 0.5 : 1 }]} disabled={submitting} onPress={() => {
           setMsg('');
           if (gaps.length) { setMsg('Complete the listed items first'); return; }
           setSigning(true);
-        }}><Text style={st.btnTxt}>{kind === 'preflight' ? 'Sign pre-flight ✓' : 'Sign post-flight ✓'}</Text></TouchableOpacity>
+        }}><Text style={st.btnTxt}>{submitting ? 'Submitting…' : kind === 'preflight' ? 'Sign pre-flight ✓' : 'Sign post-flight ✓'}</Text></TouchableOpacity>
       </View>
       <SignaturePad visible={signing} title={kind === 'preflight' ? 'Sign pre-flight' : 'Sign post-flight'} onClose={() => setSigning(false)}
         onDone={async (dataUrl: string) => {
-          setSigning(false); setMsg('');
-          try { await acceptFolder2(flight.id, dataUrl, kind); onDone(); }
-          catch (e: any) { setMsg(e.message); }
+          if (submitting) return;          // guard against double-fire
+          setSigning(false); setMsg(''); setSubmitting(true);
+          try {
+            await persistAll();            // flush all form data before the sign call
+            await acceptFolder2(flight.id, dataUrl, kind);
+            onDone();
+          } catch (e: any) { setMsg(e.message); }
+          finally { setSubmitting(false); }
         }} />
     </View>
   );
