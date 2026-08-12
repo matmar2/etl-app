@@ -326,9 +326,9 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
   };
   const isMain = route === 'main';
   const W = (isMain ? d?.waypoints : d?.alt_waypoints) || [];
-  // OM-A fuel check markers: from TOC to TOD, flag the NEXT waypoint where a fuel entry is due.
-  // Dynamic: once crew enters FOB at a flagged waypoint, the interval resets from that point and
-  // the marker moves to the next due waypoint. Only unfilled waypoints are flagged.
+  // OM-A fuel check markers: from TOC to TOD, flag the LAST waypoint WITHIN each 30-min window.
+  // The next waypoint beyond that window would exceed the max interval — so this one is mandatory.
+  // Dynamic: once crew enters FOB at a waypoint, the interval clock resets from that point.
   // Short flight (TOC→TOD ≤ 60 min): one check at the midpoint (if unfilled).
   const fuelCheckSet = React.useMemo(() => {
     const s = new Set<number>();
@@ -355,19 +355,28 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
       if (best > tocIdx && best < todIdx && !hasFob(best)) s.add(best);
       return s;
     }
-    // Normal: walk TOC→TOD, reset the clock whenever crew entered FOB
+    // Normal: flag the LAST unfilled waypoint within each 30-min window.
+    // If the next waypoint (or TOD) would exceed the deadline, this one is mandatory.
+    // If no waypoint exists within the deadline (big gap), flag the first one past it.
     let lastCheckMin = tocMin;
     for (let j = tocIdx + 1; j < todIdx; j++) {
       const am = W[j].acc_min ?? 0;
       if (hasFob(j)) {
-        // Crew entered fuel here — reset the interval clock
         lastCheckMin = am;
         continue;
       }
-      if (am >= lastCheckMin + interval) {
-        // Due: flag this waypoint, then only flag the NEXT one after another interval
+      const deadline = lastCheckMin + interval;
+      if (am > deadline) {
+        // Past deadline — unavoidable gap, flag it (no earlier waypoint existed)
         s.add(j);
         lastCheckMin = am;
+      } else {
+        // Within deadline — flag only if the next waypoint (or TOD) would exceed it
+        const nextAm = (j + 1 < todIdx) ? (W[j + 1].acc_min ?? 0) : todMin;
+        if (nextAm > deadline) {
+          s.add(j);
+          lastCheckMin = am;
+        }
       }
     }
     return s;
@@ -432,7 +441,7 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
                 <View key={i}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: rmk || isMain ? 0 : 1, borderBottomColor: '#1b2c49', borderLeftWidth: fuelCheck ? 3 : 0, borderLeftColor: '#f0d48a' }}>
                   <Text numberOfLines={1} style={[cell, { width: CW[0], fontWeight: '700',
-                    color: /^-?(TOC|TOD)-?$/i.test(w.wpt || '') ? T.accent : T.text }]}>{(w.wpt || '').replace(/^-+|-+$/g, '')}</Text>
+                    color: /^-?(TOC|TOD|T\/C|T\/D)-?$/i.test(w.wpt || '') ? T.accent : T.text }]}>{(w.wpt || '').replace(/^-+|-+$/g, '')}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[1], color: T.sub }]}>{w.awy ?? ''}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[2] }]}>{w.fl ?? ''}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[3] }]}>{w.mt ?? ''}</Text>
