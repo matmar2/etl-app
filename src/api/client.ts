@@ -7,6 +7,7 @@ import { flushOutbox, queueRequest } from '../db/outbox';
 import { geoapifyTileUrl, overviewTiles, tileKey } from '../util/tiles';
 import { db } from '../db/schema';
 import { generateTotp, sha1Hex, verifyTotp } from '../util/totp';
+import { runHousekeeping } from '../db/housekeeping';
 
 // On the web, auto-detect sandbox: when loaded from /sandbox-app/, talk to /sandbox-api/
 // instead of the prod /api/. iPads always use the baked-in prod URL from app.json.
@@ -197,6 +198,7 @@ export async function login(username: string, password: string, otp?: string) {
   prefetchLastFuel().catch(() => {});              // warm previous-leg landing fuel (all tails, last 3 days)
   prefetchHelp().catch(() => {});                  // warm the offline User Guide + FAQ cache
   myFeedback().catch(() => {});                    // warm this user's feedback + replies for offline
+  runHousekeeping(currentAircraft()?.registration).catch(() => {});  // prune stale tiles/AMM/TL caches, VACUUM
   return json as { access_token: string; role: string; mfa_enrollment_required?: boolean };
 }
 
