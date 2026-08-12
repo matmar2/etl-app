@@ -355,12 +355,10 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
       if (best > tocIdx && best < todIdx && !hasFob(best)) s.add(best);
       return s;
     }
-    // TOC is the first mandatory fuel check — flag it if unfilled.
-    // If pilot entered FOB at TOC, the 30-min clock starts from there (same as default).
+    // TOC is NOT a mandatory check — the 30-min clock starts from TOC.
+    // If crew enters FOB at any waypoint (flagged or not), the clock resets from there
+    // and all downstream flags recalculate dynamically.
     let lastCheckMin = tocMin;
-    if (!hasFob(tocIdx)) {
-      s.add(tocIdx);
-    }
     // Normal: flag the LAST unfilled waypoint within each 30-min window.
     // If the next waypoint (or TOD) would exceed the deadline, this one is mandatory.
     // If no waypoint exists within the deadline (big gap), flag the first one past it.
