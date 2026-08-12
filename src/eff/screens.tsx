@@ -326,8 +326,10 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
   };
   const isMain = route === 'main';
   const W = (isMain ? d?.waypoints : d?.alt_waypoints) || [];
-  // OM-A fuel check markers: from TOC to TOD, flag waypoints at intervals ≤ admin-set minutes.
-  // If total flight time ≤ 60 min, one check suffices. The set is computed once per waypoint list.
+  // OM-A fuel check markers: from TOC to TOD, flag the NEXT waypoint where a fuel entry is due.
+  // Dynamic: once crew enters FOB at a flagged waypoint, the interval resets from that point and
+  // the marker moves to the next due waypoint. Only unfilled waypoints are flagged.
+  // Short flight (TOC→TOD ≤ 60 min): one check at the midpoint (if unfilled).
   const fuelCheckSet = React.useMemo(() => {
     const s = new Set<number>();
     if (!W.length) return s;
@@ -339,27 +341,37 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
     const tocMin = W[tocIdx].acc_min ?? 0;
     const todMin = W[todIdx].acc_min ?? 0;
     const interval = getFuelCheckInterval();
-    // Short flight (≤ 60 min total): one check at the midpoint waypoint
+    const hasFob = (i: number) => {
+      const v = Number(draft[i]?.fob_kg ?? d?.entries?.[i]?.fob_kg);
+      return !!v;
+    };
+    // Short flight (≤ 60 min): one check at the midpoint if not yet filled
     if (todMin - tocMin <= 60) {
       const mid = (tocMin + todMin) / 2;
       let best = tocIdx + 1;
       for (let j = tocIdx + 1; j < todIdx; j++) {
         if (Math.abs((W[j].acc_min ?? 0) - mid) < Math.abs((W[best].acc_min ?? 0) - mid)) best = j;
       }
-      if (best > tocIdx && best < todIdx) s.add(best);
+      if (best > tocIdx && best < todIdx && !hasFob(best)) s.add(best);
       return s;
     }
-    // Normal: mark waypoints at each interval boundary from TOC
-    let nextDue = tocMin + interval;
+    // Normal: walk TOC→TOD, reset the clock whenever crew entered FOB
+    let lastCheckMin = tocMin;
     for (let j = tocIdx + 1; j < todIdx; j++) {
       const am = W[j].acc_min ?? 0;
-      if (am >= nextDue) {
+      if (hasFob(j)) {
+        // Crew entered fuel here — reset the interval clock
+        lastCheckMin = am;
+        continue;
+      }
+      if (am >= lastCheckMin + interval) {
+        // Due: flag this waypoint, then only flag the NEXT one after another interval
         s.add(j);
-        nextDue = am + interval;
+        lastCheckMin = am;
       }
     }
     return s;
-  }, [W]);
+  }, [W, draft, d?.entries]);
   // Column widths: base px values scale UP to fill the measured container, so on iPad landscape
   // every column is visible with no horizontal scrolling; below the base total the table falls
   // back to a horizontal scroll rather than crushing the entry inputs.
