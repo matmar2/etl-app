@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Image } from 'react-native';
-import { acceptFolder, api, fetchLogo, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
+import { acceptFolder, api, fetchLogo, getFuelCheckInterval, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { openInduction } from './help';
@@ -326,6 +326,40 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
   };
   const isMain = route === 'main';
   const W = (isMain ? d?.waypoints : d?.alt_waypoints) || [];
+  // OM-A fuel check markers: from TOC to TOD, flag waypoints at intervals ≤ admin-set minutes.
+  // If total flight time ≤ 60 min, one check suffices. The set is computed once per waypoint list.
+  const fuelCheckSet = React.useMemo(() => {
+    const s = new Set<number>();
+    if (!W.length) return s;
+    const isToc = (w: any) => /^-?(TOC|T\/C)-?$/i.test(w.wpt || '');
+    const isTod = (w: any) => /^-?(TOD|T\/D)-?$/i.test(w.wpt || '');
+    const tocIdx = W.findIndex(isToc);
+    const todIdx = W.findIndex(isTod);
+    if (tocIdx < 0 || todIdx < 0 || tocIdx >= todIdx) return s;
+    const tocMin = W[tocIdx].acc_min ?? 0;
+    const todMin = W[todIdx].acc_min ?? 0;
+    const interval = getFuelCheckInterval();
+    // Short flight (≤ 60 min total): one check at the midpoint waypoint
+    if (todMin - tocMin <= 60) {
+      const mid = (tocMin + todMin) / 2;
+      let best = tocIdx + 1;
+      for (let j = tocIdx + 1; j < todIdx; j++) {
+        if (Math.abs((W[j].acc_min ?? 0) - mid) < Math.abs((W[best].acc_min ?? 0) - mid)) best = j;
+      }
+      if (best > tocIdx && best < todIdx) s.add(best);
+      return s;
+    }
+    // Normal: mark waypoints at each interval boundary from TOC
+    let nextDue = tocMin + interval;
+    for (let j = tocIdx + 1; j < todIdx; j++) {
+      const am = W[j].acc_min ?? 0;
+      if (am >= nextDue) {
+        s.add(j);
+        nextDue = am + interval;
+      }
+    }
+    return s;
+  }, [W]);
   // Column widths: base px values scale UP to fill the measured container, so on iPad landscape
   // every column is visible with no horizontal scrolling; below the base total the table falls
   // back to a horizontal scroll rather than crushing the entry inputs.
@@ -381,9 +415,10 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
               const below = fobA && w.mreq && fobA < w.mreq;
               const apt = i === 0 || i === W.length - 1;
               const rmk = String(dv.remark ?? e.remark ?? '');
+              const fuelCheck = fuelCheckSet.has(i);
               return (
                 <View key={i}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: rmk || isMain ? 0 : 1, borderBottomColor: '#1b2c49' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: below ? '#3a1515' : apt ? '#122544' : i % 2 ? 'rgba(255,255,255,0.025)' : undefined, borderBottomWidth: rmk || isMain ? 0 : 1, borderBottomColor: '#1b2c49', borderLeftWidth: fuelCheck ? 3 : 0, borderLeftColor: '#f0d48a' }}>
                   <Text numberOfLines={1} style={[cell, { width: CW[0], fontWeight: '700',
                     color: /^-?(TOC|TOD)-?$/i.test(w.wpt || '') ? T.accent : T.text }]}>{(w.wpt || '').replace(/^-+|-+$/g, '')}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[1], color: T.sub }]}>{w.awy ?? ''}</Text>
@@ -395,7 +430,7 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
                   <Text style={[cell, { width: CW[7] }]}>{w.fob_plan ?? ''}</Text>
                   <Text style={[cell, { width: CW[8], color: T.sub }]}>{w.mreq ?? ''}</Text>
                   <View style={{ width: CW[9], padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'ato', CW[9] - 10, '--:--')}{(() => { const eto = planEto(w); return eto ? planChip(eto, () => acceptPlan(i, 'ato', eto)) : null; })()}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
-                  <View style={{ width: CW[10], padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'fob_kg', CW[10] - 10, 'kg', 'numeric')}{w.fob_plan != null ? planChip(String(w.fob_plan), () => acceptPlan(i, 'fob_kg', w.fob_plan)) : null}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
+                  <View style={{ width: CW[10], padding: 3, alignItems: 'center' }}>{isMain ? (<>{entry(i, 'fob_kg', CW[10] - 10, 'kg', 'numeric')}{fuelCheck && !fobA ? <Text style={{ color: '#f0d48a', fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: 2 }}>⛽ FUEL CHK</Text> : null}{w.fob_plan != null ? planChip(String(w.fob_plan), () => acceptPlan(i, 'fob_kg', w.fob_plan)) : null}</>) : <Text style={[cell, { color: T.sub }]}>—</Text>}</View>
                   <Text style={[cell, { width: CW[11], color: delta == null ? T.sub : delta >= 0 ? T.entry : '#f0a3a3' }]}>{delta == null ? '—' : (delta > 0 ? `+${delta}` : `${delta}`)}</Text>
                 </View>
                 {isMain ? (
@@ -414,6 +449,7 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
         </ScrollView>
       )}
       <Text style={[s.sub, { marginTop: 10 }]}>Green columns are yours: ATO, actual fuel on board, remark. Tap the blue <Text style={{ color: T.accent, fontWeight: '700' }}>= value</Text> chip to accept the plan, then amend if needed. A row turns red when actual FOB falls below MREQ.</Text>
+      {fuelCheckSet.size > 0 ? <Text style={[s.sub, { marginTop: 4 }]}><Text style={{ color: '#f0d48a', fontWeight: '700' }}>⛽ FUEL CHK</Text> — OM-A fuel check due (every {getFuelCheckInterval()} min from TOC to TOD). Enter actual FOB to clear the marker.</Text> : null}
     </ScrollView>
   );
 }

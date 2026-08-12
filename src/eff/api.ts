@@ -317,6 +317,14 @@ export function getDelayCodes(): { code: string; description: string; category: 
   return Array.isArray(delayCodesMem) ? delayCodesMem : [];
 }
 
+// OM-A fuel check interval (minutes) — admin-set, default 30.
+let fuelCheckIntervalMem: number = 30;
+export function setFuelCheckInterval(v: any) {
+  const n = typeof v === 'number' ? v : 30;
+  fuelCheckIntervalMem = Math.max(5, n);
+}
+export function getFuelCheckInterval(): number { return fuelCheckIntervalMem; }
+
 export const listFlights = async () => {
   const rows = await api('/flights');
   api('/config').then((c) => {
@@ -324,6 +332,7 @@ export const listFlights = async () => {
     setRequiredFields(c?.required_fields);
     setDeepLinks(c?.deep_links);
     setDelayCodes(c?.delay_codes);
+    setFuelCheckInterval(c?.fuel_check_interval_min);
   }).catch(() => {});
   return rows;
 };
