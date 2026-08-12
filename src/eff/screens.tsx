@@ -382,6 +382,15 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
         }
       }
     }
+    // TOD (or last waypoint before it) is always mandatory — final fuel state before descent
+    if (!hasFob(todIdx)) {
+      s.add(todIdx);
+    } else {
+      // TOD filled — flag the last unfilled waypoint before TOD
+      for (let j = todIdx - 1; j > tocIdx; j--) {
+        if (!hasFob(j)) { s.add(j); break; }
+      }
+    }
     return s;
   }, [W, draft, d?.entries]);
   // Column widths: base px values scale UP to fill the measured container, so on iPad landscape
