@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { Image } from 'react-native';
-import { acceptFolder, api, fetchLogo, getFuelCheckInterval, getFolder, getNavlog, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
+import { acceptFolder, api, fetchLogo, getFuelCheckInterval, getFolder, getNavlog, getTodSkipThreshold, isOnlineSync, listFlights, login, pendingCount, prefetchAll, prefetchDocs, purgeCaches, saveNavEntry, setToken, wxRefresh } from './api';
 import { kvGet, kvSet } from './storage';
 import SignaturePad from '../components/SignaturePad';   // cross-platform signer (WebView native / canvas web)
 import { openInduction } from './help';
@@ -382,13 +382,16 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
         }
       }
     }
-    // TOD (or last waypoint before it) is always mandatory — final fuel state before descent
-    if (!hasFob(todIdx)) {
-      s.add(todIdx);
-    } else {
-      // TOD filled — flag the last unfilled waypoint before TOD
-      for (let j = todIdx - 1; j > tocIdx; j--) {
-        if (!hasFob(j)) { s.add(j); break; }
+    // TOD is mandatory UNLESS last check is within the skip threshold (admin-configurable, default 10 min)
+    const todSkip = getTodSkipThreshold();
+    if (todMin - lastCheckMin > todSkip) {
+      if (!hasFob(todIdx)) {
+        s.add(todIdx);
+      } else {
+        // TOD filled — flag the last unfilled waypoint before TOD
+        for (let j = todIdx - 1; j > tocIdx; j--) {
+          if (!hasFob(j)) { s.add(j); break; }
+        }
       }
     }
     return s;

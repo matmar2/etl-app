@@ -325,6 +325,14 @@ export function setFuelCheckInterval(v: any) {
 }
 export function getFuelCheckInterval(): number { return fuelCheckIntervalMem; }
 
+// TOD skip threshold (minutes) — if last check is within this many min of TOD, skip TOD flag.
+let todSkipThresholdMem: number = 10;
+export function setTodSkipThreshold(v: any) {
+  const n = typeof v === 'number' ? v : 10;
+  todSkipThresholdMem = Math.max(0, n);
+}
+export function getTodSkipThreshold(): number { return todSkipThresholdMem; }
+
 export const listFlights = async () => {
   const rows = await api('/flights');
   api('/config').then((c) => {
@@ -333,6 +341,7 @@ export const listFlights = async () => {
     setDeepLinks(c?.deep_links);
     setDelayCodes(c?.delay_codes);
     setFuelCheckInterval(c?.fuel_check_interval_min);
+    setTodSkipThreshold(c?.tod_skip_threshold_min);
   }).catch(() => {});
   return rows;
 };
