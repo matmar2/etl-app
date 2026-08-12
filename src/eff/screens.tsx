@@ -376,8 +376,8 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
   // every column is visible with no horizontal scrolling; below the base total the table falls
   // back to a horizontal scroll rather than crushing the entry inputs.
   //             WPT  AWY  FL  MT  TAS/GS W/V  LEG/ACC FOB  MREQ ATO  FOB✎ ΔFUEL
-  const BASE_W = [92, 72, 40, 40, 78, 66, 84, 72, 66, 84, 100, 66];
-  const COMPACT_W = [76, 56, 34, 34, 66, 54, 72, 60, 54, 72, 84, 56];   // fits iPad portrait with sidebar open
+  const BASE_W = [92, 72, 46, 40, 78, 66, 84, 68, 62, 84, 100, 66];
+  const COMPACT_W = [76, 56, 38, 34, 66, 54, 72, 56, 52, 72, 84, 56];   // fits iPad portrait with sidebar open
   const activeW = layoutMode === 'compact' ? COMPACT_W : BASE_W;
   const activeTot = activeW.reduce((a, b) => a + b, 0);
   const [tblW, setTblW] = useState(0);
@@ -434,8 +434,8 @@ export function NavLogScreen({ flight, back, embedded, onSetRail }: { flight: an
                   <Text numberOfLines={1} style={[cell, { width: CW[0], fontWeight: '700',
                     color: /^-?(TOC|TOD)-?$/i.test(w.wpt || '') ? T.accent : T.text }]}>{(w.wpt || '').replace(/^-+|-+$/g, '')}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[1], color: T.sub }]}>{w.awy ?? ''}</Text>
-                  <Text style={[cell, { width: CW[2] }]}>{w.fl ?? ''}</Text>
-                  <Text style={[cell, { width: CW[3] }]}>{w.mt ?? ''}</Text>
+                  <Text numberOfLines={1} style={[cell, { width: CW[2] }]}>{w.fl ?? ''}</Text>
+                  <Text numberOfLines={1} style={[cell, { width: CW[3] }]}>{w.mt ?? ''}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[4] }]}>{w.tas ? `${w.tas}/${w.gs}` : ''}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[5], color: T.sub }]}>{w.wv ?? ''}</Text>
                   <Text numberOfLines={1} style={[cell, { width: CW[6], color: T.sub }]}>{w.leg_min != null ? `${String(w.leg_min).padStart(2, '0')}/` : ''}{w.acc_min != null ? `${Math.floor(w.acc_min / 60)}:${String(w.acc_min % 60).padStart(2, '0')}` : ''}</Text>
